@@ -3,16 +3,16 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema } from "@shared/schema";
 import { z } from "zod";
-import WebSocket from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // WebSocket server for real-time updates
-  const wss = new WebSocket.Server({ server: httpServer });
+  // WebSocket server for real-time updates on a different port
+  const wss = new WebSocketServer({ port: 8080 });
   
   // Mock market data broadcasting
-  const marketData = {
+  const marketData: Record<string, { price: number; change: number }> = {
     'BTC/USDT': { price: 43285.12, change: 2.34 },
     'ETH/USDT': { price: 2568.91, change: -1.12 },
     'ADA/USDT': { price: 0.4521, change: 0.87 },
@@ -24,8 +24,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   setInterval(() => {
     Object.keys(marketData).forEach(pair => {
       const change = (Math.random() - 0.5) * 2; // Random price movement
-      marketData[pair].price += change;
-      marketData[pair].change = change;
+      if (marketData[pair]) {
+        marketData[pair].price += change;
+        marketData[pair].change = change;
+      }
     });
 
     wss.clients.forEach(client => {
