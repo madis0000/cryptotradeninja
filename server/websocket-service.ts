@@ -386,23 +386,36 @@ export class WebSocketService {
     console.log('[PUBLIC WS] Attempting to send market data to client');
     console.log(`[PUBLIC WS] WebSocket ready state: ${ws.readyState}`);
     
-    const currentData = Array.from(this.marketData.values());
-    console.log(`[PUBLIC WS] Available market data entries: ${currentData.length}`);
+    // Find the subscription for this WebSocket to get subscribed symbols
+    const subscription = Array.from(this.marketSubscriptions).find(sub => sub.ws === ws);
+    if (!subscription) {
+      console.log('[PUBLIC WS] No subscription found for this client');
+      return;
+    }
+
+    // Filter market data to only include subscribed symbols
+    const subscribedSymbols = Array.from(subscription.symbols);
+    const filteredData = Array.from(this.marketData.values()).filter(data => 
+      subscribedSymbols.length === 0 || subscribedSymbols.includes(data.symbol.toLowerCase())
+    );
     
-    if (currentData.length > 0) {
+    console.log(`[PUBLIC WS] Client subscribed to: ${subscribedSymbols.join(', ')}`);
+    console.log(`[PUBLIC WS] Filtered market data entries: ${filteredData.length}`);
+    
+    if (filteredData.length > 0) {
       try {
         const message = JSON.stringify({
           type: 'market_data',
-          data: currentData
+          data: filteredData
         });
-        console.log(`[PUBLIC WS] Sending market data message (${message.length} chars)`);
+        console.log(`[PUBLIC WS] Sending filtered market data (${message.length} chars)`);
         ws.send(message);
-        console.log('[PUBLIC WS] Market data sent successfully');
+        console.log('[PUBLIC WS] Filtered market data sent successfully');
       } catch (error) {
         console.error('[PUBLIC WS] Error sending market data:', error);
       }
     } else {
-      console.log('[PUBLIC WS] No market data available to send');
+      console.log('[PUBLIC WS] No relevant market data available for subscribed symbols');
     }
   }
 
@@ -490,8 +503,9 @@ export class WebSocketService {
     console.log('[WEBSOCKET] Stopping all Binance streams');
     this.isStreamsActive = false;
     
-    // Stop mock data generation
-    // Mock data generation removed
+    // Clear cached market data to prevent stale data
+    console.log('[WEBSOCKET] Clearing cached market data');
+    this.marketData.clear();
     
     if (this.binancePublicWs) {
       console.log('[WEBSOCKET] Closing Binance public stream');
