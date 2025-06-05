@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
-import { MarketData } from "@/types";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { Link, useLocation } from "wouter";
 
@@ -14,11 +13,6 @@ export function TopBar({ onLogout }: TopBarProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [location] = useLocation();
 
-  const { data: marketData } = useQuery<MarketData>({
-    queryKey: ['/api/market'],
-    refetchInterval: 3000, // Refresh every 3 seconds
-  });
-
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -26,20 +20,6 @@ export function TopBar({ onLogout }: TopBarProps) {
 
     return () => clearInterval(timer);
   }, []);
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(price);
-  };
-
-  const formatChange = (change: number) => {
-    const sign = change >= 0 ? '+' : '';
-    return `${sign}${change.toFixed(2)}%`;
-  };
 
   const navigationItems = [
     { path: '/', label: 'Dashboard', icon: 'fas fa-chart-line' },
@@ -81,71 +61,66 @@ export function TopBar({ onLogout }: TopBarProps) {
         </div>
         
         <div className="flex items-center space-x-6">
-          {/* Live Market Status */}
-          <div className="hidden lg:flex items-center space-x-2">
-            <div className="w-2 h-2 bg-crypto-success rounded-full animate-pulse"></div>
-            <span className="text-xs text-crypto-light">Live</span>
-          </div>
-
-          {/* Market Data */}
-          <div className="hidden lg:flex items-center space-x-4 text-sm">
-            {marketData && (
-              <>
-                <div className="flex items-center space-x-2">
-                  <span className="text-crypto-light">BTC:</span>
-                  <span className="font-mono font-medium text-white">
-                    {formatPrice(marketData['BTC/USDT']?.price || 0)}
-                  </span>
-                  <span className={`text-xs ${
-                    marketData['BTC/USDT']?.change >= 0 ? 'text-crypto-success' : 'text-crypto-danger'
-                  }`}>
-                    {formatChange(marketData['BTC/USDT']?.change || 0)}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-crypto-light">ETH:</span>
-                  <span className="font-mono font-medium text-white">
-                    {formatPrice(marketData['ETH/USDT']?.price || 0)}
-                  </span>
-                  <span className={`text-xs ${
-                    marketData['ETH/USDT']?.change >= 0 ? 'text-crypto-success' : 'text-crypto-danger'
-                  }`}>
-                    {formatChange(marketData['ETH/USDT']?.change || 0)}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-
           {/* UTC Time */}
           <div className="hidden md:flex items-center space-x-2 text-crypto-light text-sm">
             <i className="fas fa-clock text-xs"></i>
             <span>{currentTime.toLocaleTimeString('en-US', { timeZone: 'UTC', hour12: false })} UTC</span>
           </div>
           
-          {/* User Menu */}
-          <div className="flex items-center space-x-3">
-            <Button variant="ghost" size="sm" className="p-2 text-crypto-light hover:bg-gray-800 relative">
-              <i className="fas fa-bell"></i>
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-crypto-danger rounded-full"></span>
-            </Button>
-            
-            <div className="flex items-center space-x-2 pl-2 border-l border-gray-700">
-              <div className="text-right">
-                <div className="text-sm font-medium text-white">{user?.username}</div>
-                <div className="text-xs text-crypto-light">Trading Account</div>
-              </div>
-              <Button 
-                onClick={onLogout}
-                variant="ghost" 
-                size="sm" 
-                className="p-2 text-crypto-light hover:bg-gray-800 hover:text-crypto-danger"
-                title="Logout"
-              >
-                <i className="fas fa-sign-out-alt"></i>
+          {/* Notifications */}
+          <Button variant="ghost" size="sm" className="p-2 text-crypto-light hover:bg-gray-800 relative">
+            <i className="fas fa-bell"></i>
+            <span className="absolute -top-1 -right-1 w-2 h-2 bg-crypto-danger rounded-full"></span>
+          </Button>
+          
+          {/* User Menu Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="flex items-center space-x-2 text-crypto-light hover:bg-gray-800 pl-2 border-l border-gray-700">
+                <div className="text-right hidden sm:block">
+                  <div className="text-sm font-medium text-white">{user?.username}</div>
+                  <div className="text-xs text-crypto-light">Trading Account</div>
+                </div>
+                <div className="w-8 h-8 bg-gradient-to-br from-crypto-accent to-crypto-success rounded-full flex items-center justify-center">
+                  <span className="text-xs font-bold text-white">
+                    {user?.username?.charAt(0).toUpperCase() || 'U'}
+                  </span>
+                </div>
+                <i className="fas fa-chevron-down text-xs"></i>
               </Button>
-            </div>
-          </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 bg-crypto-dark border-gray-800">
+              <div className="px-3 py-2 border-b border-gray-800">
+                <div className="text-sm font-medium text-white">{user?.username}</div>
+                <div className="text-xs text-crypto-light">{user?.email}</div>
+              </div>
+              
+              <DropdownMenuItem className="text-crypto-light hover:bg-gray-800 hover:text-white cursor-pointer">
+                <i className="fas fa-user mr-2"></i>
+                Profile Settings
+              </DropdownMenuItem>
+              
+              <DropdownMenuItem className="text-crypto-light hover:bg-gray-800 hover:text-white cursor-pointer">
+                <i className="fas fa-cog mr-2"></i>
+                Account Settings
+              </DropdownMenuItem>
+              
+              <DropdownMenuItem className="text-crypto-light hover:bg-gray-800 hover:text-white cursor-pointer">
+                <i className="fas fa-shield-alt mr-2"></i>
+                Security
+              </DropdownMenuItem>
+              
+              <DropdownMenuSeparator className="bg-gray-800" />
+              
+              <DropdownMenuItem 
+                className="text-crypto-danger hover:bg-crypto-danger/10 hover:text-crypto-danger cursor-pointer"
+                onClick={onLogout}
+              >
+                <i className="fas fa-sign-out-alt mr-2"></i>
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>
