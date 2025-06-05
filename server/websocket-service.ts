@@ -92,22 +92,25 @@ export class WebSocketService {
       });
 
       ws.on('close', (code, reason) => {
-        console.log(`[WEBSOCKET] Client disconnected - Code: ${code}, Reason: ${reason}`);
+        console.log(`[WEBSOCKET] ===== CLIENT DISCONNECT EVENT ===== Code: ${code}, Reason: ${reason}`);
+        console.log(`[WEBSOCKET] Subscriptions before removal: ${this.marketSubscriptions.size}`);
         this.marketSubscriptions.delete(subscription);
+        console.log(`[WEBSOCKET] Subscriptions after removal: ${this.marketSubscriptions.size}`);
         
         // Clean up user connection
         this.userConnections.forEach((connection, userId) => {
           if (connection.ws === ws) {
             this.userConnections.delete(userId);
+            console.log(`[WEBSOCKET] Removed authenticated user ${userId}`);
           }
         });
         
-        console.log(`[WEBSOCKET] Remaining subscriptions: ${this.marketSubscriptions.size}`);
-        
         // Stop Binance streams if no clients are connected
         if (this.marketSubscriptions.size === 0) {
-          console.log(`[WEBSOCKET] No clients connected - stopping Binance streams`);
+          console.log(`[WEBSOCKET] ⚠️  NO CLIENTS CONNECTED - STOPPING ALL STREAMS ⚠️`);
           this.stopBinanceStreams();
+        } else {
+          console.log(`[WEBSOCKET] Still have ${this.marketSubscriptions.size} active subscriptions, keeping streams alive`);
         }
       });
 
