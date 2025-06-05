@@ -43,7 +43,8 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[CLIENT WS] Connected to backend WebSocket server');
+      console.log('[CLIENT WS] ===== CONNECTED TO BACKEND SERVER =====');
+      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:8080`);
       setStatus('connected');
       options.onConnect?.();
       
@@ -52,7 +53,7 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
         type: 'subscribe',
         symbols: ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']
       };
-      console.log('[CLIENT WS] Sending subscription command to backend:', subscribeMessage);
+      console.log('[CLIENT WS] Sending command to backend:', subscribeMessage);
       ws.send(JSON.stringify(subscribeMessage));
     };
 
