@@ -34,8 +34,8 @@ export class WebSocketService {
 
     // User data WebSocket server  
     this.userWss = new WebSocketServer({ 
-      port: 8082, 
-      path: '/user'
+      server: server,
+      path: '/ws/user'
     });
 
     this.setupPublicWebSocket();
@@ -50,35 +50,49 @@ export class WebSocketService {
 
   private stopBackendStreams() {
     console.log('[CONNECTION MANAGER] Stopping all backend streams');
+    this.stopAllBinanceStreams();
+    console.log('[CONNECTION MANAGER] All backend streams stopped');
+  }
+
+  private stopAllBinanceStreams() {
+    console.log('[BINANCE] Stopping all Binance streams');
     
     // Stop mock data generation
     if (this.mockDataInterval) {
       clearInterval(this.mockDataInterval);
       this.mockDataInterval = null;
-      console.log('[CONNECTION MANAGER] Stopped mock data generation');
+      console.log('[BINANCE] Stopped mock data generation');
     }
     
     // Close all active Binance streams
     this.activeBinanceStreams.forEach((ws, url) => {
-      console.log(`[CONNECTION MANAGER] Closing stream: ${url}`);
+      console.log(`[BINANCE] Closing stream: ${url}`);
       ws.close();
     });
     this.activeBinanceStreams.clear();
     
     // Close legacy binance connections
     if (this.binancePublicWs) {
+      console.log('[BINANCE] Closing main WebSocket connection');
       this.binancePublicWs.close();
       this.binancePublicWs = null;
     }
     
-    this.binanceUserStreams.forEach(ws => ws.close());
+    // Close user streams
+    this.binanceUserStreams.forEach((ws, key) => {
+      console.log(`[BINANCE] Closing user stream: ${key}`);
+      ws.close();
+    });
     this.binanceUserStreams.clear();
     
-    console.log('[CONNECTION MANAGER] All backend streams stopped');
+    // Clear market data
+    this.marketData.clear();
+    
+    console.log('[BINANCE] All Binance streams stopped and cleared');
   }
 
   private setupPublicWebSocket() {
-    console.log('[PUBLIC WS] Setting up public WebSocket server on port 8081');
+    console.log('[PUBLIC WS] Setting up public WebSocket server on main HTTP server');
     
     this.publicWss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;
@@ -114,7 +128,10 @@ export class WebSocketService {
               subscription.symbols.add(symbol.toLowerCase());
             });
             
-            // Start new Binance stream with these symbols
+            // Stop all existing streams first
+            this.stopAllBinanceStreams();
+            
+            // Start new Binance stream with ONLY these symbols
             this.connectToConfigurableStream('ticker', symbols);
             
             // Send current market data
@@ -228,11 +245,14 @@ export class WebSocketService {
     console.log(`[BINANCE] Attempting to connect to WebSocket API: ${wsApiUrl}`);
     this.connectToBinanceWebSocketAPI(wsApiUrl);
 
-    // Connect to Binance testnet public stream for market data (default ticker streams)
-    this.connectToConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT', 'ICPUSDT']);
+    // Do NOT start default streams - wait for client subscription
+    console.log('[BINANCE] Waiting for client subscriptions before starting streams');
   }
 
   private connectToConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
+    // First stop all existing streams to ensure clean state
+    this.stopAllBinanceStreams();
+    
     const baseUrl = 'wss://stream.testnet.binance.vision/stream?streams=';
     
     const streamPaths = symbols.map(symbol => {
@@ -258,7 +278,9 @@ export class WebSocketService {
     });
     
     const streamUrl = baseUrl + streamPaths.join('/');
-    console.log(`[BINANCE] Connecting to ${dataType} stream: ${streamUrl}`);
+    console.log(`[BINANCE] Starting NEW ${dataType} stream for symbols: ${symbols.join(', ')}`);
+    console.log(`[BINANCE] Stream URL: ${streamUrl}`);
+    
     this.connectToBinancePublic(streamUrl);
   }
 

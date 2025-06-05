@@ -48,13 +48,8 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
       setStatus('connected');
       options.onConnect?.();
       
-      // Subscribe to default symbols
-      const subscribeMessage = {
-        type: 'subscribe',
-        symbols: ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']
-      };
-      console.log('[CLIENT WS] Sending subscription:', subscribeMessage);
-      ws.send(JSON.stringify(subscribeMessage));
+      // Don't auto-subscribe - wait for explicit subscription
+      console.log('[CLIENT WS] WebSocket ready, waiting for symbol subscription');
     };
 
     ws.onmessage = (event) => {
