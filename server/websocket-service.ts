@@ -28,8 +28,8 @@ export class WebSocketService {
   constructor(server: Server) {
     // Public market data WebSocket server
     this.publicWss = new WebSocketServer({ 
-      port: 8081, 
-      path: '/market'
+      server: server,
+      path: '/ws/market'
     });
 
     // User data WebSocket server  
@@ -262,10 +262,7 @@ export class WebSocketService {
     this.connectToBinancePublic(streamUrl);
   }
 
-  private startMockDataGeneration() {
-    // Mock data generation removed - using real Binance streams only
-    console.log('[MOCK DATA] Mock data generation disabled - using real Binance streams');
-  }
+
 
   private connectToBinanceWebSocketAPI(wsApiUrl: string) {
     if (this.binancePublicWs) {
