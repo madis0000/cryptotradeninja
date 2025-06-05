@@ -42,8 +42,11 @@ export class WebSocketService {
   }
 
   private setupPublicWebSocket() {
+    console.log('[PUBLIC WS] Setting up public WebSocket server on port 8081');
+    
     this.publicWss.on('connection', (ws, request) => {
-      console.log('Public WebSocket client connected');
+      const clientIP = request.socket.remoteAddress;
+      console.log(`[PUBLIC WS] Client connected from ${clientIP}`);
 
       const subscription: MarketSubscription = {
         ws,
@@ -51,14 +54,17 @@ export class WebSocketService {
       };
 
       this.marketSubscriptions.add(subscription);
+      console.log(`[PUBLIC WS] Total active subscriptions: ${this.marketSubscriptions.size}`);
 
       ws.on('message', (data) => {
         try {
           const message = JSON.parse(data.toString());
+          console.log(`[PUBLIC WS] Received message:`, message);
           
           if (message.type === 'subscribe') {
             // Subscribe to specific trading pairs
             const symbols = message.symbols || ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'];
+            console.log(`[PUBLIC WS] Subscribing to symbols:`, symbols);
             symbols.forEach((symbol: string) => {
               subscription.symbols.add(symbol.toLowerCase());
             });
@@ -67,21 +73,23 @@ export class WebSocketService {
             this.sendMarketDataToClient(ws);
           }
         } catch (error) {
-          console.error('Error processing public WebSocket message:', error);
+          console.error('[PUBLIC WS] Error processing message:', error);
         }
       });
 
-      ws.on('close', () => {
-        console.log('Public WebSocket client disconnected');
+      ws.on('close', (code, reason) => {
+        console.log(`[PUBLIC WS] Client disconnected - Code: ${code}, Reason: ${reason}`);
         this.marketSubscriptions.delete(subscription);
+        console.log(`[PUBLIC WS] Remaining subscriptions: ${this.marketSubscriptions.size}`);
       });
 
       ws.on('error', (error) => {
-        console.error('Public WebSocket error:', error);
+        console.error('[PUBLIC WS] WebSocket error:', error);
         this.marketSubscriptions.delete(subscription);
       });
 
       // Send initial market data
+      console.log('[PUBLIC WS] Sending initial market data');
       this.sendMarketDataToClient(ws);
     });
   }
@@ -159,11 +167,14 @@ export class WebSocketService {
   }
 
   private initializeBinancePublicStream() {
+    console.log('[BINANCE] Initializing Binance public stream connections');
+    
     // Start mock data generation for immediate functionality
     this.startMockDataGeneration();
     
     // Connect to Binance testnet WebSocket API
     const wsApiUrl = 'wss://ws-api.testnet.binance.vision/ws-api/v3';
+    console.log(`[BINANCE] Attempting to connect to WebSocket API: ${wsApiUrl}`);
     this.connectToBinanceWebSocketAPI(wsApiUrl);
   }
 
@@ -203,14 +214,15 @@ export class WebSocketService {
 
   private connectToBinanceWebSocketAPI(wsApiUrl: string) {
     if (this.binancePublicWs) {
+      console.log('[BINANCE] Closing existing WebSocket connection');
       this.binancePublicWs.close();
     }
 
-    console.log('Connecting to Binance WebSocket API:', wsApiUrl);
+    console.log('[BINANCE] Creating new WebSocket connection to:', wsApiUrl);
     this.binancePublicWs = new WebSocket(wsApiUrl);
 
     this.binancePublicWs.on('open', () => {
-      console.log('Connected to Binance WebSocket API');
+      console.log('[BINANCE] WebSocket connection opened successfully');
       
       // Subscribe to ticker data using the modern WebSocket API
       const subscribeMessage = {
@@ -221,6 +233,7 @@ export class WebSocketService {
         }
       };
       
+      console.log('[BINANCE] Sending subscription message:', JSON.stringify(subscribeMessage));
       this.binancePublicWs?.send(JSON.stringify(subscribeMessage));
     });
 
@@ -250,13 +263,14 @@ export class WebSocketService {
       }
     });
 
-    this.binancePublicWs.on('close', () => {
-      console.log('Binance WebSocket API disconnected, reconnecting...');
+    this.binancePublicWs.on('close', (code, reason) => {
+      console.log(`[BINANCE] WebSocket API disconnected - Code: ${code}, Reason: ${reason}`);
+      console.log('[BINANCE] Attempting reconnection in 5 seconds...');
       setTimeout(() => this.connectToBinanceWebSocketAPI(wsApiUrl), 5000);
     });
 
     this.binancePublicWs.on('error', (error) => {
-      console.error('Binance WebSocket API error:', error);
+      console.error('[BINANCE] WebSocket API error:', error);
     });
   }
 
