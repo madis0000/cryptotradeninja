@@ -34,9 +34,6 @@ export class WebSocketService {
 
     this.setupWebSocket();
     
-    // Start mock data generation only
-    this.startMockDataGeneration();
-    
     console.log(`[WEBSOCKET] Unified service initialized on port ${wsPort} with 0.0.0.0 binding. External streams connect on-demand only.`);
   }
 
@@ -46,7 +43,7 @@ export class WebSocketService {
     
     this.wss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;
-      console.log(`[WEBSOCKET] ✓ NEW CLIENT CONNECTED from ${clientIP}`);
+      console.log(`[WEBSOCKET] ===== NEW CLIENT CONNECTED ===== from ${clientIP}`);
 
       const subscription: MarketSubscription = {
         ws,
@@ -58,7 +55,7 @@ export class WebSocketService {
 
       // Start Binance streams if this is the first client
       if (this.marketSubscriptions.size === 1) {
-        console.log(`[WEBSOCKET] First client connected - starting Binance streams`);
+        console.log(`[WEBSOCKET] ===== FIRST CLIENT - STARTING STREAMS =====`);
         this.initializeBinancePublicStream();
       }
 
