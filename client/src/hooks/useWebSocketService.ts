@@ -119,10 +119,10 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
 
     setStatus('connecting');
     
-    // Connect to our user WebSocket service
+    // Connect to our unified WebSocket service
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
-    const ws = new WebSocket(`${protocol}//${host}:8080`);
+    const ws = new WebSocket(`${protocol}//${host}:8081`);
     wsRef.current = ws;
 
     ws.onopen = () => {

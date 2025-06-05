@@ -38,7 +38,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     message: { error: 'Too many requests, please try again later' },
     standardHeaders: true,
     legacyHeaders: false,
-    trustProxy: true, // Explicitly trust proxy for Replit
     skipSuccessfulRequests: true,
   });
   
@@ -48,7 +47,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     message: { error: 'Too many authentication attempts, please try again later' },
     standardHeaders: true,
     legacyHeaders: false,
-    trustProxy: true, // Explicitly trust proxy for Replit
     skipSuccessfulRequests: true,
   });
 

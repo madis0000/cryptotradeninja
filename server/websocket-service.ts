@@ -33,11 +33,11 @@ export class WebSocketService {
     // Start mock data generation only
     this.startMockDataGeneration();
     
-    console.log('[WEBSOCKET] Unified service initialized on port 8080. External streams connect on-demand only.');
+    console.log('[WEBSOCKET] Unified service initialized on port 8081. External streams connect on-demand only.');
   }
 
   private setupWebSocket() {
-    console.log('[WEBSOCKET] Setting up unified WebSocket server on port 8080');
+    console.log('[WEBSOCKET] Setting up unified WebSocket server on port 8081');
     
     this.wss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;
