@@ -17,6 +17,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize WebSocket service
   const wsService = new WebSocketService(httpServer);
   
+  // Configure trust proxy for Replit environment
+  app.set('trust proxy', true);
+  
   // Security middleware
   app.use(helmet({
     contentSecurityPolicy: false, // Disable for development
@@ -32,13 +35,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 1000, // limit each IP to 1000 requests per windowMs (increased for development)
-    message: { error: 'Too many requests, please try again later' }
+    message: { error: 'Too many requests, please try again later' },
+    standardHeaders: true,
+    legacyHeaders: false,
   });
   
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 5, // limit each IP to 5 auth requests per windowMs
-    message: { error: 'Too many authentication attempts, please try again later' }
+    message: { error: 'Too many authentication attempts, please try again later' },
+    standardHeaders: true,
+    legacyHeaders: false,
   });
 
   app.use('/api/', limiter);
