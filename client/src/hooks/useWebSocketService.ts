@@ -37,7 +37,9 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     setStatus('connecting');
     
     // Connect to our public WebSocket service
-    const ws = new WebSocket(`ws://localhost:8081/market`);
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.hostname;
+    const ws = new WebSocket(`${protocol}//${host}:8081/market`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -112,7 +114,9 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     setStatus('connecting');
     
     // Connect to our user WebSocket service
-    const ws = new WebSocket(`ws://localhost:8082/user`);
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.hostname;
+    const ws = new WebSocket(`${protocol}//${host}:8082/user`);
     wsRef.current = ws;
 
     ws.onopen = () => {
