@@ -177,9 +177,37 @@ export class WebSocketService {
     console.log(`[BINANCE] Attempting to connect to WebSocket API: ${wsApiUrl}`);
     this.connectToBinanceWebSocketAPI(wsApiUrl);
 
-    // Connect to Binance testnet public stream for market data
-    const streamUrl = 'wss://stream.testnet.binance.vision/stream?streams=btcusdt@ticker/ethusdt@ticker/adausdt@ticker/bnbusdt@ticker/dogeusdt@ticker';
-    console.log(`[BINANCE] Attempting to connect to public stream: ${streamUrl}`);
+    // Connect to Binance testnet public stream for market data (default ticker streams)
+    this.connectToConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']);
+  }
+
+  private connectToConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
+    const baseUrl = 'wss://stream.testnet.binance.vision/stream?streams=';
+    
+    const streamPaths = symbols.map(symbol => {
+      const sym = symbol.toLowerCase();
+      switch (dataType) {
+        case 'ticker':
+          return `${sym}@ticker`;
+        case 'kline':
+          return `${sym}@kline_${interval || '1m'}`;
+        case 'depth':
+          return `${sym}@depth${depth || '5'}`;
+        case 'trade':
+          return `${sym}@trade`;
+        case 'aggTrade':
+          return `${sym}@aggTrade`;
+        case 'miniTicker':
+          return `${sym}@miniTicker`;
+        case 'bookTicker':
+          return `${sym}@bookTicker`;
+        default:
+          return `${sym}@ticker`;
+      }
+    });
+    
+    const streamUrl = baseUrl + streamPaths.join('/');
+    console.log(`[BINANCE] Connecting to ${dataType} stream: ${streamUrl}`);
     this.connectToBinancePublic(streamUrl);
   }
 

@@ -24,9 +24,22 @@ interface Exchange {
   isTestnet?: boolean;
 }
 
+interface StreamConfig {
+  dataType: string;
+  symbols: string[];
+  interval?: string;
+  depth?: string;
+}
+
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general');
   const [selectedExchangeId, setSelectedExchangeId] = useState<string>('');
+  const [streamConfig, setStreamConfig] = useState<StreamConfig>({
+    dataType: 'ticker',
+    symbols: ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT'],
+    interval: '1m',
+    depth: '5'
+  });
   
   const { toast } = useToast();
 
@@ -221,12 +234,114 @@ export default function Settings() {
           )}
         </div>
         
+        {/* Stream Configuration */}
+        <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800 mb-6">
+          <h4 className="text-md font-medium text-white mb-3">Stream Configuration</h4>
+          <p className="text-sm text-crypto-light mb-4">
+            Configure the type of market data and symbols to receive from the stream.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <Label htmlFor="stream-type">Data Type</Label>
+              <Select value={streamConfig.dataType} onValueChange={(value) => setStreamConfig({...streamConfig, dataType: value})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select data type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ticker">24hr Ticker Statistics</SelectItem>
+                  <SelectItem value="kline">Kline/Candlestick Data</SelectItem>
+                  <SelectItem value="depth">Partial Book Depth</SelectItem>
+                  <SelectItem value="trade">Trade Streams</SelectItem>
+                  <SelectItem value="aggTrade">Aggregate Trade Streams</SelectItem>
+                  <SelectItem value="miniTicker">Mini Ticker</SelectItem>
+                  <SelectItem value="bookTicker">Book Ticker</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {streamConfig.dataType === 'kline' && (
+              <div>
+                <Label htmlFor="interval">Kline Interval</Label>
+                <Select value={streamConfig.interval} onValueChange={(value) => setStreamConfig({...streamConfig, interval: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select interval" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1m">1 minute</SelectItem>
+                    <SelectItem value="3m">3 minutes</SelectItem>
+                    <SelectItem value="5m">5 minutes</SelectItem>
+                    <SelectItem value="15m">15 minutes</SelectItem>
+                    <SelectItem value="30m">30 minutes</SelectItem>
+                    <SelectItem value="1h">1 hour</SelectItem>
+                    <SelectItem value="2h">2 hours</SelectItem>
+                    <SelectItem value="4h">4 hours</SelectItem>
+                    <SelectItem value="6h">6 hours</SelectItem>
+                    <SelectItem value="8h">8 hours</SelectItem>
+                    <SelectItem value="12h">12 hours</SelectItem>
+                    <SelectItem value="1d">1 day</SelectItem>
+                    <SelectItem value="3d">3 days</SelectItem>
+                    <SelectItem value="1w">1 week</SelectItem>
+                    <SelectItem value="1M">1 month</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            {streamConfig.dataType === 'depth' && (
+              <div>
+                <Label htmlFor="depth-level">Depth Level</Label>
+                <Select value={streamConfig.depth} onValueChange={(value) => setStreamConfig({...streamConfig, depth: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select depth" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5 levels</SelectItem>
+                    <SelectItem value="10">10 levels</SelectItem>
+                    <SelectItem value="20">20 levels</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            <div className="md:col-span-2 lg:col-span-1">
+              <Label htmlFor="symbols">Trading Symbols</Label>
+              <Input
+                id="symbols"
+                value={streamConfig.symbols.join(', ')}
+                onChange={(e) => setStreamConfig({
+                  ...streamConfig, 
+                  symbols: e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s)
+                })}
+                placeholder="BTCUSDT, ETHUSDT, ADAUSDT"
+                className="text-xs"
+              />
+            </div>
+          </div>
+          
+          <div className="mt-3 p-3 bg-crypto-dark rounded border border-gray-700">
+            <div className="text-xs text-crypto-light">
+              <strong>Generated Stream URL:</strong>
+              <div className="mt-1 text-white font-mono break-all">
+                {selectedExchange?.wsStreamEndpoint 
+                  ? `${selectedExchange.wsStreamEndpoint}/stream?streams=${streamConfig.symbols.map(symbol => 
+                      streamConfig.dataType === 'kline' ? `${symbol.toLowerCase()}@kline_${streamConfig.interval}` :
+                      streamConfig.dataType === 'depth' ? `${symbol.toLowerCase()}@depth${streamConfig.depth}` :
+                      `${symbol.toLowerCase()}@${streamConfig.dataType}`
+                    ).join('/')}`
+                  : 'No exchange selected'
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Public Stream Testing */}
           <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
             <h4 className="text-md font-medium text-white mb-3">Public Data Stream</h4>
             <p className="text-sm text-crypto-light mb-4">
-              Test public market data streams using the selected exchange's WebSocket Stream endpoint.
+              Test public market data streams using the configured stream parameters above.
             </p>
             
             <div className="space-y-3">
@@ -235,12 +350,12 @@ export default function Settings() {
                   size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
                   onClick={() => {
-                    if (selectedExchange?.wsStreamEndpoint) {
+                    if (selectedExchange?.wsStreamEndpoint && streamConfig.symbols.length > 0) {
                       publicWs.connect();
-                      publicWs.subscribe(['btcusdt']);
+                      publicWs.subscribe(streamConfig.symbols);
                     }
                   }}
-                  disabled={publicWs.status === 'connecting' || !selectedExchange?.wsStreamEndpoint}
+                  disabled={publicWs.status === 'connecting' || !selectedExchange?.wsStreamEndpoint || streamConfig.symbols.length === 0}
                 >
                   <i className={`${publicWs.status === 'connecting' ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
                   {publicWs.status === 'connecting' ? 'Connecting...' : 'Test Connection'}
