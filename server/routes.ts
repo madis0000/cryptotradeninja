@@ -387,6 +387,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // WebSocket listen key generation for authenticated streams
+  app.post("/api/websocket/listen-key", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Get user's exchange API credentials
+      const exchanges = await storage.getExchangesByUserId(userId);
+      const binanceExchange = exchanges.find(ex => ex.name.toLowerCase().includes('binance'));
+      
+      if (!binanceExchange) {
+        return res.status(400).json({ 
+          error: "No Binance API credentials found. Please add your Binance API keys in the API Keys section." 
+        });
+      }
+
+      // Decrypt API credentials
+      const { apiKey } = decryptApiCredentials(
+        binanceExchange.encryptedApiKey,
+        binanceExchange.encryptedApiSecret,
+        binanceExchange.iv
+      );
+
+      // Make request to Binance to create user data stream
+      const binanceResponse = await fetch('https://api.binance.com/api/v3/userDataStream', {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey
+        }
+      });
+
+      if (!binanceResponse.ok) {
+        const errorText = await binanceResponse.text();
+        throw new Error(`Binance API error: ${binanceResponse.status} - ${errorText}`);
+      }
+
+      const data = await binanceResponse.json();
+      
+      res.json({
+        listenKey: data.listenKey,
+        message: "Listen key generated successfully"
+      });
+
+    } catch (error: any) {
+      console.error("Error generating listen key:", error);
+      res.status(500).json({ 
+        error: error.message || "Failed to generate listen key. Please check your API credentials." 
+      });
+    }
+  });
+
   // Market Data API
   app.get("/api/market", async (req, res) => {
     try {
