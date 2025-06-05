@@ -418,12 +418,19 @@ export class WebSocketService {
       data: marketUpdate
     });
 
+    console.log(`[WEBSOCKET] Broadcasting update for ${marketUpdate.symbol} to ${this.marketSubscriptions.size} clients`);
+    
     this.marketSubscriptions.forEach(subscription => {
       if (subscription.ws.readyState === WebSocket.OPEN) {
         // Check if client is subscribed to this symbol
-        if (subscription.symbols.size === 0 || 
-            subscription.symbols.has(marketUpdate.symbol.toLowerCase())) {
+        const isSubscribed = subscription.symbols.size === 0 || 
+                           subscription.symbols.has(marketUpdate.symbol.toLowerCase());
+        
+        console.log(`[WEBSOCKET] Client subscription check - symbols: [${Array.from(subscription.symbols)}], isSubscribed: ${isSubscribed}`);
+        
+        if (isSubscribed) {
           subscription.ws.send(message);
+          console.log(`[WEBSOCKET] Sent update to client for ${marketUpdate.symbol}`);
         }
       }
     });
