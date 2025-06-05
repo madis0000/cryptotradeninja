@@ -260,7 +260,7 @@ export default function Settings() {
           <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
             <h4 className="text-md font-medium text-white mb-3">User Data Stream</h4>
             <p className="text-sm text-crypto-light mb-4">
-              Test authenticated user data streams for account updates and order execution
+              Test authenticated user data streams using the modern WebSocket API or legacy listen key method. Select an exchange account to use its API credentials for testing.
             </p>
             
             <div className="space-y-3">

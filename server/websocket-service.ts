@@ -159,15 +159,12 @@ export class WebSocketService {
   }
 
   private initializeBinancePublicStream() {
-    // For testing purposes, start with mock data generation
+    // Start mock data generation for immediate functionality
     this.startMockDataGeneration();
     
-    // Also attempt real connection
-    const symbols = ['btcusdt', 'ethusdt', 'adausdt', 'bnbusdt', 'dogeusdt'];
-    const streamNames = symbols.map(symbol => `${symbol}@ticker`).join('/');
-    const wsUrl = `wss://stream.binance.com:9443/ws/${streamNames}`;
-
-    this.connectToBinancePublic(wsUrl);
+    // Connect to Binance testnet WebSocket API
+    const wsApiUrl = 'wss://ws-api.testnet.binance.vision/ws-api/v3';
+    this.connectToBinanceWebSocketAPI(wsApiUrl);
   }
 
   private startMockDataGeneration() {
@@ -204,7 +201,67 @@ export class WebSocketService {
     }, 2000); // Update every 2 seconds
   }
 
+  private connectToBinanceWebSocketAPI(wsApiUrl: string) {
+    if (this.binancePublicWs) {
+      this.binancePublicWs.close();
+    }
+
+    console.log('Connecting to Binance WebSocket API:', wsApiUrl);
+    this.binancePublicWs = new WebSocket(wsApiUrl);
+
+    this.binancePublicWs.on('open', () => {
+      console.log('Connected to Binance WebSocket API');
+      
+      // Subscribe to ticker data using the modern WebSocket API
+      const subscribeMessage = {
+        id: 1,
+        method: "ticker.24hr",
+        params: {
+          symbols: ["BTCUSDT", "ETHUSDT", "ADAUSDT", "BNBUSDT", "DOGEUSDT"]
+        }
+      };
+      
+      this.binancePublicWs?.send(JSON.stringify(subscribeMessage));
+    });
+
+    this.binancePublicWs.on('message', (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        
+        // Handle API response
+        if (message.result && Array.isArray(message.result)) {
+          message.result.forEach((ticker: any) => {
+            const marketUpdate = {
+              symbol: ticker.symbol,
+              price: parseFloat(ticker.lastPrice),
+              change: parseFloat(ticker.priceChangePercent),
+              volume: parseFloat(ticker.volume),
+              high: parseFloat(ticker.highPrice),
+              low: parseFloat(ticker.lowPrice),
+              timestamp: Date.now()
+            };
+            
+            this.marketData.set(ticker.symbol, marketUpdate);
+            this.broadcastMarketUpdate(marketUpdate);
+          });
+        }
+      } catch (error) {
+        console.error('Error processing Binance WebSocket API data:', error);
+      }
+    });
+
+    this.binancePublicWs.on('close', () => {
+      console.log('Binance WebSocket API disconnected, reconnecting...');
+      setTimeout(() => this.connectToBinanceWebSocketAPI(wsApiUrl), 5000);
+    });
+
+    this.binancePublicWs.on('error', (error) => {
+      console.error('Binance WebSocket API error:', error);
+    });
+  }
+
   private connectToBinancePublic(wsUrl: string) {
+    // Legacy method - keeping for fallback
     if (this.binancePublicWs) {
       this.binancePublicWs.close();
     }
@@ -212,7 +269,7 @@ export class WebSocketService {
     this.binancePublicWs = new WebSocket(wsUrl);
 
     this.binancePublicWs.on('open', () => {
-      console.log('Connected to Binance public stream');
+      console.log('Connected to Binance public stream (legacy)');
     });
 
     this.binancePublicWs.on('message', (data) => {
