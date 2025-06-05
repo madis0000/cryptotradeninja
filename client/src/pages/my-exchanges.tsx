@@ -130,24 +130,28 @@ export default function MyExchanges() {
   ];
 
   const renderSidebar = () => (
-    <div className="w-64 bg-crypto-dark border-r border-gray-800 p-4">
-      <h2 className="text-xl font-bold text-white mb-6">My Exchanges</h2>
-      <nav className="space-y-2">
-        {sidebarItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveSection(item.id)}
-            className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex items-center space-x-3 ${
-              activeSection === item.id
-                ? 'bg-crypto-accent text-white'
-                : 'text-crypto-light hover:bg-gray-800 hover:text-white'
-            }`}
-          >
-            <i className={item.icon}></i>
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </nav>
+    <div className="w-72 bg-crypto-dark p-6">
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold text-white mb-4">Exchange Management</h2>
+          <nav className="space-y-1">
+            {sidebarItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveSection(item.id)}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center space-x-3 text-sm ${
+                  activeSection === item.id
+                    ? 'bg-crypto-accent text-white'
+                    : 'text-crypto-light hover:bg-gray-800 hover:text-white'
+                }`}
+              >
+                <i className={`${item.icon} w-4`}></i>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
     </div>
   );
 
@@ -373,8 +377,10 @@ export default function MyExchanges() {
       <div className="flex">
         {renderSidebar()}
         
-        <div className="flex-1 p-6">
-          {activeSection === 'general' && renderGeneralSection()}
+        <div className="flex-1">
+          <div className="p-8">
+            {activeSection === 'general' && renderGeneralSection()}
+          </div>
         </div>
       </div>
     </div>
