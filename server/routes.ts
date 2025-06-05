@@ -31,58 +31,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     credentials: true
   }));
 
-  // Rate limiting with proper trust proxy configuration
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 1000, // limit each IP to 1000 requests per windowMs (increased for development)
-    message: { error: 'Too many requests, please try again later' },
-    standardHeaders: true,
-    legacyHeaders: false,
-    skipSuccessfulRequests: true,
-  });
+  // Disabled rate limiting for development
   
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10, // increased for development
-    message: { error: 'Too many authentication attempts, please try again later' },
-    standardHeaders: true,
-    legacyHeaders: false,
-    skipSuccessfulRequests: true,
-  });
-
-  app.use('/api/', limiter);
-  
-  // WebSocket server for real-time updates on a different port
-  const wss = new WebSocketServer({ port: 8080 });
-  
-  // Mock market data broadcasting
-  const marketData: Record<string, { price: number; change: number }> = {
-    'BTC/USDT': { price: 43285.12, change: 2.34 },
-    'ETH/USDT': { price: 2568.91, change: -1.12 },
-    'ADA/USDT': { price: 0.4521, change: 0.87 },
-    'BNB/USDT': { price: 312.67, change: 0.89 },
-    'SOL/USDT': { price: 98.34, change: -2.67 },
-  };
-
-  // Broadcast market data updates
-  setInterval(() => {
-    Object.keys(marketData).forEach(pair => {
-      const change = (Math.random() - 0.5) * 2; // Random price movement
-      if (marketData[pair]) {
-        marketData[pair].price += change;
-        marketData[pair].change = change;
-      }
-    });
-
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: 'market_update',
-          data: marketData
-        }));
-      }
-    });
-  }, 3000);
+  // Market data is now handled by the unified WebSocket service
 
   // Authentication routes
   const registerSchema = insertUserSchema.extend({
@@ -97,7 +48,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     password: z.string().min(1),
   });
 
-  app.post("/api/auth/register", authLimiter, async (req, res) => {
+  app.post("/api/auth/register", async (req, res) => {
     try {
       const validatedData = registerSchema.parse(req.body);
       
@@ -140,7 +91,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/login", authLimiter, async (req, res) => {
+  app.post("/api/auth/login", async (req, res) => {
     try {
       const validatedData = loginSchema.parse(req.body);
       
