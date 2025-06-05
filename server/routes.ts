@@ -6,12 +6,16 @@ import { z } from "zod";
 import WebSocket, { WebSocketServer } from "ws";
 import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";
 import { encryptApiCredentials, decryptApiCredentials } from "./encryption";
+import { WebSocketService } from "./websocket-service";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import cors from "cors";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+  
+  // Initialize WebSocket service
+  const wsService = new WebSocketService(httpServer);
   
   // Security middleware
   app.use(helmet({
@@ -391,41 +395,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/websocket/listen-key", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      
-      // Get user's exchange API credentials
-      const exchanges = await storage.getExchangesByUserId(userId);
-      const binanceExchange = exchanges.find(ex => ex.name.toLowerCase().includes('binance'));
-      
-      if (!binanceExchange) {
-        return res.status(400).json({ 
-          error: "No Binance API credentials found. Please add your Binance API keys in the API Keys section." 
-        });
-      }
-
-      // Decrypt API credentials
-      const { apiKey } = decryptApiCredentials(
-        binanceExchange.encryptedApiKey,
-        binanceExchange.encryptedApiSecret,
-        binanceExchange.iv
-      );
-
-      // Make request to Binance to create user data stream
-      const binanceResponse = await fetch('https://api.binance.com/api/v3/userDataStream', {
-        method: 'POST',
-        headers: {
-          'X-MBX-APIKEY': apiKey
-        }
-      });
-
-      if (!binanceResponse.ok) {
-        const errorText = await binanceResponse.text();
-        throw new Error(`Binance API error: ${binanceResponse.status} - ${errorText}`);
-      }
-
-      const data = await binanceResponse.json();
+      const listenKey = await wsService.generateListenKey(userId);
       
       res.json({
-        listenKey: data.listenKey,
+        listenKey,
         message: "Listen key generated successfully"
       });
 
