@@ -54,6 +54,12 @@ export class WebSocketService {
       this.marketSubscriptions.add(subscription);
       console.log(`[WEBSOCKET] Total active subscriptions: ${this.marketSubscriptions.size}`);
 
+      // Start Binance streams if this is the first client
+      if (this.marketSubscriptions.size === 1) {
+        console.log(`[WEBSOCKET] First client connected - starting Binance streams`);
+        this.initializeBinancePublicStream();
+      }
+
       ws.on('message', async (data) => {
         try {
           const message = JSON.parse(data.toString());
@@ -95,6 +101,12 @@ export class WebSocketService {
         });
         
         console.log(`[WEBSOCKET] Remaining subscriptions: ${this.marketSubscriptions.size}`);
+        
+        // Stop Binance streams if no clients are connected
+        if (this.marketSubscriptions.size === 0) {
+          console.log(`[WEBSOCKET] No clients connected - stopping Binance streams`);
+          this.stopBinanceStreams();
+        }
       });
 
       ws.on('error', (error) => {
@@ -495,9 +507,27 @@ export class WebSocketService {
     return this.userConnections;
   }
 
+  public stopBinanceStreams() {
+    console.log('[WEBSOCKET] Stopping all Binance streams');
+    
+    if (this.binancePublicWs) {
+      console.log('[WEBSOCKET] Closing Binance public stream');
+      this.binancePublicWs.close();
+      this.binancePublicWs = null;
+    }
+    
+    // Close all user streams
+    this.binanceUserStreams.forEach((ws, listenKey) => {
+      console.log(`[WEBSOCKET] Closing user stream ${listenKey}`);
+      ws.close();
+    });
+    this.binanceUserStreams.clear();
+    
+    console.log('[WEBSOCKET] All Binance streams stopped');
+  }
+
   public close() {
     this.wss.close();
-    this.binancePublicWs?.close();
-    this.binanceUserStreams.forEach(ws => ws.close());
+    this.stopBinanceStreams();
   }
 }
