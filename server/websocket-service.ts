@@ -166,10 +166,10 @@ export class WebSocketService {
       return;
     }
 
-    console.log('[BINANCE] ===== INITIALIZING BINANCE STREAMS =====');
+    console.log('[BINANCE] ===== INITIALIZING REAL BINANCE STREAMS =====');
     this.isStreamsActive = true;
     
-    // Connect only to real Binance streams (no mock data)
+    // Connect only to real Binance streams
     this.connectConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']);
   }
 
@@ -203,45 +203,7 @@ export class WebSocketService {
     this.connectToBinancePublic(streamUrl);
   }
 
-  private startMockDataGeneration() {
-    if (this.mockDataInterval) {
-      console.log('[MOCK DATA] Mock data generation already active');
-      return;
-    }
-
-    console.log('[MOCK DATA] Starting mock data generation');
-    // Generate realistic market data for testing
-    const symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT'];
-    const baseData = {
-      'BTCUSDT': { basePrice: 43000, volatility: 0.02 },
-      'ETHUSDT': { basePrice: 2400, volatility: 0.03 },
-      'ADAUSDT': { basePrice: 0.45, volatility: 0.05 },
-      'BNBUSDT': { basePrice: 310, volatility: 0.04 },
-      'DOGEUSDT': { basePrice: 0.085, volatility: 0.06 }
-    };
-
-    this.mockDataInterval = setInterval(() => {
-      symbols.forEach(symbol => {
-        const base = baseData[symbol as keyof typeof baseData];
-        const change = (Math.random() - 0.5) * base.volatility;
-        const newPrice = base.basePrice * (1 + change);
-        const changePercent = change * 100;
-
-        const marketUpdate = {
-          symbol,
-          price: parseFloat(newPrice.toFixed(symbol.includes('USDT') && !symbol.startsWith('BTC') && !symbol.startsWith('ETH') ? 4 : 2)),
-          change: parseFloat(changePercent.toFixed(2)),
-          volume: Math.random() * 1000000,
-          high: newPrice * 1.02,
-          low: newPrice * 0.98,
-          timestamp: Date.now()
-        };
-
-        this.marketData.set(symbol, marketUpdate);
-        this.broadcastMarketUpdate(marketUpdate);
-      });
-    }, 2000); // Update every 2 seconds
-  }
+  // Mock data generation removed - only real exchange data
 
   private connectToBinanceWebSocketAPI(wsApiUrl: string) {
     if (this.binancePublicWs) {
@@ -518,11 +480,7 @@ export class WebSocketService {
     this.isStreamsActive = false;
     
     // Stop mock data generation
-    if (this.mockDataInterval) {
-      console.log('[WEBSOCKET] Stopping mock data generation');
-      clearInterval(this.mockDataInterval);
-      this.mockDataInterval = null;
-    }
+    // Mock data generation removed
     
     if (this.binancePublicWs) {
       console.log('[WEBSOCKET] Closing Binance public stream');
