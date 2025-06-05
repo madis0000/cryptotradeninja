@@ -8,12 +8,28 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { usePublicWebSocket, useUserWebSocket } from "@/hooks/useWebSocketService";
+import { useQuery } from "@tanstack/react-query";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+interface Exchange {
+  id: number;
+  name: string;
+  apiKey: string;
+  isActive: boolean;
+  createdAt: string;
+}
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general');
   const [listenKey, setListenKey] = useState<string>('');
+  const [selectedExchangeId, setSelectedExchangeId] = useState<string>('');
   
   const { toast } = useToast();
+
+  // Fetch exchanges for selection
+  const { data: exchanges = [], isLoading: exchangesLoading } = useQuery<Exchange[]>({
+    queryKey: ['/api/exchanges'],
+  });
 
   // Use the dedicated WebSocket service hooks
   const publicWs = usePublicWebSocket({
@@ -66,10 +82,21 @@ export default function Settings() {
     }
   });
 
-  // Enhanced WebSocket testing functions using stored API keys
+  // Enhanced WebSocket testing functions using selected exchange API keys
   const generateListenKey = async () => {
+    if (!selectedExchangeId) {
+      toast({
+        title: "Exchange Required",
+        description: "Please select an exchange account first",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      const response = await apiRequest('POST', '/api/websocket/listen-key', {});
+      const response = await apiRequest('POST', '/api/websocket/listen-key', {
+        exchangeId: parseInt(selectedExchangeId)
+      });
       const data = await response.json();
       
       if (response.ok) {
@@ -238,6 +265,30 @@ export default function Settings() {
             
             <div className="space-y-3">
               <div>
+                <Label htmlFor="exchange-selector" className="text-crypto-light text-sm">Exchange Account</Label>
+                <Select value={selectedExchangeId} onValueChange={setSelectedExchangeId}>
+                  <SelectTrigger className="mt-1 bg-crypto-dark border-gray-700 text-white">
+                    <SelectValue placeholder={exchangesLoading ? "Loading exchanges..." : "Select an exchange account"} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-crypto-dark border-gray-700">
+                    {exchanges.map((exchange) => (
+                      <SelectItem key={exchange.id} value={exchange.id.toString()}>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-white">{exchange.name}</span>
+                          <div className={`w-2 h-2 rounded-full ${exchange.isActive ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {exchanges.length === 0 && !exchangesLoading && (
+                  <p className="text-xs text-crypto-light/70 mt-1">
+                    No exchange accounts found. Please add API keys in My Exchanges section.
+                  </p>
+                )}
+              </div>
+
+              <div>
                 <Label htmlFor="user-ws-url" className="text-crypto-light text-sm">User Stream URL</Label>
                 <Input
                   id="user-ws-url"
@@ -260,6 +311,7 @@ export default function Settings() {
                   size="sm" 
                   className="bg-crypto-accent hover:bg-crypto-accent/80 text-white"
                   onClick={generateListenKey}
+                  disabled={!selectedExchangeId || exchangesLoading}
                 >
                   <i className="fas fa-key mr-2"></i>
                   Generate Listen Key
