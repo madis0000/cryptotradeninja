@@ -17,11 +17,15 @@ interface Exchange {
   apiKey: string;
   isActive: boolean;
   createdAt: string;
+  wsApiEndpoint?: string;
+  wsStreamEndpoint?: string;
+  restApiEndpoint?: string;
+  exchangeType?: string;
+  isTestnet?: boolean;
 }
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general');
-  const [listenKey, setListenKey] = useState<string>('');
   const [selectedExchangeId, setSelectedExchangeId] = useState<string>('');
   
   const { toast } = useToast();
@@ -30,6 +34,9 @@ export default function Settings() {
   const { data: exchanges = [], isLoading: exchangesLoading } = useQuery<Exchange[]>({
     queryKey: ['/api/exchanges'],
   });
+
+  // Get selected exchange data
+  const selectedExchange = exchanges.find(ex => ex.id.toString() === selectedExchangeId);
 
   // Use the dedicated WebSocket service hooks
   const publicWs = usePublicWebSocket({
@@ -82,9 +89,9 @@ export default function Settings() {
     }
   });
 
-  // Enhanced WebSocket testing functions using selected exchange API keys
-  const generateListenKey = async () => {
-    if (!selectedExchangeId) {
+  // WebSocket testing functions using stored exchange endpoints
+  const testUserWebSocket = () => {
+    if (!selectedExchangeId || !selectedExchange) {
       toast({
         title: "Exchange Required",
         description: "Please select an exchange account first",
@@ -93,44 +100,17 @@ export default function Settings() {
       return;
     }
 
-    try {
-      const response = await apiRequest('POST', '/api/websocket/listen-key', {
-        exchangeId: parseInt(selectedExchangeId)
-      });
-      const data = await response.json();
-      
-      if (response.ok) {
-        setListenKey(data.listenKey);
-        (document.getElementById('listen-key') as HTMLInputElement).value = data.listenKey;
-        toast({
-          title: "Listen Key Generated",
-          description: "Use this key to connect to authenticated streams",
-        });
-      } else {
-        throw new Error(data.error || 'Failed to generate listen key');
-      }
-    } catch (error: any) {
+    if (!selectedExchange.wsApiEndpoint) {
       toast({
-        title: "Listen Key Error",
-        description: error.message || "Please ensure your API keys are configured in My Exchanges",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const testUserWebSocket = () => {
-    const listenKey = (document.getElementById('listen-key') as HTMLInputElement)?.value;
-    
-    if (!listenKey) {
-      toast({
-        title: "Listen Key Required",
-        description: "Generate a listen key first to test user data stream",
+        title: "Endpoint Missing",
+        description: "WebSocket API endpoint not configured for this exchange",
         variant: "destructive",
       });
       return;
     }
     
-    userWs.connect(listenKey);
+    // Connect using the exchange's stored WebSocket API endpoint
+    userWs.connect(selectedExchangeId);
   };
 
   const sidebarItems = [
@@ -260,7 +240,7 @@ export default function Settings() {
           <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
             <h4 className="text-md font-medium text-white mb-3">User Data Stream</h4>
             <p className="text-sm text-crypto-light mb-4">
-              Test authenticated user data streams using the modern WebSocket API or legacy listen key method. Select an exchange account to use its API credentials for testing.
+              Test authenticated user data streams using the modern WebSocket API. Select an exchange account to use its stored endpoints and API credentials for testing.
             </p>
             
             <div className="space-y-3">
@@ -288,39 +268,33 @@ export default function Settings() {
                 )}
               </div>
 
-              <div>
-                <Label htmlFor="user-ws-url" className="text-crypto-light text-sm">User Stream URL</Label>
-                <Input
-                  id="user-ws-url"
-                  defaultValue="wss://stream.binance.com:9443/ws/"
-                  className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="listen-key" className="text-crypto-light text-sm">Listen Key</Label>
-                <Input
-                  id="listen-key"
-                  placeholder="API key required for listen key generation"
-                  className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
-                />
-              </div>
+              {selectedExchange && (
+                <div className="space-y-2">
+                  <div>
+                    <Label className="text-crypto-light text-sm">WebSocket API Endpoint</Label>
+                    <Input
+                      value={selectedExchange.wsApiEndpoint || 'No endpoint configured'}
+                      readOnly
+                      className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-crypto-light text-sm">REST API Endpoint</Label>
+                    <Input
+                      value={selectedExchange.restApiEndpoint || 'No endpoint configured'}
+                      readOnly
+                      className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
+                    />
+                  </div>
+                </div>
+              )}
               
               <div className="flex space-x-2">
                 <Button 
                   size="sm" 
-                  className="bg-crypto-accent hover:bg-crypto-accent/80 text-white"
-                  onClick={generateListenKey}
-                  disabled={!selectedExchangeId || exchangesLoading}
-                >
-                  <i className="fas fa-key mr-2"></i>
-                  Generate Listen Key
-                </Button>
-                <Button 
-                  size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
                   onClick={testUserWebSocket}
-                  disabled={userWs.status === 'connecting'}
+                  disabled={userWs.status === 'connecting' || !selectedExchangeId}
                 >
                   <i className={`${userWs.status === 'connecting' ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
                   {userWs.status === 'connecting' ? 'Connecting...' : 'Test Connection'}
@@ -329,29 +303,29 @@ export default function Settings() {
               
               <div className="bg-crypto-dark p-3 rounded border border-gray-700">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-crypto-light">Authentication Status</span>
+                  <span className="text-xs font-medium text-crypto-light">Connection Status</span>
                   <div className="flex items-center space-x-1">
                     <div className={`w-2 h-2 rounded-full ${
                       userWs.status === 'connected' ? 'bg-crypto-success animate-pulse' :
                       userWs.status === 'connecting' ? 'bg-yellow-500 animate-pulse' :
                       userWs.status === 'error' ? 'bg-crypto-danger' :
-                      listenKey ? 'bg-yellow-500' : 'bg-gray-500'
+                      selectedExchangeId ? 'bg-yellow-500' : 'bg-gray-500'
                     }`}></div>
                     <span className={`text-xs ${
                       userWs.status === 'connected' ? 'text-crypto-success' :
                       userWs.status === 'connecting' ? 'text-yellow-500' :
                       userWs.status === 'error' ? 'text-crypto-danger' :
-                      listenKey ? 'text-yellow-500' : 'text-gray-500'
+                      selectedExchangeId ? 'text-yellow-500' : 'text-gray-500'
                     }`}>
                       {userWs.status === 'connected' ? 'Connected' :
                        userWs.status === 'connecting' ? 'Connecting' :
-                       userWs.status === 'error' ? 'Auth Error' :
-                       listenKey ? 'Ready to Connect' : 'API Key Required'}
+                       userWs.status === 'error' ? 'Connection Error' :
+                       selectedExchangeId ? 'Ready to Connect' : 'Select Exchange Account'}
                     </span>
                   </div>
                 </div>
                 <div className="text-xs text-crypto-light/70 font-mono bg-black/30 p-2 rounded max-h-24 overflow-y-auto">
-                  {userWs.lastMessage ? JSON.stringify(userWs.lastMessage, null, 2) : 'Generate a listen key and test connection to receive authenticated data...'}
+                  {userWs.lastMessage ? JSON.stringify(userWs.lastMessage, null, 2) : 'Select an exchange account and test connection to receive authenticated data...'}
                 </div>
               </div>
             </div>
