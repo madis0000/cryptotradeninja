@@ -1,0 +1,42 @@
+[BINANCE STREAM] Market update for DOGEUSDT: 0.17198000
+[WEBSOCKET] Broadcasting update for DOGEUSDT to 1 clients
+[WEBSOCKET] Sent update to client for DOGEUSDT
+[WEBSOCKET] ===== CLIENT DISCONNECT EVENT ===== Code: 1005, Reason: 
+[WEBSOCKET] Subscriptions before removal: 1
+[WEBSOCKET] Subscriptions after removal: 0
+[WEBSOCKET] ⚠️  NO CLIENTS CONNECTED - STOPPING ALL STREAMS ⚠️
+[WEBSOCKET] Stopping all Binance streams
+[WEBSOCKET] Closing Binance public stream
+[WEBSOCKET] All Binance streams stopped
+[BINANCE STREAM] Disconnected - Code: 1005, Reason: 
+[BINANCE STREAM] Streams inactive, not reconnecting
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive
+[BINANCE STREAM] Ignoring message - streams inactive

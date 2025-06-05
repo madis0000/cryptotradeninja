@@ -9,7 +9,7 @@ interface WebSocketHookOptions {
 }
 
 interface PublicWebSocketService {
-  connect: () => void;
+  connect: (symbols?: string[]) => void;
   disconnect: () => void;
   subscribe: (symbols: string[]) => void;
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -29,7 +29,7 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
   const [lastMessage, setLastMessage] = useState<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  const connect = useCallback(() => {
+  const connect = useCallback((symbols?: string[]) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
@@ -48,12 +48,13 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
       setStatus('connected');
       options.onConnect?.();
       
-      // Send subscription command to backend
+      // Send subscription command to backend with configured symbols
+      const symbolsToUse = symbols || ['BTCUSDT'];
       const subscribeMessage = {
         type: 'subscribe',
-        symbols: ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']
+        symbols: symbolsToUse
       };
-      console.log('[CLIENT WS] Sending command to backend:', subscribeMessage);
+      console.log('[CLIENT WS] Sending configured symbols to backend:', subscribeMessage);
       ws.send(JSON.stringify(subscribeMessage));
     };
 

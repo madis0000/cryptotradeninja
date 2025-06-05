@@ -53,11 +53,7 @@ export class WebSocketService {
       this.marketSubscriptions.add(subscription);
       console.log(`[WEBSOCKET] Total active subscriptions: ${this.marketSubscriptions.size}`);
 
-      // Start Binance streams if this is the first client
-      if (this.marketSubscriptions.size === 1) {
-        console.log(`[WEBSOCKET] ===== FIRST CLIENT - STARTING STREAMS =====`);
-        this.initializeBinancePublicStream();
-      }
+      // Don't start streams automatically - wait for frontend subscription
 
       ws.on('message', async (data) => {
         try {
@@ -66,11 +62,18 @@ export class WebSocketService {
           
           if (message.type === 'subscribe') {
             // Frontend requests subscription to specific trading pairs
-            const symbols = message.symbols || ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'];
+            const symbols = message.symbols || ['BTCUSDT'];
             console.log(`[WEBSOCKET] Frontend requesting subscription to symbols:`, symbols);
             symbols.forEach((symbol: string) => {
-              subscription.symbols.add(symbol.toLowerCase());
+              subscription.symbols.add(symbol.toUpperCase());
             });
+            
+            // Start Binance streams with the requested symbols
+            if (!this.isStreamsActive) {
+              console.log(`[WEBSOCKET] Starting streams for symbols:`, symbols);
+              this.connectConfigurableStream('ticker', symbols);
+              this.isStreamsActive = true;
+            }
             
             // Send current market data from backend to frontend
             this.sendMarketDataToClient(ws);
@@ -160,18 +163,7 @@ export class WebSocketService {
     }
   }
 
-  private initializeBinancePublicStream() {
-    if (this.isStreamsActive) {
-      console.log('[BINANCE] Streams already active, skipping initialization');
-      return;
-    }
-
-    console.log('[BINANCE] ===== INITIALIZING REAL BINANCE STREAMS =====');
-    this.isStreamsActive = true;
-    
-    // Connect only to real Binance streams
-    this.connectConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']);
-  }
+  // Removed - streams now started on-demand when frontend subscribes
 
   public connectConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
     const baseUrl = 'wss://stream.testnet.binance.vision/stream?streams=';
@@ -287,8 +279,7 @@ export class WebSocketService {
       try {
         // Ignore messages if streams are inactive
         if (!this.isStreamsActive) {
-          console.log('[BINANCE STREAM] Ignoring message - streams inactive');
-          return;
+          return; // Silently ignore - connection closing
         }
 
         const message = JSON.parse(data.toString());
