@@ -165,31 +165,82 @@ export default function Settings() {
           Configure and test WebSocket connections for real-time trading data and order monitoring.
           Proper WebSocket configuration is crucial for strategy execution.
         </p>
+
+        {/* Exchange Account Selector */}
+        <div className="mb-6 bg-crypto-darker p-4 rounded-lg border border-gray-800">
+          <h4 className="text-md font-medium text-white mb-3">Exchange Account Selection</h4>
+          <p className="text-sm text-crypto-light mb-4">
+            Select an exchange account to use its configured endpoints for both public and user data streams.
+          </p>
+          
+          <div>
+            <Label htmlFor="exchange-selector" className="text-crypto-light text-sm">Exchange Account</Label>
+            <Select value={selectedExchangeId} onValueChange={setSelectedExchangeId}>
+              <SelectTrigger className="mt-1 bg-crypto-dark border-gray-700 text-white">
+                <SelectValue placeholder={exchangesLoading ? "Loading exchanges..." : "Select an exchange account"} />
+              </SelectTrigger>
+              <SelectContent className="bg-crypto-dark border-gray-700">
+                {exchanges.map((exchange) => (
+                  <SelectItem key={exchange.id} value={exchange.id.toString()}>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-white">{exchange.name}</span>
+                      <div className={`w-2 h-2 rounded-full ${exchange.isActive ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {exchanges.length === 0 && !exchangesLoading && (
+              <p className="text-xs text-crypto-light/70 mt-1">
+                No exchange accounts found. Please add API keys in My Exchanges section.
+              </p>
+            )}
+          </div>
+
+          {selectedExchange && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <Label className="text-crypto-light text-xs">WebSocket API Endpoint</Label>
+                <div className="mt-1 p-2 bg-crypto-dark border border-gray-700 rounded text-xs text-white">
+                  {selectedExchange.wsApiEndpoint || 'Not configured'}
+                </div>
+              </div>
+              <div>
+                <Label className="text-crypto-light text-xs">WebSocket Stream Endpoint</Label>
+                <div className="mt-1 p-2 bg-crypto-dark border border-gray-700 rounded text-xs text-white">
+                  {selectedExchange.wsStreamEndpoint || 'Not configured'}
+                </div>
+              </div>
+              <div>
+                <Label className="text-crypto-light text-xs">REST API Endpoint</Label>
+                <div className="mt-1 p-2 bg-crypto-dark border border-gray-700 rounded text-xs text-white">
+                  {selectedExchange.restApiEndpoint || 'Not configured'}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Public Stream Testing */}
           <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
             <h4 className="text-md font-medium text-white mb-3">Public Data Stream</h4>
             <p className="text-sm text-crypto-light mb-4">
-              Test public market data streams for charts and price feeds
+              Test public market data streams using the selected exchange's WebSocket Stream endpoint.
             </p>
             
             <div className="space-y-3">
-              <div>
-                <Label htmlFor="public-ws-url" className="text-crypto-light text-sm">Public Stream URL</Label>
-                <Input
-                  id="public-ws-url"
-                  defaultValue="wss://stream.binance.com:9443/ws/btcusdt@ticker"
-                  className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
-                />
-              </div>
-              
               <div className="flex space-x-2">
                 <Button 
                   size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
-                  onClick={() => publicWs.connect()}
-                  disabled={publicWs.status === 'connecting'}
+                  onClick={() => {
+                    if (selectedExchange?.wsStreamEndpoint) {
+                      publicWs.connect();
+                      publicWs.subscribe(['btcusdt']);
+                    }
+                  }}
+                  disabled={publicWs.status === 'connecting' || !selectedExchange?.wsStreamEndpoint}
                 >
                   <i className={`${publicWs.status === 'connecting' ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
                   {publicWs.status === 'connecting' ? 'Connecting...' : 'Test Connection'}
@@ -230,7 +281,7 @@ export default function Settings() {
                   </div>
                 </div>
                 <div className="text-xs text-crypto-light/70 font-mono bg-black/30 p-2 rounded max-h-24 overflow-y-auto">
-                  {publicWs.lastMessage ? JSON.stringify(publicWs.lastMessage, null, 2) : 'Click "Test Connection" to start receiving live market data...'}
+                  {publicWs.lastMessage ? JSON.stringify(publicWs.lastMessage, null, 2) : 'Select an exchange account and test connection to receive live market data...'}
                 </div>
               </div>
             </div>
@@ -240,54 +291,10 @@ export default function Settings() {
           <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
             <h4 className="text-md font-medium text-white mb-3">User Data Stream</h4>
             <p className="text-sm text-crypto-light mb-4">
-              Test authenticated user data streams using the modern WebSocket API. Select an exchange account to use its stored endpoints and API credentials for testing.
+              Test authenticated user data streams using the selected exchange's WebSocket API endpoint and stored API credentials.
             </p>
             
             <div className="space-y-3">
-              <div>
-                <Label htmlFor="exchange-selector" className="text-crypto-light text-sm">Exchange Account</Label>
-                <Select value={selectedExchangeId} onValueChange={setSelectedExchangeId}>
-                  <SelectTrigger className="mt-1 bg-crypto-dark border-gray-700 text-white">
-                    <SelectValue placeholder={exchangesLoading ? "Loading exchanges..." : "Select an exchange account"} />
-                  </SelectTrigger>
-                  <SelectContent className="bg-crypto-dark border-gray-700">
-                    {exchanges.map((exchange) => (
-                      <SelectItem key={exchange.id} value={exchange.id.toString()}>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-white">{exchange.name}</span>
-                          <div className={`w-2 h-2 rounded-full ${exchange.isActive ? 'bg-green-500' : 'bg-gray-500'}`}></div>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {exchanges.length === 0 && !exchangesLoading && (
-                  <p className="text-xs text-crypto-light/70 mt-1">
-                    No exchange accounts found. Please add API keys in My Exchanges section.
-                  </p>
-                )}
-              </div>
-
-              {selectedExchange && (
-                <div className="space-y-2">
-                  <div>
-                    <Label className="text-crypto-light text-sm">WebSocket API Endpoint</Label>
-                    <Input
-                      value={selectedExchange.wsApiEndpoint || 'No endpoint configured'}
-                      readOnly
-                      className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-crypto-light text-sm">REST API Endpoint</Label>
-                    <Input
-                      value={selectedExchange.restApiEndpoint || 'No endpoint configured'}
-                      readOnly
-                      className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
-                    />
-                  </div>
-                </div>
-              )}
               
               <div className="flex space-x-2">
                 <Button 
