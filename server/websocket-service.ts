@@ -21,6 +21,8 @@ export class WebSocketService {
   private marketData = new Map<string, any>();
   private binancePublicWs: WebSocket | null = null;
   private binanceUserStreams = new Map<string, WebSocket>();
+  private mockDataInterval: NodeJS.Timeout | null = null;
+  private isStreamsActive = false;
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -159,7 +161,13 @@ export class WebSocketService {
   }
 
   private initializeBinancePublicStream() {
+    if (this.isStreamsActive) {
+      console.log('[BINANCE] Streams already active, skipping initialization');
+      return;
+    }
+
     console.log('[BINANCE] Initializing Binance public stream connections');
+    this.isStreamsActive = true;
     
     // Start mock data generation for immediate functionality
     this.startMockDataGeneration();
@@ -204,6 +212,12 @@ export class WebSocketService {
   }
 
   private startMockDataGeneration() {
+    if (this.mockDataInterval) {
+      console.log('[MOCK DATA] Mock data generation already active');
+      return;
+    }
+
+    console.log('[MOCK DATA] Starting mock data generation');
     // Generate realistic market data for testing
     const symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT'];
     const baseData = {
@@ -214,7 +228,7 @@ export class WebSocketService {
       'DOGEUSDT': { basePrice: 0.085, volatility: 0.06 }
     };
 
-    setInterval(() => {
+    this.mockDataInterval = setInterval(() => {
       symbols.forEach(symbol => {
         const base = baseData[symbol as keyof typeof baseData];
         const change = (Math.random() - 0.5) * base.volatility;
@@ -509,6 +523,14 @@ export class WebSocketService {
 
   public stopBinanceStreams() {
     console.log('[WEBSOCKET] Stopping all Binance streams');
+    this.isStreamsActive = false;
+    
+    // Stop mock data generation
+    if (this.mockDataInterval) {
+      console.log('[WEBSOCKET] Stopping mock data generation');
+      clearInterval(this.mockDataInterval);
+      this.mockDataInterval = null;
+    }
     
     if (this.binancePublicWs) {
       console.log('[WEBSOCKET] Closing Binance public stream');
