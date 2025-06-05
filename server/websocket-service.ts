@@ -106,11 +106,8 @@ export class WebSocketService {
       this.marketSubscriptions.add(subscription);
       console.log(`[PUBLIC WS] Total active subscriptions: ${this.marketSubscriptions.size}`);
       
-      // Start backend streams if this is the first client
-      if (this.marketSubscriptions.size === 1) {
-        console.log('[CONNECTION MANAGER] First client connected, starting backend streams');
-        this.startBackendStreams();
-      }
+      // Don't auto-start streams - wait for client subscription
+      console.log('[CONNECTION MANAGER] Client connected, waiting for subscription message');
 
       ws.on('message', (data) => {
         try {
@@ -119,7 +116,12 @@ export class WebSocketService {
           
           if (message.type === 'subscribe') {
             // Subscribe to specific trading pairs
-            const symbols = message.symbols || ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'ICPUSDT'];
+            const symbols = message.symbols;
+            if (!symbols || symbols.length === 0) {
+              console.log(`[PUBLIC WS] No symbols provided in subscription message`);
+              return;
+            }
+            
             console.log(`[PUBLIC WS] Client subscribing to symbols:`, symbols);
             
             // Clear existing subscriptions and add new ones
@@ -296,19 +298,8 @@ export class WebSocketService {
     this.binancePublicWs = new WebSocket(wsApiUrl);
 
     this.binancePublicWs.on('open', () => {
-      console.log('[BINANCE] WebSocket connection opened successfully');
-      
-      // Subscribe to ticker data using the modern WebSocket API
-      const subscribeMessage = {
-        id: 1,
-        method: "ticker.24hr",
-        params: {
-          symbols: ["BTCUSDT", "ETHUSDT", "ADAUSDT", "BNBUSDT", "DOGEUSDT"]
-        }
-      };
-      
-      console.log('[BINANCE] Sending subscription message:', JSON.stringify(subscribeMessage));
-      this.binancePublicWs?.send(JSON.stringify(subscribeMessage));
+      console.log('[BINANCE] WebSocket API connection opened successfully');
+      // Don't auto-subscribe - wait for client requests
     });
 
     this.binancePublicWs.on('message', (data) => {

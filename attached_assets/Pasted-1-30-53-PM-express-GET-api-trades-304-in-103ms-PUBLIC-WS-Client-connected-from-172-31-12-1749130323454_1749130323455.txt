@@ -1,0 +1,39 @@
+1:30:53 PM [express] GET /api/trades 304 in 103ms :: []
+[PUBLIC WS] Client connected from 172.31.128.83
+[PUBLIC WS] Total active subscriptions: 1
+[CONNECTION MANAGER] First client connected, starting backend streams
+[CONNECTION MANAGER] Starting Binance backend streams
+[BINANCE] Initializing Binance public stream connections
+[BINANCE] Attempting to connect to WebSocket API: wss://ws-api.testnet.binance.vision/ws-api/v3
+[BINANCE] Creating new WebSocket connection to: wss://ws-api.testnet.binance.vision/ws-api/v3
+[BINANCE] Waiting for client subscriptions before starting streams
+[PUBLIC WS] Sending initial market data
+[PUBLIC WS] Attempting to send market data to client
+[PUBLIC WS] WebSocket ready state: 1
+[PUBLIC WS] Available market data entries: 0
+[PUBLIC WS] No market data available to send
+[PUBLIC WS] Client disconnected - Code: 1006, Reason: 
+[PUBLIC WS] Remaining subscriptions: 0
+[CONNECTION MANAGER] No clients remaining, stopping backend streams
+[CONNECTION MANAGER] Stopping all backend streams
+[BINANCE] Stopping all Binance streams
+[BINANCE] Closing main WebSocket connection
+[BINANCE] All Binance streams stopped and cleared
+[CONNECTION MANAGER] All backend streams stopped
+[BINANCE] WebSocket API error: Error: WebSocket was closed before the connection was established
+    at WebSocket.close (/home/runner/workspace/node_modules/ws/lib/websocket.js:299:7)
+    at WebSocketService.stopAllBinanceStreams (/home/runner/workspace/server/websocket-service.ts:77:28)
+    at WebSocketService.stopBackendStreams (/home/runner/workspace/server/websocket-service.ts:53:10)
+    at WebSocket.<anonymous> (/home/runner/workspace/server/websocket-service.ts:153:16)
+    at WebSocket.emit (node:events:530:35)
+    at WebSocket.emitClose (/home/runner/workspace/node_modules/ws/lib/websocket.js:272:10)
+    at Receiver.receiverOnFinish (/home/runner/workspace/node_modules/ws/lib/websocket.js:1209:20)
+    at Receiver.emit (node:events:518:28)
+    at finish (node:internal/streams/writable:955:10)
+    at node:internal/streams/writable:936:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+[BINANCE] WebSocket API disconnected - Code: 1006, Reason: 
+[BINANCE] Attempting reconnection in 5 seconds...
+[BINANCE] Creating new WebSocket connection to: wss://ws-api.testnet.binance.vision/ws-api/v3
+[BINANCE] WebSocket connection opened successfully
+[BINANCE] Sending subscription message: {"id":1,"method":"ticker.24hr","params":{"symbols":["BTCUSDT","ETHUSDT","ADAUSDT","BNBUSDT","DOGEUSDT"]}}
