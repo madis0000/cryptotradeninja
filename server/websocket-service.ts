@@ -22,6 +22,8 @@ export class WebSocketService {
   private marketData = new Map<string, any>();
   private binancePublicWs: WebSocket | null = null;
   private binanceUserStreams = new Map<string, WebSocket>();
+  private activeBinanceStreams = new Map<string, WebSocket>();
+  private mockDataInterval: NodeJS.Timeout | null = null;
 
   constructor(server: Server) {
     // Public market data WebSocket server
@@ -38,7 +40,7 @@ export class WebSocketService {
 
     this.setupPublicWebSocket();
     this.setupUserWebSocket();
-    this.initializeBinancePublicStream();
+    // Backend streams will start only when clients connect
   }
 
   private setupPublicWebSocket() {
@@ -55,6 +57,12 @@ export class WebSocketService {
 
       this.marketSubscriptions.add(subscription);
       console.log(`[PUBLIC WS] Total active subscriptions: ${this.marketSubscriptions.size}`);
+      
+      // Start backend streams if this is the first client
+      if (this.marketSubscriptions.size === 1) {
+        console.log('[CONNECTION MANAGER] First client connected, starting backend streams');
+        this.startBackendStreams();
+      }
 
       ws.on('message', (data) => {
         try {
@@ -81,6 +89,12 @@ export class WebSocketService {
         console.log(`[PUBLIC WS] Client disconnected - Code: ${code}, Reason: ${reason}`);
         this.marketSubscriptions.delete(subscription);
         console.log(`[PUBLIC WS] Remaining subscriptions: ${this.marketSubscriptions.size}`);
+        
+        // Stop backend streams if no clients remain
+        if (this.marketSubscriptions.size === 0) {
+          console.log('[CONNECTION MANAGER] No clients remaining, stopping backend streams');
+          this.stopBackendStreams();
+        }
       });
 
       ws.on('error', (error) => {
