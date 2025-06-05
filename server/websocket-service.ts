@@ -172,10 +172,15 @@ export class WebSocketService {
     // Start mock data generation for immediate functionality
     this.startMockDataGeneration();
     
-    // Connect to Binance testnet WebSocket API
+    // Connect to Binance testnet WebSocket API for authenticated operations
     const wsApiUrl = 'wss://ws-api.testnet.binance.vision/ws-api/v3';
     console.log(`[BINANCE] Attempting to connect to WebSocket API: ${wsApiUrl}`);
     this.connectToBinanceWebSocketAPI(wsApiUrl);
+
+    // Connect to Binance testnet public stream for market data
+    const streamUrl = 'wss://stream.testnet.binance.vision/stream?streams=btcusdt@ticker/ethusdt@ticker/adausdt@ticker/bnbusdt@ticker/dogeusdt@ticker';
+    console.log(`[BINANCE] Attempting to connect to public stream: ${streamUrl}`);
+    this.connectToBinancePublic(streamUrl);
   }
 
   private startMockDataGeneration() {
@@ -275,48 +280,70 @@ export class WebSocketService {
   }
 
   private connectToBinancePublic(wsUrl: string) {
-    // Legacy method - keeping for fallback
-    if (this.binancePublicWs) {
-      this.binancePublicWs.close();
-    }
+    console.log('[BINANCE STREAM] Creating new WebSocket connection to:', wsUrl);
+    
+    const publicStreamWs = new WebSocket(wsUrl);
 
-    this.binancePublicWs = new WebSocket(wsUrl);
-
-    this.binancePublicWs.on('open', () => {
-      console.log('Connected to Binance public stream (legacy)');
+    publicStreamWs.on('open', () => {
+      console.log('[BINANCE STREAM] Connected to Binance public stream successfully');
     });
 
-    this.binancePublicWs.on('message', (data) => {
+    publicStreamWs.on('message', (data) => {
       try {
-        const ticker = JSON.parse(data.toString());
+        const message = JSON.parse(data.toString());
+        console.log('[BINANCE STREAM] Received message:', JSON.stringify(message).substring(0, 200) + '...');
         
-        if (ticker.s) { // Valid ticker data
+        // Handle combined stream format: {"stream":"<streamName>","data":<rawPayload>}
+        if (message.stream && message.data) {
+          const ticker = message.data;
           const symbol = ticker.s;
+          
+          if (symbol) {
+            const marketUpdate = {
+              symbol,
+              price: parseFloat(ticker.c),
+              change: parseFloat(ticker.P),
+              volume: parseFloat(ticker.v),
+              high: parseFloat(ticker.h),
+              low: parseFloat(ticker.l),
+              timestamp: Date.now()
+            };
+
+            console.log(`[BINANCE STREAM] Market update for ${symbol}: ${ticker.c}`);
+            this.marketData.set(symbol, marketUpdate);
+            this.broadcastMarketUpdate(marketUpdate);
+          }
+        }
+        // Handle single stream format
+        else if (message.s) {
+          const symbol = message.s;
           const marketUpdate = {
             symbol,
-            price: parseFloat(ticker.c),
-            change: parseFloat(ticker.P),
-            volume: parseFloat(ticker.v),
-            high: parseFloat(ticker.h),
-            low: parseFloat(ticker.l),
+            price: parseFloat(message.c),
+            change: parseFloat(message.P),
+            volume: parseFloat(message.v),
+            high: parseFloat(message.h),
+            low: parseFloat(message.l),
             timestamp: Date.now()
           };
 
+          console.log(`[BINANCE STREAM] Direct market update for ${symbol}: ${message.c}`);
           this.marketData.set(symbol, marketUpdate);
           this.broadcastMarketUpdate(marketUpdate);
         }
       } catch (error) {
-        console.error('Error processing Binance public data:', error);
+        console.error('[BINANCE STREAM] Error processing data:', error);
       }
     });
 
-    this.binancePublicWs.on('close', () => {
-      console.log('Binance public stream disconnected, reconnecting...');
+    publicStreamWs.on('close', (code, reason) => {
+      console.log(`[BINANCE STREAM] Disconnected - Code: ${code}, Reason: ${reason}`);
+      console.log('[BINANCE STREAM] Attempting reconnection in 5 seconds...');
       setTimeout(() => this.connectToBinancePublic(wsUrl), 5000);
     });
 
-    this.binancePublicWs.on('error', (error) => {
-      console.error('Binance public stream error:', error);
+    publicStreamWs.on('error', (error) => {
+      console.error('[BINANCE STREAM] WebSocket error:', error);
     });
   }
 
