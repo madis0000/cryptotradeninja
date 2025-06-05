@@ -36,10 +36,10 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     setStatus('connecting');
     
-    // Connect to our unified WebSocket service on HTTP server
+    // Connect to our unified WebSocket service on port 8888
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const ws = new WebSocket(`${protocol}//${host}/api/ws`);
+    const hostname = window.location.hostname;
+    const ws = new WebSocket(`${protocol}//${hostname}:8888/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -119,10 +119,10 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
 
     setStatus('connecting');
     
-    // Connect to our unified WebSocket service on HTTP server
+    // Connect to our unified WebSocket service on port 8888
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const ws = new WebSocket(`${protocol}//${host}/api/ws`);
+    const hostname = window.location.hostname;
+    const ws = new WebSocket(`${protocol}//${hostname}:8888/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
