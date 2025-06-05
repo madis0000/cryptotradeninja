@@ -46,7 +46,7 @@ export default function MyExchanges() {
 
   // Add exchange mutation
   const addExchangeMutation = useMutation({
-    mutationFn: async (exchangeData: { name: string; apiKey: string; apiSecret: string }) => {
+    mutationFn: async (exchangeData: any) => {
       const response = await apiRequest('POST', '/api/exchanges', exchangeData);
       return response.json();
     },
@@ -73,6 +73,9 @@ export default function MyExchanges() {
     setMode('testnet');
     setApiKey('');
     setApiSecret('');
+    setWsApiEndpoint('');
+    setWsStreamEndpoint('');
+    setRestApiEndpoint('');
   };
 
   const testConnection = async () => {
@@ -122,6 +125,11 @@ export default function MyExchanges() {
       name: exchangeName,
       apiKey,
       apiSecret,
+      wsApiEndpoint: wsApiEndpoint || null,
+      wsStreamEndpoint: wsStreamEndpoint || null,
+      restApiEndpoint: restApiEndpoint || null,
+      exchangeType: selectedExchange.toLowerCase(),
+      isTestnet: mode === 'testnet',
     });
   };
 
@@ -282,6 +290,48 @@ export default function MyExchanges() {
               placeholder="Enter your API secret"
               className="mt-1 bg-crypto-dark border-gray-700 text-white"
             />
+          </div>
+
+          <Separator className="bg-gray-800" />
+
+          <div className="space-y-4">
+            <h4 className="text-md font-medium text-white">Endpoint Configuration (Optional)</h4>
+            
+            <div>
+              <Label htmlFor="ws-api-endpoint" className="text-crypto-light">WebSocket API Endpoint</Label>
+              <Input
+                id="ws-api-endpoint"
+                type="url"
+                value={wsApiEndpoint}
+                onChange={(e) => setWsApiEndpoint(e.target.value)}
+                placeholder="wss://ws-api.testnet.binance.vision/ws-api/v3"
+                className="mt-1 bg-crypto-dark border-gray-700 text-white"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="ws-stream-endpoint" className="text-crypto-light">WebSocket Stream Endpoint</Label>
+              <Input
+                id="ws-stream-endpoint"
+                type="url"
+                value={wsStreamEndpoint}
+                onChange={(e) => setWsStreamEndpoint(e.target.value)}
+                placeholder="wss://stream.binance.com:9443/ws/"
+                className="mt-1 bg-crypto-dark border-gray-700 text-white"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="rest-api-endpoint" className="text-crypto-light">REST API Endpoint</Label>
+              <Input
+                id="rest-api-endpoint"
+                type="url"
+                value={restApiEndpoint}
+                onChange={(e) => setRestApiEndpoint(e.target.value)}
+                placeholder="https://testnet.binance.vision"
+                className="mt-1 bg-crypto-dark border-gray-700 text-white"
+              />
+            </div>
           </div>
 
           <Separator className="bg-gray-800" />
