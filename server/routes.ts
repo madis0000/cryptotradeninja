@@ -31,21 +31,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     credentials: true
   }));
 
-  // Rate limiting
+  // Rate limiting with proper trust proxy configuration
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 1000, // limit each IP to 1000 requests per windowMs (increased for development)
     message: { error: 'Too many requests, please try again later' },
     standardHeaders: true,
     legacyHeaders: false,
+    trustProxy: true, // Explicitly trust proxy for Replit
+    skipSuccessfulRequests: true,
   });
   
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // limit each IP to 5 auth requests per windowMs
+    max: 10, // increased for development
     message: { error: 'Too many authentication attempts, please try again later' },
     standardHeaders: true,
     legacyHeaders: false,
+    trustProxy: true, // Explicitly trust proxy for Replit
+    skipSuccessfulRequests: true,
   });
 
   app.use('/api/', limiter);
