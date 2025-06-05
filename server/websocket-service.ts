@@ -357,12 +357,26 @@ export class WebSocketService {
   }
 
   private sendMarketDataToClient(ws: WebSocket) {
+    console.log('[PUBLIC WS] Attempting to send market data to client');
+    console.log(`[PUBLIC WS] WebSocket ready state: ${ws.readyState}`);
+    
     const currentData = Array.from(this.marketData.values());
+    console.log(`[PUBLIC WS] Available market data entries: ${currentData.length}`);
+    
     if (currentData.length > 0) {
-      ws.send(JSON.stringify({
-        type: 'market_data',
-        data: currentData
-      }));
+      try {
+        const message = JSON.stringify({
+          type: 'market_data',
+          data: currentData
+        });
+        console.log(`[PUBLIC WS] Sending market data message (${message.length} chars)`);
+        ws.send(message);
+        console.log('[PUBLIC WS] Market data sent successfully');
+      } catch (error) {
+        console.error('[PUBLIC WS] Error sending market data:', error);
+      }
+    } else {
+      console.log('[PUBLIC WS] No market data available to send');
     }
   }
 
