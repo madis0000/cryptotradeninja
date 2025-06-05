@@ -38,7 +38,11 @@ export class WebSocketService {
 
     this.setupPublicWebSocket();
     this.setupUserWebSocket();
-    this.initializeBinancePublicStream();
+    
+    // Start mock data generation only
+    this.startMockDataGeneration();
+    
+    console.log('[WEBSOCKET] Service initialized. External streams connect on-demand only.');
   }
 
   private setupPublicWebSocket() {
