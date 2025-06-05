@@ -106,8 +106,12 @@ export class WebSocketService {
       this.marketSubscriptions.add(subscription);
       console.log(`[PUBLIC WS] Total active subscriptions: ${this.marketSubscriptions.size}`);
       
-      // Don't auto-start streams - wait for client subscription
-      console.log('[CONNECTION MANAGER] Client connected, waiting for subscription message');
+      // Send immediate response to keep connection alive
+      const welcomeMessage = {
+        type: 'connection_established',
+        message: 'WebSocket connected, ready for subscriptions'
+      };
+      ws.send(JSON.stringify(welcomeMessage));
 
       ws.on('message', (data) => {
         try {
