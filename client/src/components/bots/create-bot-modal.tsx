@@ -36,7 +36,7 @@ export function CreateBotModal({ isOpen, onClose }: CreateBotModalProps) {
 
   const createBotMutation = useMutation({
     mutationFn: async (data: CreateBotFormData) => {
-      const response = await apiRequest('POST', '/api/bots', {
+      const response = await apiRequest('/api/bots', 'POST', {
         ...data,
         configuration: getStrategyConfiguration(data.strategy),
       });

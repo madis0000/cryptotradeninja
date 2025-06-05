@@ -24,7 +24,7 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
     setIsLoading(true);
 
     try {
-      const response = await apiRequest('POST', '/api/auth/login', formData);
+      const response = await apiRequest('/api/auth/login', 'POST', formData);
       const data = await response.json();
 
       if (response.ok) {

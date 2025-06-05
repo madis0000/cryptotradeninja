@@ -26,7 +26,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
     setIsLoading(true);
 
     try {
-      const response = await apiRequest('POST', '/api/auth/register', formData);
+      const response = await apiRequest('/api/auth/register', 'POST', formData);
       const data = await response.json();
 
       if (response.ok) {

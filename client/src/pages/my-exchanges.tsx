@@ -47,7 +47,7 @@ export default function MyExchanges() {
   // Add exchange mutation
   const addExchangeMutation = useMutation({
     mutationFn: async (exchangeData: any) => {
-      const response = await apiRequest('POST', '/api/exchanges', exchangeData);
+      const response = await apiRequest('/api/exchanges', 'POST', exchangeData);
       return response.json();
     },
     onSuccess: () => {
