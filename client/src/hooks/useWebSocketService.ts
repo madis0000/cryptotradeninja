@@ -39,8 +39,7 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     // Connect to our public WebSocket service
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
-    const port = window.location.port;
-    const ws = new WebSocket(`${protocol}//${host}:${port}/ws/market`);
+    const ws = new WebSocket(`${protocol}//${host}:8080`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -48,8 +47,13 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
       setStatus('connected');
       options.onConnect?.();
       
-      // Don't auto-subscribe - wait for explicit subscription
-      console.log('[CLIENT WS] WebSocket ready, waiting for symbol subscription');
+      // Subscribe to default symbols
+      const subscribeMessage = {
+        type: 'subscribe',
+        symbols: ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']
+      };
+      console.log('[CLIENT WS] Sending subscription:', subscribeMessage);
+      ws.send(JSON.stringify(subscribeMessage));
     };
 
     ws.onmessage = (event) => {

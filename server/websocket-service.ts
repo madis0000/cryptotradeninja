@@ -22,77 +22,27 @@ export class WebSocketService {
   private marketData = new Map<string, any>();
   private binancePublicWs: WebSocket | null = null;
   private binanceUserStreams = new Map<string, WebSocket>();
-  private activeBinanceStreams = new Map<string, WebSocket>();
-  private mockDataInterval: NodeJS.Timeout | null = null;
 
   constructor(server: Server) {
     // Public market data WebSocket server
     this.publicWss = new WebSocketServer({ 
-      server: server,
-      path: '/ws/market'
+      port: 8081, 
+      path: '/market'
     });
 
     // User data WebSocket server  
     this.userWss = new WebSocketServer({ 
-      server: server,
-      path: '/ws/user'
+      port: 8082, 
+      path: '/user'
     });
 
     this.setupPublicWebSocket();
     this.setupUserWebSocket();
-    // Backend streams will start only when clients connect
-  }
-
-  private startBackendStreams() {
-    console.log('[CONNECTION MANAGER] Starting Binance backend streams');
     this.initializeBinancePublicStream();
   }
 
-  private stopBackendStreams() {
-    console.log('[CONNECTION MANAGER] Stopping all backend streams');
-    this.stopAllBinanceStreams();
-    console.log('[CONNECTION MANAGER] All backend streams stopped');
-  }
-
-  private stopAllBinanceStreams() {
-    console.log('[BINANCE] Stopping all Binance streams');
-    
-    // Stop mock data generation
-    if (this.mockDataInterval) {
-      clearInterval(this.mockDataInterval);
-      this.mockDataInterval = null;
-      console.log('[BINANCE] Stopped mock data generation');
-    }
-    
-    // Close all active Binance streams
-    this.activeBinanceStreams.forEach((ws, url) => {
-      console.log(`[BINANCE] Closing stream: ${url}`);
-      ws.close();
-    });
-    this.activeBinanceStreams.clear();
-    
-    // Close legacy binance connections
-    if (this.binancePublicWs) {
-      console.log('[BINANCE] Closing main WebSocket connection');
-      this.binancePublicWs.close();
-      this.binancePublicWs = null;
-    }
-    
-    // Close user streams
-    this.binanceUserStreams.forEach((ws, key) => {
-      console.log(`[BINANCE] Closing user stream: ${key}`);
-      ws.close();
-    });
-    this.binanceUserStreams.clear();
-    
-    // Clear market data
-    this.marketData.clear();
-    
-    console.log('[BINANCE] All Binance streams stopped and cleared');
-  }
-
   private setupPublicWebSocket() {
-    console.log('[PUBLIC WS] Setting up public WebSocket server on main HTTP server');
+    console.log('[PUBLIC WS] Setting up public WebSocket server on port 8081');
     
     this.publicWss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;
@@ -105,13 +55,6 @@ export class WebSocketService {
 
       this.marketSubscriptions.add(subscription);
       console.log(`[PUBLIC WS] Total active subscriptions: ${this.marketSubscriptions.size}`);
-      
-      // Send immediate response to keep connection alive
-      const welcomeMessage = {
-        type: 'connection_established',
-        message: 'WebSocket connected, ready for subscriptions'
-      };
-      ws.send(JSON.stringify(welcomeMessage));
 
       ws.on('message', (data) => {
         try {
@@ -120,25 +63,11 @@ export class WebSocketService {
           
           if (message.type === 'subscribe') {
             // Subscribe to specific trading pairs
-            const symbols = message.symbols;
-            if (!symbols || symbols.length === 0) {
-              console.log(`[PUBLIC WS] No symbols provided in subscription message`);
-              return;
-            }
-            
-            console.log(`[PUBLIC WS] Client subscribing to symbols:`, symbols);
-            
-            // Clear existing subscriptions and add new ones
-            subscription.symbols.clear();
+            const symbols = message.symbols || ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'];
+            console.log(`[PUBLIC WS] Subscribing to symbols:`, symbols);
             symbols.forEach((symbol: string) => {
               subscription.symbols.add(symbol.toLowerCase());
             });
-            
-            // Stop all existing streams first
-            this.stopAllBinanceStreams();
-            
-            // Start new Binance stream with ONLY these symbols
-            this.connectToConfigurableStream('ticker', symbols);
             
             // Send current market data
             this.sendMarketDataToClient(ws);
@@ -152,12 +81,6 @@ export class WebSocketService {
         console.log(`[PUBLIC WS] Client disconnected - Code: ${code}, Reason: ${reason}`);
         this.marketSubscriptions.delete(subscription);
         console.log(`[PUBLIC WS] Remaining subscriptions: ${this.marketSubscriptions.size}`);
-        
-        // Stop backend streams if no clients remain
-        if (this.marketSubscriptions.size === 0) {
-          console.log('[CONNECTION MANAGER] No clients remaining, stopping backend streams');
-          this.stopBackendStreams();
-        }
       });
 
       ws.on('error', (error) => {
@@ -246,19 +169,19 @@ export class WebSocketService {
   private initializeBinancePublicStream() {
     console.log('[BINANCE] Initializing Binance public stream connections');
     
+    // Start mock data generation for immediate functionality
+    this.startMockDataGeneration();
+    
     // Connect to Binance testnet WebSocket API for authenticated operations
     const wsApiUrl = 'wss://ws-api.testnet.binance.vision/ws-api/v3';
     console.log(`[BINANCE] Attempting to connect to WebSocket API: ${wsApiUrl}`);
     this.connectToBinanceWebSocketAPI(wsApiUrl);
 
-    // Do NOT start default streams - wait for client subscription
-    console.log('[BINANCE] Waiting for client subscriptions before starting streams');
+    // Connect to Binance testnet public stream for market data (default ticker streams)
+    this.connectToConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']);
   }
 
   private connectToConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
-    // First stop all existing streams to ensure clean state
-    this.stopAllBinanceStreams();
-    
     const baseUrl = 'wss://stream.testnet.binance.vision/stream?streams=';
     
     const streamPaths = symbols.map(symbol => {
@@ -284,13 +207,43 @@ export class WebSocketService {
     });
     
     const streamUrl = baseUrl + streamPaths.join('/');
-    console.log(`[BINANCE] Starting NEW ${dataType} stream for symbols: ${symbols.join(', ')}`);
-    console.log(`[BINANCE] Stream URL: ${streamUrl}`);
-    
+    console.log(`[BINANCE] Connecting to ${dataType} stream: ${streamUrl}`);
     this.connectToBinancePublic(streamUrl);
   }
 
+  private startMockDataGeneration() {
+    // Generate realistic market data for testing
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT'];
+    const baseData = {
+      'BTCUSDT': { basePrice: 43000, volatility: 0.02 },
+      'ETHUSDT': { basePrice: 2400, volatility: 0.03 },
+      'ADAUSDT': { basePrice: 0.45, volatility: 0.05 },
+      'BNBUSDT': { basePrice: 310, volatility: 0.04 },
+      'DOGEUSDT': { basePrice: 0.085, volatility: 0.06 }
+    };
 
+    setInterval(() => {
+      symbols.forEach(symbol => {
+        const base = baseData[symbol as keyof typeof baseData];
+        const change = (Math.random() - 0.5) * base.volatility;
+        const newPrice = base.basePrice * (1 + change);
+        const changePercent = change * 100;
+
+        const marketUpdate = {
+          symbol,
+          price: parseFloat(newPrice.toFixed(symbol.includes('USDT') && !symbol.startsWith('BTC') && !symbol.startsWith('ETH') ? 4 : 2)),
+          change: parseFloat(changePercent.toFixed(2)),
+          volume: Math.random() * 1000000,
+          high: newPrice * 1.02,
+          low: newPrice * 0.98,
+          timestamp: Date.now()
+        };
+
+        this.marketData.set(symbol, marketUpdate);
+        this.broadcastMarketUpdate(marketUpdate);
+      });
+    }, 2000); // Update every 2 seconds
+  }
 
   private connectToBinanceWebSocketAPI(wsApiUrl: string) {
     if (this.binancePublicWs) {
@@ -302,8 +255,19 @@ export class WebSocketService {
     this.binancePublicWs = new WebSocket(wsApiUrl);
 
     this.binancePublicWs.on('open', () => {
-      console.log('[BINANCE] WebSocket API connection opened successfully');
-      // Don't auto-subscribe - wait for client requests
+      console.log('[BINANCE] WebSocket connection opened successfully');
+      
+      // Subscribe to ticker data using the modern WebSocket API
+      const subscribeMessage = {
+        id: 1,
+        method: "ticker.24hr",
+        params: {
+          symbols: ["BTCUSDT", "ETHUSDT", "ADAUSDT", "BNBUSDT", "DOGEUSDT"]
+        }
+      };
+      
+      console.log('[BINANCE] Sending subscription message:', JSON.stringify(subscribeMessage));
+      this.binancePublicWs?.send(JSON.stringify(subscribeMessage));
     });
 
     this.binancePublicWs.on('message', (data) => {
@@ -544,6 +508,7 @@ export class WebSocketService {
   public close() {
     this.publicWss.close();
     this.userWss.close();
-    this.stopBackendStreams();
+    this.binancePublicWs?.close();
+    this.binanceUserStreams.forEach(ws => ws.close());
   }
 }
