@@ -1,9 +1,14 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema } from "@shared/schema";
+import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insertUserSchema } from "@shared/schema";
 import { z } from "zod";
 import WebSocket, { WebSocketServer } from "ws";
+import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";
+import { encryptApiCredentials, decryptApiCredentials } from "./encryption";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import cors from "cors";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);

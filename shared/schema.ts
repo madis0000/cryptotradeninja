@@ -8,6 +8,8 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastLogin: timestamp("last_login"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -15,8 +17,9 @@ export const exchanges = pgTable("exchanges", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   name: text("name").notNull(), // binance, coinbase, kraken, etc.
-  apiKey: text("api_key").notNull(),
-  apiSecret: text("api_secret").notNull(),
+  apiKey: text("api_key").notNull(), // encrypted
+  apiSecret: text("api_secret").notNull(), // encrypted
+  encryptionIv: text("encryption_iv").notNull(), // initialization vector for decryption
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
