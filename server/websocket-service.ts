@@ -105,11 +105,17 @@ export class WebSocketService {
           
           if (message.type === 'subscribe') {
             // Subscribe to specific trading pairs
-            const symbols = message.symbols || ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'];
-            console.log(`[PUBLIC WS] Subscribing to symbols:`, symbols);
+            const symbols = message.symbols || ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'ICPUSDT'];
+            console.log(`[PUBLIC WS] Client subscribing to symbols:`, symbols);
+            
+            // Clear existing subscriptions and add new ones
+            subscription.symbols.clear();
             symbols.forEach((symbol: string) => {
               subscription.symbols.add(symbol.toLowerCase());
             });
+            
+            // Start new Binance stream with these symbols
+            this.connectToConfigurableStream('ticker', symbols);
             
             // Send current market data
             this.sendMarketDataToClient(ws);

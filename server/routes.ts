@@ -43,37 +43,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.use('/api/', limiter);
   
-  // WebSocket server for real-time updates on a different port
-  const wss = new WebSocketServer({ port: 8080 });
-  
-  // Mock market data broadcasting
-  const marketData: Record<string, { price: number; change: number }> = {
-    'BTC/USDT': { price: 43285.12, change: 2.34 },
-    'ETH/USDT': { price: 2568.91, change: -1.12 },
-    'ADA/USDT': { price: 0.4521, change: 0.87 },
-    'BNB/USDT': { price: 312.67, change: 0.89 },
-    'SOL/USDT': { price: 98.34, change: -2.67 },
-  };
-
-  // Broadcast market data updates
-  setInterval(() => {
-    Object.keys(marketData).forEach(pair => {
-      const change = (Math.random() - 0.5) * 2; // Random price movement
-      if (marketData[pair]) {
-        marketData[pair].price += change;
-        marketData[pair].change = change;
-      }
-    });
-
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: 'market_update',
-          data: marketData
-        }));
-      }
-    });
-  }, 3000);
+  // Mock WebSocket removed - using dedicated WebSocket service for real Binance data
 
   // Authentication routes
   const registerSchema = insertUserSchema.extend({
@@ -410,9 +380,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Market Data API
+  // Market Data API - Get data from WebSocket service
   app.get("/api/market", async (req, res) => {
     try {
+      const marketDataMap = wsService.getMarketData();
+      const marketData: Record<string, any> = {};
+      
+      // Convert Map to object with proper format
+      marketDataMap.forEach((value, key) => {
+        const formattedKey = key.includes('/') ? key : key.replace('USDT', '/USDT');
+        marketData[formattedKey] = {
+          price: value.price || 0,
+          change: value.change || 0
+        };
+      });
+      
       res.json(marketData);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch market data" });

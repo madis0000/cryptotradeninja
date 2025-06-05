@@ -39,7 +39,7 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     // Connect to our public WebSocket service
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
-    const ws = new WebSocket(`${protocol}//${host}:8080`);
+    const ws = new WebSocket(`${protocol}//${host}:8081/market`);
     wsRef.current = ws;
 
     ws.onopen = () => {
