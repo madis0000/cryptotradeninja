@@ -169,10 +169,7 @@ export class WebSocketService {
     console.log('[BINANCE] ===== INITIALIZING BINANCE STREAMS =====');
     this.isStreamsActive = true;
     
-    // Start mock data generation for immediate functionality
-    this.startMockDataGeneration();
-    
-    // Connect to Binance testnet public stream for market data (default ticker streams)
+    // Connect only to real Binance streams (no mock data)
     this.connectConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']);
   }
 
