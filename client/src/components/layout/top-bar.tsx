@@ -25,7 +25,7 @@ export function TopBar({ onLogout }: TopBarProps) {
     { path: '/', label: 'Dashboard', icon: 'fas fa-chart-line' },
     { path: '/bots', label: 'Trading Bots', icon: 'fas fa-robot' },
     { path: '/portfolio', label: 'Portfolio', icon: 'fas fa-wallet' },
-    { path: '/api-keys', label: 'API Keys', icon: 'fas fa-key' },
+    { path: '/my-exchanges', label: 'My Exchanges', icon: 'fas fa-exchange-alt' },
     { path: '/settings', label: 'Settings', icon: 'fas fa-cog' },
   ];
 

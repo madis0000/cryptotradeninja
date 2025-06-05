@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { usePublicWebSocket, useUserWebSocket } from "@/hooks/useWebSocketService";
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general');
