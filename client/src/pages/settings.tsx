@@ -350,34 +350,31 @@ export default function Settings() {
                   size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
                   onClick={async () => {
-                    if (selectedExchange?.wsStreamEndpoint && streamConfig.symbols.length > 0) {
+                    if (streamConfig.symbols.length > 0) {
                       try {
-                        // Configure the stream on the backend
-                        await apiRequest('/api/websocket/configure-stream', 'POST', {
-                          dataType: streamConfig.dataType,
-                          symbols: streamConfig.symbols,
-                          interval: streamConfig.interval,
-                          depth: streamConfig.depth
-                        });
-
-                        // Connect to the WebSocket
-                        publicWs.connect();
-                        publicWs.subscribe(streamConfig.symbols);
+                        // Connect directly to backend with configured symbols
+                        publicWs.connect(streamConfig.symbols);
 
                         toast({
-                          title: "Stream Configured",
-                          description: `${streamConfig.dataType} stream started for ${streamConfig.symbols.join(', ')}`,
+                          title: "Stream Connected",
+                          description: `Connected to ${streamConfig.dataType} stream for ${streamConfig.symbols.join(', ')}`,
                         });
                       } catch (error) {
                         toast({
-                          title: "Configuration Failed",
-                          description: "Failed to configure stream parameters",
+                          title: "Connection Failed",
+                          description: "Failed to connect to stream",
                           variant: "destructive",
                         });
                       }
+                    } else {
+                      toast({
+                        title: "No Symbols",
+                        description: "Please configure trading symbols first",
+                        variant: "destructive",
+                      });
                     }
                   }}
-                  disabled={publicWs.status === 'connecting' || !selectedExchange?.wsStreamEndpoint || streamConfig.symbols.length === 0}
+                  disabled={publicWs.status === 'connecting' || streamConfig.symbols.length === 0}
                 >
                   <i className={`${publicWs.status === 'connecting' ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
                   {publicWs.status === 'connecting' ? 'Connecting...' : 'Test Connection'}
