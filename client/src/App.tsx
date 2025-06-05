@@ -3,7 +3,6 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,16 +16,10 @@ import AuthPage from "@/pages/auth";
 function AuthenticatedApp() {
   const { logout } = useAuth();
 
-  const handleAuthSuccess = (token: string, user: any) => {
-    // The AuthProvider will handle this automatically
-    window.location.reload();
-  };
-
   return (
-    <div className="flex h-screen bg-crypto-darker">
-      <Sidebar />
-      <div className="flex-1 lg:pl-64">
-        <TopBar onLogout={logout} />
+    <div className="min-h-screen bg-crypto-darker">
+      <TopBar onLogout={logout} />
+      <main className="flex-1">
         <Switch>
           <Route path="/" component={Dashboard} />
           <Route path="/bots" component={TradingBots} />
@@ -34,7 +27,7 @@ function AuthenticatedApp() {
           <Route path="/portfolio" component={Portfolio} />
           <Route component={NotFound} />
         </Switch>
-      </div>
+      </main>
     </div>
   );
 }
