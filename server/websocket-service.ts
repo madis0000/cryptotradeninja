@@ -23,10 +23,10 @@ export class WebSocketService {
   private binanceUserStreams = new Map<string, WebSocket>();
 
   constructor(server: Server) {
-    // Unified WebSocket server on port 3001 - commonly available in Replit
+    // Unified WebSocket server attached to HTTP server with unique path
     this.wss = new WebSocketServer({ 
-      port: 3001,
-      path: '/ws'
+      server: server,
+      path: '/api/websocket'
     });
 
     this.setupWebSocket();
@@ -34,11 +34,11 @@ export class WebSocketService {
     // Start mock data generation only
     this.startMockDataGeneration();
     
-    console.log('[WEBSOCKET] Unified service initialized on port 3001 /ws path. External streams connect on-demand only.');
+    console.log('[WEBSOCKET] Unified service initialized on HTTP server /api/websocket path. External streams connect on-demand only.');
   }
 
   private setupWebSocket() {
-    console.log('[WEBSOCKET] Setting up unified WebSocket server on port 3001 /ws path');
+    console.log('[WEBSOCKET] Setting up unified WebSocket server on HTTP server /api/websocket path');
     
     this.wss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;
