@@ -28,18 +28,14 @@ export function Sidebar() {
         {navigation.map((item) => {
           const isActive = location === item.href;
           return (
-            <Link key={item.name} href={item.href}>
-              <a
-                className={cn(
-                  "flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors",
-                  isActive
-                    ? "bg-crypto-accent/10 text-crypto-accent border border-crypto-accent/20"
-                    : "text-crypto-light hover:bg-gray-800 hover:text-white"
-                )}
-              >
-                <i className={cn(item.icon, "mr-3")}></i>
-                {item.name}
-              </a>
+            <Link key={item.name} href={item.href} className={cn(
+              "flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors",
+              isActive
+                ? "bg-crypto-accent/10 text-crypto-accent border border-crypto-accent/20"
+                : "text-crypto-light hover:bg-gray-800 hover:text-white"
+            )}>
+              <i className={cn(item.icon, "mr-3")}></i>
+              {item.name}
             </Link>
           );
         })}
