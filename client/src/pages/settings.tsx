@@ -349,10 +349,32 @@ export default function Settings() {
                 <Button 
                   size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
-                  onClick={() => {
+                  onClick={async () => {
                     if (selectedExchange?.wsStreamEndpoint && streamConfig.symbols.length > 0) {
-                      publicWs.connect();
-                      publicWs.subscribe(streamConfig.symbols);
+                      try {
+                        // Configure the stream on the backend
+                        await apiRequest('/api/websocket/configure-stream', 'POST', {
+                          dataType: streamConfig.dataType,
+                          symbols: streamConfig.symbols,
+                          interval: streamConfig.interval,
+                          depth: streamConfig.depth
+                        });
+
+                        // Connect to the WebSocket
+                        publicWs.connect();
+                        publicWs.subscribe(streamConfig.symbols);
+
+                        toast({
+                          title: "Stream Configured",
+                          description: `${streamConfig.dataType} stream started for ${streamConfig.symbols.join(', ')}`,
+                        });
+                      } catch (error) {
+                        toast({
+                          title: "Configuration Failed",
+                          description: "Failed to configure stream parameters",
+                          variant: "destructive",
+                        });
+                      }
                     }
                   }}
                   disabled={publicWs.status === 'connecting' || !selectedExchange?.wsStreamEndpoint || streamConfig.symbols.length === 0}

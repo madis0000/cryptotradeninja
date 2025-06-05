@@ -410,6 +410,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Configure stream connection
+  app.post("/api/websocket/configure-stream", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { dataType, symbols, interval, depth } = req.body;
+      
+      if (!dataType || !symbols || !Array.isArray(symbols) || symbols.length === 0) {
+        return res.status(400).json({ message: "Invalid stream configuration" });
+      }
+
+      wsService.connectConfigurableStream(dataType, symbols, interval, depth);
+      res.json({ 
+        message: "Stream configured successfully",
+        configuration: { dataType, symbols, interval, depth }
+      });
+    } catch (error) {
+      console.error("Error configuring stream:", error);
+      res.status(500).json({ message: "Failed to configure stream" });
+    }
+  });
+
   // Market Data API
   app.get("/api/market", async (req, res) => {
     try {

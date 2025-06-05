@@ -182,10 +182,10 @@ export class WebSocketService {
     this.connectToBinanceWebSocketAPI(wsApiUrl);
 
     // Connect to Binance testnet public stream for market data (default ticker streams)
-    this.connectToConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']);
+    this.connectConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']);
   }
 
-  private connectToConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
+  public connectConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
     const baseUrl = 'wss://stream.testnet.binance.vision/stream?streams=';
     
     const streamPaths = symbols.map(symbol => {
