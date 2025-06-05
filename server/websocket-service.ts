@@ -43,6 +43,40 @@ export class WebSocketService {
     // Backend streams will start only when clients connect
   }
 
+  private startBackendStreams() {
+    console.log('[CONNECTION MANAGER] Starting Binance backend streams');
+    this.initializeBinancePublicStream();
+  }
+
+  private stopBackendStreams() {
+    console.log('[CONNECTION MANAGER] Stopping all backend streams');
+    
+    // Stop mock data generation
+    if (this.mockDataInterval) {
+      clearInterval(this.mockDataInterval);
+      this.mockDataInterval = null;
+      console.log('[CONNECTION MANAGER] Stopped mock data generation');
+    }
+    
+    // Close all active Binance streams
+    this.activeBinanceStreams.forEach((ws, url) => {
+      console.log(`[CONNECTION MANAGER] Closing stream: ${url}`);
+      ws.close();
+    });
+    this.activeBinanceStreams.clear();
+    
+    // Close legacy binance connections
+    if (this.binancePublicWs) {
+      this.binancePublicWs.close();
+      this.binancePublicWs = null;
+    }
+    
+    this.binanceUserStreams.forEach(ws => ws.close());
+    this.binanceUserStreams.clear();
+    
+    console.log('[CONNECTION MANAGER] All backend streams stopped');
+  }
+
   private setupPublicWebSocket() {
     console.log('[PUBLIC WS] Setting up public WebSocket server on port 8081');
     
@@ -522,7 +556,6 @@ export class WebSocketService {
   public close() {
     this.publicWss.close();
     this.userWss.close();
-    this.binancePublicWs?.close();
-    this.binanceUserStreams.forEach(ws => ws.close());
+    this.stopBackendStreams();
   }
 }
