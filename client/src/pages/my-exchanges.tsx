@@ -17,6 +17,11 @@ interface Exchange {
   apiKey: string;
   isActive: boolean;
   createdAt: string;
+  wsApiEndpoint?: string;
+  wsStreamEndpoint?: string;
+  restApiEndpoint?: string;
+  exchangeType?: string;
+  isTestnet?: boolean;
 }
 
 export default function MyExchanges() {
@@ -26,6 +31,9 @@ export default function MyExchanges() {
   const [mode, setMode] = useState('testnet');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
+  const [wsApiEndpoint, setWsApiEndpoint] = useState('');
+  const [wsStreamEndpoint, setWsStreamEndpoint] = useState('');
+  const [restApiEndpoint, setRestApiEndpoint] = useState('');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   
   const { toast } = useToast();

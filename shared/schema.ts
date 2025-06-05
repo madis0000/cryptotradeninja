@@ -21,6 +21,14 @@ export const exchanges = pgTable("exchanges", {
   apiSecret: text("api_secret").notNull(), // encrypted
   encryptionIv: text("encryption_iv").notNull(), // initialization vector for decryption
   isActive: boolean("is_active").default(true).notNull(),
+  // WebSocket endpoints
+  wsApiEndpoint: text("ws_api_endpoint"), // wss://ws-api.testnet.binance.vision/ws-api/v3
+  wsStreamEndpoint: text("ws_stream_endpoint"), // wss://stream.binance.com:9443/ws/
+  // REST API endpoints
+  restApiEndpoint: text("rest_api_endpoint"), // https://api.binance.com or https://testnet.binance.vision
+  // Exchange specific settings
+  exchangeType: text("exchange_type").default("binance"), // binance, coinbase, kraken
+  isTestnet: boolean("is_testnet").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -118,6 +126,12 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export const insertExchangeSchema = createInsertSchema(exchanges).omit({
   id: true,
   createdAt: true,
+}).extend({
+  wsApiEndpoint: z.string().url().optional(),
+  wsStreamEndpoint: z.string().url().optional(),
+  restApiEndpoint: z.string().url().optional(),
+  exchangeType: z.string().optional(),
+  isTestnet: z.boolean().optional(),
 });
 
 export const insertTradingBotSchema = createInsertSchema(tradingBots).omit({
