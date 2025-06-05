@@ -166,17 +166,12 @@ export class WebSocketService {
       return;
     }
 
-    console.log('[BINANCE] Initializing Binance public stream connections');
+    console.log('[BINANCE] ===== INITIALIZING BINANCE STREAMS =====');
     this.isStreamsActive = true;
     
     // Start mock data generation for immediate functionality
     this.startMockDataGeneration();
     
-    // Connect to Binance testnet WebSocket API for authenticated operations
-    const wsApiUrl = 'wss://ws-api.testnet.binance.vision/ws-api/v3';
-    console.log(`[BINANCE] Attempting to connect to WebSocket API: ${wsApiUrl}`);
-    this.connectToBinanceWebSocketAPI(wsApiUrl);
-
     // Connect to Binance testnet public stream for market data (default ticker streams)
     this.connectConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']);
   }
