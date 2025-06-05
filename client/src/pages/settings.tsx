@@ -350,12 +350,14 @@ export default function Settings() {
                   size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
                   onClick={() => {
-                    if (selectedExchange?.wsStreamEndpoint && streamConfig.symbols.length > 0) {
+                    if (streamConfig.symbols.length > 0) {
                       publicWs.connect();
-                      publicWs.subscribe(streamConfig.symbols);
+                      setTimeout(() => {
+                        publicWs.subscribe(streamConfig.symbols);
+                      }, 1000);
                     }
                   }}
-                  disabled={publicWs.status === 'connecting' || !selectedExchange?.wsStreamEndpoint || streamConfig.symbols.length === 0}
+                  disabled={publicWs.status === 'connecting' || streamConfig.symbols.length === 0}
                 >
                   <i className={`${publicWs.status === 'connecting' ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
                   {publicWs.status === 'connecting' ? 'Connecting...' : 'Test Connection'}
