@@ -41,7 +41,7 @@ export class WebSocketService {
     
     this.wss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;
-      console.log(`[WEBSOCKET] Client connected from ${clientIP}`);
+      console.log(`[WEBSOCKET] ✓ NEW CLIENT CONNECTED from ${clientIP}`);
 
       const subscription: MarketSubscription = {
         ws,
