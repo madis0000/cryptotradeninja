@@ -23,10 +23,10 @@ export class WebSocketService {
   private binanceUserStreams = new Map<string, WebSocket>();
 
   constructor(server: Server) {
-    // Unified WebSocket server attached to HTTP server with unique path
+    // WebSocket server using HTTP upgrade with Vite-compatible path
     this.wss = new WebSocketServer({ 
       server: server,
-      path: '/api/websocket'
+      path: '/api/ws-stream'
     });
 
     this.setupWebSocket();
@@ -34,11 +34,11 @@ export class WebSocketService {
     // Start mock data generation only
     this.startMockDataGeneration();
     
-    console.log('[WEBSOCKET] Unified service initialized on HTTP server /api/websocket path. External streams connect on-demand only.');
+    console.log('[WEBSOCKET] Unified service initialized on HTTP server /api/ws-stream path. External streams connect on-demand only.');
   }
 
   private setupWebSocket() {
-    console.log('[WEBSOCKET] Setting up unified WebSocket server on HTTP server /api/websocket path');
+    console.log('[WEBSOCKET] Setting up unified WebSocket server on HTTP server /api/ws-stream path');
     
     this.wss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;

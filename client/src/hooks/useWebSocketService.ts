@@ -39,7 +39,7 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     // Connect to our unified WebSocket service on HTTP server
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const ws = new WebSocket(`${protocol}//${host}/api/websocket`);
+    const ws = new WebSocket(`${protocol}//${host}/api/ws-stream`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -122,7 +122,7 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     // Connect to our unified WebSocket service on HTTP server
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const ws = new WebSocket(`${protocol}//${host}/api/websocket`);
+    const ws = new WebSocket(`${protocol}//${host}/api/ws-stream`);
     wsRef.current = ws;
 
     ws.onopen = () => {
