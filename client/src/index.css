@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 11% 6%;
+  --foreground: 213 31% 91%;
+  --muted: 217 19% 12%;
+  --muted-foreground: 215 20% 65%;
+  --popover: 215 25% 7%;
+  --popover-foreground: 213 31% 91%;
+  --card: 215 25% 7%;
+  --card-foreground: 213 31% 91%;
+  --border: 217 19% 15%;
+  --input: 217 19% 15%;
+  --primary: 195 100% 50%;
+  --primary-foreground: 195 100% 10%;
+  --secondary: 217 19% 12%;
+  --secondary-foreground: 213 31% 91%;
+  --accent: 195 100% 50%;
+  --accent-foreground: 195 100% 10%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 195 100% 50%;
+  --radius: 0.5rem;
+  
+  /* Crypto specific colors */
+  --crypto-dark: 210 25% 6%;
+  --crypto-darker: 210 25% 8%;
+  --crypto-accent: 195 100% 50%;
+  --crypto-success: 142 71% 45%;
+  --crypto-danger: 0 84% 60%;
+  --crypto-warning: 38 92% 50%;
+  --crypto-neutral: 215 16% 47%;
+  --crypto-light: 215 20% 65%;
+  --crypto-lighter: 213 27% 84%;
+}
+
+.dark {
+  --background: 210 11% 6%;
+  --foreground: 213 31% 91%;
+  --muted: 217 19% 12%;
+  --muted-foreground: 215 20% 65%;
+  --popover: 215 25% 7%;
+  --popover-foreground: 213 31% 91%;
+  --card: 215 25% 7%;
+  --card-foreground: 213 31% 91%;
+  --border: 217 19% 15%;
+  --input: 217 19% 15%;
+  --primary: 195 100% 50%;
+  --primary-foreground: 195 100% 10%;
+  --secondary: 217 19% 12%;
+  --secondary-foreground: 213 31% 91%;
+  --accent: 195 100% 50%;
+  --accent-foreground: 195 100% 10%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 195 100% 50%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background: hsl(var(--crypto-darker));
+    color: hsl(var(--crypto-lighter));
+  }
+}
+
+@layer utilities {
+  .text-crypto-accent {
+    color: hsl(var(--crypto-accent));
+  }
+  
+  .text-crypto-success {
+    color: hsl(var(--crypto-success));
+  }
+  
+  .text-crypto-danger {
+    color: hsl(var(--crypto-danger));
+  }
+  
+  .text-crypto-warning {
+    color: hsl(var(--crypto-warning));
+  }
+  
+  .text-crypto-light {
+    color: hsl(var(--crypto-light));
+  }
+  
+  .text-crypto-lighter {
+    color: hsl(var(--crypto-lighter));
+  }
+  
+  .bg-crypto-dark {
+    background-color: hsl(var(--crypto-dark));
+  }
+  
+  .bg-crypto-darker {
+    background-color: hsl(var(--crypto-darker));
+  }
+  
+  .bg-crypto-accent {
+    background-color: hsl(var(--crypto-accent));
+  }
+  
+  .bg-crypto-success {
+    background-color: hsl(var(--crypto-success));
+  }
+  
+  .bg-crypto-danger {
+    background-color: hsl(var(--crypto-danger));
+  }
+  
+  .border-crypto-accent {
+    border-color: hsl(var(--crypto-accent));
+  }
+  
+  .border-crypto-success {
+    border-color: hsl(var(--crypto-success));
+  }
+  
+  .border-crypto-danger {
+    border-color: hsl(var(--crypto-danger));
+  }
+  
+  .hover\:bg-crypto-accent:hover {
+    background-color: hsl(var(--crypto-accent));
+  }
+  
+  .hover\:bg-crypto-accent\/80:hover {
+    background-color: hsl(var(--crypto-accent) / 0.8);
+  }
+  
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .glow-accent {
+    box-shadow: 0 0 20px hsl(var(--crypto-accent) / 0.3);
+  }
+  
+  .glow-success {
+    box-shadow: 0 0 20px hsl(var(--crypto-success) / 0.3);
+  }
+  
+  .glow-danger {
+    box-shadow: 0 0 20px hsl(var(--crypto-danger) / 0.3);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--crypto-dark));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--crypto-light) / 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--crypto-light) / 0.5);
+}
