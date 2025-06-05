@@ -13,6 +13,32 @@ import cors from "cors";
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
+  // Security middleware
+  app.use(helmet({
+    contentSecurityPolicy: false, // Disable for development
+    crossOriginEmbedderPolicy: false
+  }));
+  
+  app.use(cors({
+    origin: process.env.NODE_ENV === 'production' ? ['https://yourdomain.com'] : true,
+    credentials: true
+  }));
+
+  // Rate limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: { error: 'Too many requests, please try again later' }
+  });
+  
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // limit each IP to 5 auth requests per windowMs
+    message: { error: 'Too many authentication attempts, please try again later' }
+  });
+
+  app.use('/api/', limiter);
+  
   // WebSocket server for real-time updates on a different port
   const wss = new WebSocketServer({ port: 8080 });
   
@@ -45,49 +71,203 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }, 3000);
 
-  // Mock user ID (in a real app, this would come from authentication)
-  const getCurrentUserId = () => 1;
+  // Authentication routes
+  const registerSchema = insertUserSchema.extend({
+    confirmPassword: z.string().min(8),
+  }).refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
-  // Exchanges API
-  app.get("/api/exchanges", async (req, res) => {
+  const loginSchema = z.object({
+    email: z.string().email(),
+    password: z.string().min(1),
+  });
+
+  app.post("/api/auth/register", authLimiter, async (req, res) => {
     try {
-      const userId = getCurrentUserId();
+      const validatedData = registerSchema.parse(req.body);
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(validatedData.email);
+      if (existingUser) {
+        return res.status(400).json({ error: "User already exists with this email" });
+      }
+
+      const existingUsername = await storage.getUserByUsername(validatedData.username);
+      if (existingUsername) {
+        return res.status(400).json({ error: "Username already taken" });
+      }
+
+      // Hash password and create user
+      const hashedPassword = await hashPassword(validatedData.password);
+      const user = await storage.createUser({
+        username: validatedData.username,
+        email: validatedData.email,
+        password: hashedPassword,
+      });
+
+      // Generate token
+      const token = generateToken(user.id, user.username, user.email);
+
+      res.status(201).json({
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: "Validation error", details: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to register user" });
+      }
+    }
+  });
+
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
+    try {
+      const validatedData = loginSchema.parse(req.body);
+      
+      const user = await storage.getUserByEmail(validatedData.email);
+      if (!user || !user.isActive) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      const isValidPassword = await comparePassword(validatedData.password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      // Update last login
+      await storage.updateUserLastLogin(user.id);
+
+      // Generate token
+      const token = generateToken(user.id, user.username, user.email);
+
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: "Validation error", details: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to login" });
+      }
+    }
+  });
+
+  app.get("/api/auth/me", requireAuth, async (req: AuthenticatedRequest, res) => {
+    res.json({
+      user: req.user,
+    });
+  });
+
+  // Exchanges API - Secured with authentication
+  app.get("/api/exchanges", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
       const exchanges = await storage.getExchangesByUserId(userId);
-      res.json(exchanges);
+      
+      // Decrypt API keys for display (masked)
+      const exchangesWithMaskedKeys = exchanges.map(exchange => ({
+        ...exchange,
+        apiKey: exchange.apiKey.slice(0, 4) + '•'.repeat(Math.max(8, exchange.apiKey.length - 8)) + exchange.apiKey.slice(-4),
+        apiSecret: '•'.repeat(20), // Never show secret
+        encryptionIv: undefined, // Never expose IV
+      }));
+      
+      res.json(exchangesWithMaskedKeys);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch exchanges" });
     }
   });
 
-  app.post("/api/exchanges", async (req, res) => {
+  app.post("/api/exchanges", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = getCurrentUserId();
-      const exchangeData = insertExchangeSchema.parse({ ...req.body, userId });
-      const exchange = await storage.createExchange(exchangeData);
-      res.json(exchange);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: "Invalid exchange data", details: error.errors });
-      } else {
-        res.status(500).json({ error: "Failed to create exchange" });
+      const userId = req.user!.id;
+      const { name, apiKey, apiSecret } = req.body;
+      
+      // Validate input
+      if (!name || !apiKey || !apiSecret) {
+        return res.status(400).json({ error: "Name, API key, and API secret are required" });
       }
+
+      // Encrypt API credentials
+      const encryptedCredentials = encryptApiCredentials(apiKey, apiSecret);
+      
+      const exchangeData = {
+        userId,
+        name,
+        ...encryptedCredentials,
+      };
+      
+      const exchange = await storage.createExchange(exchangeData);
+      
+      // Return masked data
+      res.json({
+        ...exchange,
+        apiKey: apiKey.slice(0, 4) + '•'.repeat(Math.max(8, apiKey.length - 8)) + apiKey.slice(-4),
+        apiSecret: '•'.repeat(20),
+        encryptionIv: undefined,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create exchange" });
     }
   });
 
-  app.put("/api/exchanges/:id", async (req, res) => {
+  app.put("/api/exchanges/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const updateData = req.body;
-      const exchange = await storage.updateExchange(id, updateData);
-      res.json(exchange);
+      const userId = req.user!.id;
+      const { name, apiKey, apiSecret } = req.body;
+      
+      // Verify exchange belongs to user
+      const exchange = await storage.getExchangesByUserId(userId);
+      const userExchange = exchange.find(ex => ex.id === id);
+      if (!userExchange) {
+        return res.status(404).json({ error: "Exchange not found" });
+      }
+
+      let updateData: any = { name };
+      
+      // If new API credentials provided, encrypt them
+      if (apiKey && apiSecret) {
+        const encryptedCredentials = encryptApiCredentials(apiKey, apiSecret);
+        updateData = { ...updateData, ...encryptedCredentials };
+      }
+      
+      const updatedExchange = await storage.updateExchange(id, updateData);
+      res.json({
+        ...updatedExchange,
+        apiKey: updatedExchange.apiKey.slice(0, 4) + '•'.repeat(20) + updatedExchange.apiKey.slice(-4),
+        apiSecret: '•'.repeat(20),
+        encryptionIv: undefined,
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to update exchange" });
     }
   });
 
-  app.delete("/api/exchanges/:id", async (req, res) => {
+  app.delete("/api/exchanges/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const id = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      // Verify exchange belongs to user
+      const exchanges = await storage.getExchangesByUserId(userId);
+      const userExchange = exchanges.find(ex => ex.id === id);
+      if (!userExchange) {
+        return res.status(404).json({ error: "Exchange not found" });
+      }
+      
       await storage.deleteExchange(id);
       res.json({ success: true });
     } catch (error) {
@@ -95,10 +275,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Trading Bots API
-  app.get("/api/bots", async (req, res) => {
+  // Trading Bots API - Secured
+  app.get("/api/bots", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = getCurrentUserId();
+      const userId = req.user!.id;
       const bots = await storage.getTradingBotsByUserId(userId);
       res.json(bots);
     } catch (error) {
@@ -106,9 +286,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/bots", async (req, res) => {
+  app.post("/api/bots", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = getCurrentUserId();
+      const userId = req.user!.id;
       const botData = insertTradingBotSchema.parse({ ...req.body, userId });
       const bot = await storage.createTradingBot(botData);
       res.json(bot);
@@ -121,20 +301,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/bots/:id", async (req, res) => {
+  app.put("/api/bots/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const id = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      // Verify bot belongs to user
+      const bot = await storage.getTradingBot(id);
+      if (!bot || bot.userId !== userId) {
+        return res.status(404).json({ error: "Trading bot not found" });
+      }
+      
       const updateData = req.body;
-      const bot = await storage.updateTradingBot(id, updateData);
-      res.json(bot);
+      const updatedBot = await storage.updateTradingBot(id, updateData);
+      res.json(updatedBot);
     } catch (error) {
       res.status(500).json({ error: "Failed to update trading bot" });
     }
   });
 
-  app.delete("/api/bots/:id", async (req, res) => {
+  app.delete("/api/bots/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const id = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      // Verify bot belongs to user
+      const bot = await storage.getTradingBot(id);
+      if (!bot || bot.userId !== userId) {
+        return res.status(404).json({ error: "Trading bot not found" });
+      }
+      
       await storage.deleteTradingBot(id);
       res.json({ success: true });
     } catch (error) {
@@ -142,10 +338,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Trades API
-  app.get("/api/trades", async (req, res) => {
+  // Trades API - Secured
+  app.get("/api/trades", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = getCurrentUserId();
+      const userId = req.user!.id;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
       const trades = await storage.getTradesByUserId(userId, limit);
       res.json(trades);
@@ -154,9 +350,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/trades", async (req, res) => {
+  app.post("/api/trades", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = getCurrentUserId();
+      const userId = req.user!.id;
       const tradeData = insertTradeSchema.parse({ ...req.body, userId });
       const trade = await storage.createTrade(tradeData);
       res.json(trade);
@@ -169,10 +365,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Portfolio API
-  app.get("/api/portfolio", async (req, res) => {
+  // Portfolio API - Secured
+  app.get("/api/portfolio", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = getCurrentUserId();
+      const userId = req.user!.id;
       const portfolio = await storage.getPortfolioByUserId(userId);
       res.json(portfolio);
     } catch (error) {
@@ -180,10 +376,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // User Stats API
-  app.get("/api/stats", async (req, res) => {
+  // User Stats API - Secured
+  app.get("/api/stats", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = getCurrentUserId();
+      const userId = req.user!.id;
       const stats = await storage.getUserStats(userId);
       res.json(stats);
     } catch (error) {
