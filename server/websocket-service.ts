@@ -270,13 +270,20 @@ export class WebSocketService {
   private connectToBinancePublic(wsUrl: string) {
     console.log('[BINANCE STREAM] Creating new WebSocket connection to:', wsUrl);
     
-    const publicStreamWs = new WebSocket(wsUrl);
+    // Close existing connection if any
+    if (this.binancePublicWs) {
+      console.log('[BINANCE STREAM] Closing existing connection');
+      this.binancePublicWs.close();
+    }
+    
+    // Store the WebSocket reference for proper cleanup
+    this.binancePublicWs = new WebSocket(wsUrl);
 
-    publicStreamWs.on('open', () => {
+    this.binancePublicWs.on('open', () => {
       console.log('[BINANCE STREAM] Connected to Binance public stream successfully');
     });
 
-    publicStreamWs.on('message', (data) => {
+    this.binancePublicWs.on('message', (data) => {
       try {
         const message = JSON.parse(data.toString());
         console.log('[BINANCE STREAM] Received message:', JSON.stringify(message).substring(0, 200) + '...');
@@ -324,13 +331,20 @@ export class WebSocketService {
       }
     });
 
-    publicStreamWs.on('close', (code, reason) => {
+    this.binancePublicWs.on('close', (code, reason) => {
       console.log(`[BINANCE STREAM] Disconnected - Code: ${code}, Reason: ${reason}`);
-      console.log('[BINANCE STREAM] Attempting reconnection in 5 seconds...');
-      setTimeout(() => this.connectToBinancePublic(wsUrl), 5000);
+      this.binancePublicWs = null;
+      
+      // Only reconnect if streams are still supposed to be active
+      if (this.isStreamsActive) {
+        console.log('[BINANCE STREAM] Attempting reconnection in 5 seconds...');
+        setTimeout(() => this.connectToBinancePublic(wsUrl), 5000);
+      } else {
+        console.log('[BINANCE STREAM] Streams inactive, not reconnecting');
+      }
     });
 
-    publicStreamWs.on('error', (error) => {
+    this.binancePublicWs.on('error', (error) => {
       console.error('[BINANCE STREAM] WebSocket error:', error);
     });
   }
