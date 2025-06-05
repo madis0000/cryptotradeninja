@@ -36,23 +36,23 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     setStatus('connecting');
     
-    // Connect to our unified WebSocket service on dedicated port
+    // Connect to backend WebSocket server (not external exchanges)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
     const ws = new WebSocket(`${protocol}//${hostname}:8080`);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[CLIENT WS] Public WebSocket connection opened');
+      console.log('[CLIENT WS] Connected to backend WebSocket server');
       setStatus('connected');
       options.onConnect?.();
       
-      // Subscribe to default symbols
+      // Send subscription command to backend
       const subscribeMessage = {
         type: 'subscribe',
         symbols: ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']
       };
-      console.log('[CLIENT WS] Sending subscription:', subscribeMessage);
+      console.log('[CLIENT WS] Sending subscription command to backend:', subscribeMessage);
       ws.send(JSON.stringify(subscribeMessage));
     };
 

@@ -62,17 +62,17 @@ export class WebSocketService {
       ws.on('message', async (data) => {
         try {
           const message = JSON.parse(data.toString());
-          console.log(`[WEBSOCKET] Received message:`, message);
+          console.log(`[WEBSOCKET] Received command from frontend:`, message);
           
           if (message.type === 'subscribe') {
-            // Subscribe to specific trading pairs
+            // Frontend requests subscription to specific trading pairs
             const symbols = message.symbols || ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'];
-            console.log(`[WEBSOCKET] Subscribing to symbols:`, symbols);
+            console.log(`[WEBSOCKET] Frontend requesting subscription to symbols:`, symbols);
             symbols.forEach((symbol: string) => {
               subscription.symbols.add(symbol.toLowerCase());
             });
             
-            // Send current market data
+            // Send current market data from backend to frontend
             this.sendMarketDataToClient(ws);
           }
           
