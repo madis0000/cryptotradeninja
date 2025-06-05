@@ -43,32 +43,38 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     wsRef.current = ws;
 
     ws.onopen = () => {
+      console.log('[CLIENT WS] Public WebSocket connection opened');
       setStatus('connected');
       options.onConnect?.();
       
       // Subscribe to default symbols
-      ws.send(JSON.stringify({
+      const subscribeMessage = {
         type: 'subscribe',
         symbols: ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']
-      }));
+      };
+      console.log('[CLIENT WS] Sending subscription:', subscribeMessage);
+      ws.send(JSON.stringify(subscribeMessage));
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log('[CLIENT WS] Received message:', data);
         setLastMessage(data);
         options.onMessage?.(data);
       } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
+        console.error('[CLIENT WS] Error parsing message:', error);
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      console.log(`[CLIENT WS] Connection closed - Code: ${event.code}, Reason: ${event.reason}`);
       setStatus('disconnected');
       options.onDisconnect?.();
     };
 
     ws.onerror = (error) => {
+      console.error('[CLIENT WS] Connection error:', error);
       setStatus('error');
       options.onError?.(error);
     };
