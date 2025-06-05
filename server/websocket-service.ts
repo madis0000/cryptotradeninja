@@ -15,8 +15,7 @@ interface MarketSubscription {
 }
 
 export class WebSocketService {
-  private publicWss: WebSocketServer;
-  private userWss: WebSocketServer;
+  private wss: WebSocketServer;
   private userConnections = new Map<number, UserConnection>();
   private marketSubscriptions = new Set<MarketSubscription>();
   private marketData = new Map<string, any>();
@@ -24,33 +23,25 @@ export class WebSocketService {
   private binanceUserStreams = new Map<string, WebSocket>();
 
   constructor(server: Server) {
-    // Public market data WebSocket server
-    this.publicWss = new WebSocketServer({ 
-      port: 8081, 
-      path: '/market'
+    // Unified WebSocket server on single port
+    this.wss = new WebSocketServer({ 
+      port: 8081
     });
 
-    // User data WebSocket server  
-    this.userWss = new WebSocketServer({ 
-      port: 8082, 
-      path: '/user'
-    });
-
-    this.setupPublicWebSocket();
-    this.setupUserWebSocket();
+    this.setupWebSocket();
     
     // Start mock data generation only
     this.startMockDataGeneration();
     
-    console.log('[WEBSOCKET] Service initialized. External streams connect on-demand only.');
+    console.log('[WEBSOCKET] Unified service initialized on port 8080. External streams connect on-demand only.');
   }
 
-  private setupPublicWebSocket() {
-    console.log('[PUBLIC WS] Setting up public WebSocket server on port 8081');
+  private setupWebSocket() {
+    console.log('[WEBSOCKET] Setting up unified WebSocket server on port 8080');
     
-    this.publicWss.on('connection', (ws, request) => {
+    this.wss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;
-      console.log(`[PUBLIC WS] Client connected from ${clientIP}`);
+      console.log(`[WEBSOCKET] Client connected from ${clientIP}`);
 
       const subscription: MarketSubscription = {
         ws,
@@ -58,17 +49,17 @@ export class WebSocketService {
       };
 
       this.marketSubscriptions.add(subscription);
-      console.log(`[PUBLIC WS] Total active subscriptions: ${this.marketSubscriptions.size}`);
+      console.log(`[WEBSOCKET] Total active subscriptions: ${this.marketSubscriptions.size}`);
 
-      ws.on('message', (data) => {
+      ws.on('message', async (data) => {
         try {
           const message = JSON.parse(data.toString());
-          console.log(`[PUBLIC WS] Received message:`, message);
+          console.log(`[WEBSOCKET] Received message:`, message);
           
           if (message.type === 'subscribe') {
             // Subscribe to specific trading pairs
             const symbols = message.symbols || ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'];
-            console.log(`[PUBLIC WS] Subscribing to symbols:`, symbols);
+            console.log(`[WEBSOCKET] Subscribing to symbols:`, symbols);
             symbols.forEach((symbol: string) => {
               subscription.symbols.add(symbol.toLowerCase());
             });
@@ -76,41 +67,12 @@ export class WebSocketService {
             // Send current market data
             this.sendMarketDataToClient(ws);
           }
-        } catch (error) {
-          console.error('[PUBLIC WS] Error processing message:', error);
-        }
-      });
-
-      ws.on('close', (code, reason) => {
-        console.log(`[PUBLIC WS] Client disconnected - Code: ${code}, Reason: ${reason}`);
-        this.marketSubscriptions.delete(subscription);
-        console.log(`[PUBLIC WS] Remaining subscriptions: ${this.marketSubscriptions.size}`);
-      });
-
-      ws.on('error', (error) => {
-        console.error('[PUBLIC WS] WebSocket error:', error);
-        this.marketSubscriptions.delete(subscription);
-      });
-
-      // Send initial market data
-      console.log('[PUBLIC WS] Sending initial market data');
-      this.sendMarketDataToClient(ws);
-    });
-  }
-
-  private setupUserWebSocket() {
-    this.userWss.on('connection', (ws, request) => {
-      console.log('User WebSocket client connected');
-
-      ws.on('message', async (data) => {
-        try {
-          const message = JSON.parse(data.toString());
           
           if (message.type === 'authenticate') {
             await this.authenticateUserConnection(ws, message.userId, message.listenKey);
           }
         } catch (error) {
-          console.error('Error processing user WebSocket message:', error);
+          console.error('[WEBSOCKET] Error processing message:', error);
           ws.send(JSON.stringify({
             type: 'error',
             message: 'Failed to process message'
@@ -118,21 +80,32 @@ export class WebSocketService {
         }
       });
 
-      ws.on('close', () => {
-        console.log('User WebSocket client disconnected');
+      ws.on('close', (code, reason) => {
+        console.log(`[WEBSOCKET] Client disconnected - Code: ${code}, Reason: ${reason}`);
+        this.marketSubscriptions.delete(subscription);
+        
         // Clean up user connection
         this.userConnections.forEach((connection, userId) => {
           if (connection.ws === ws) {
             this.userConnections.delete(userId);
           }
         });
+        
+        console.log(`[WEBSOCKET] Remaining subscriptions: ${this.marketSubscriptions.size}`);
       });
 
       ws.on('error', (error) => {
-        console.error('User WebSocket error:', error);
+        console.error('[WEBSOCKET] WebSocket error:', error);
+        this.marketSubscriptions.delete(subscription);
       });
+
+      // Send initial market data
+      console.log('[WEBSOCKET] Sending initial market data');
+      this.sendMarketDataToClient(ws);
     });
   }
+
+
 
   private async authenticateUserConnection(ws: WebSocket, userId: number, listenKey: string) {
     try {
@@ -510,8 +483,7 @@ export class WebSocketService {
   }
 
   public close() {
-    this.publicWss.close();
-    this.userWss.close();
+    this.wss.close();
     this.binancePublicWs?.close();
     this.binanceUserStreams.forEach(ws => ws.close());
   }
