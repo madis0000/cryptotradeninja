@@ -285,6 +285,12 @@ export class WebSocketService {
 
     this.binancePublicWs.on('message', (data) => {
       try {
+        // Ignore messages if streams are inactive
+        if (!this.isStreamsActive) {
+          console.log('[BINANCE STREAM] Ignoring message - streams inactive');
+          return;
+        }
+
         const message = JSON.parse(data.toString());
         console.log('[BINANCE STREAM] Received message:', JSON.stringify(message).substring(0, 200) + '...');
         
