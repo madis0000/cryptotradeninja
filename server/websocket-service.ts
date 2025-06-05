@@ -23,9 +23,10 @@ export class WebSocketService {
   private binanceUserStreams = new Map<string, WebSocket>();
 
   constructor(server: Server) {
-    // Unified WebSocket server on single port
+    // Unified WebSocket server attached to HTTP server instead of separate port
     this.wss = new WebSocketServer({ 
-      port: 8081
+      server: server,
+      path: '/ws'
     });
 
     this.setupWebSocket();
@@ -413,6 +414,11 @@ export class WebSocketService {
   }
 
   private broadcastMarketUpdate(marketUpdate: any) {
+    // Only broadcast if there are connected clients
+    if (this.marketSubscriptions.size === 0) {
+      return;
+    }
+
     const message = JSON.stringify({
       type: 'market_update',
       data: marketUpdate
@@ -425,8 +431,6 @@ export class WebSocketService {
         // Check if client is subscribed to this symbol
         const isSubscribed = subscription.symbols.size === 0 || 
                            subscription.symbols.has(marketUpdate.symbol.toLowerCase());
-        
-        console.log(`[WEBSOCKET] Client subscription check - symbols: [${Array.from(subscription.symbols)}], isSubscribed: ${isSubscribed}`);
         
         if (isSubscribed) {
           subscription.ws.send(message);
