@@ -23,10 +23,10 @@ export class WebSocketService {
   private binanceUserStreams = new Map<string, WebSocket>();
 
   constructor(server: Server) {
-    // Unified WebSocket server attached to HTTP server instead of separate port
+    // Unified WebSocket server on dedicated port to avoid Vite conflicts
     this.wss = new WebSocketServer({ 
-      server: server,
-      path: '/ws'
+      port: 8082,
+      path: '/market-data'
     });
 
     this.setupWebSocket();
@@ -34,11 +34,11 @@ export class WebSocketService {
     // Start mock data generation only
     this.startMockDataGeneration();
     
-    console.log('[WEBSOCKET] Unified service initialized on HTTP server /ws path. External streams connect on-demand only.');
+    console.log('[WEBSOCKET] Unified service initialized on port 8082 /market-data path. External streams connect on-demand only.');
   }
 
   private setupWebSocket() {
-    console.log('[WEBSOCKET] Setting up unified WebSocket server on HTTP server /ws path');
+    console.log('[WEBSOCKET] Setting up unified WebSocket server on port 8082 /market-data path');
     
     this.wss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;
