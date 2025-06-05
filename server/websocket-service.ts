@@ -217,16 +217,13 @@ export class WebSocketService {
   private initializeBinancePublicStream() {
     console.log('[BINANCE] Initializing Binance public stream connections');
     
-    // Start mock data generation for immediate functionality
-    this.startMockDataGeneration();
-    
     // Connect to Binance testnet WebSocket API for authenticated operations
     const wsApiUrl = 'wss://ws-api.testnet.binance.vision/ws-api/v3';
     console.log(`[BINANCE] Attempting to connect to WebSocket API: ${wsApiUrl}`);
     this.connectToBinanceWebSocketAPI(wsApiUrl);
 
     // Connect to Binance testnet public stream for market data (default ticker streams)
-    this.connectToConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT']);
+    this.connectToConfigurableStream('ticker', ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT', 'ICPUSDT']);
   }
 
   private connectToConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
@@ -260,37 +257,8 @@ export class WebSocketService {
   }
 
   private startMockDataGeneration() {
-    // Generate realistic market data for testing
-    const symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT'];
-    const baseData = {
-      'BTCUSDT': { basePrice: 43000, volatility: 0.02 },
-      'ETHUSDT': { basePrice: 2400, volatility: 0.03 },
-      'ADAUSDT': { basePrice: 0.45, volatility: 0.05 },
-      'BNBUSDT': { basePrice: 310, volatility: 0.04 },
-      'DOGEUSDT': { basePrice: 0.085, volatility: 0.06 }
-    };
-
-    setInterval(() => {
-      symbols.forEach(symbol => {
-        const base = baseData[symbol as keyof typeof baseData];
-        const change = (Math.random() - 0.5) * base.volatility;
-        const newPrice = base.basePrice * (1 + change);
-        const changePercent = change * 100;
-
-        const marketUpdate = {
-          symbol,
-          price: parseFloat(newPrice.toFixed(symbol.includes('USDT') && !symbol.startsWith('BTC') && !symbol.startsWith('ETH') ? 4 : 2)),
-          change: parseFloat(changePercent.toFixed(2)),
-          volume: Math.random() * 1000000,
-          high: newPrice * 1.02,
-          low: newPrice * 0.98,
-          timestamp: Date.now()
-        };
-
-        this.marketData.set(symbol, marketUpdate);
-        this.broadcastMarketUpdate(marketUpdate);
-      });
-    }, 2000); // Update every 2 seconds
+    // Mock data generation removed - using real Binance streams only
+    console.log('[MOCK DATA] Mock data generation disabled - using real Binance streams');
   }
 
   private connectToBinanceWebSocketAPI(wsApiUrl: string) {
