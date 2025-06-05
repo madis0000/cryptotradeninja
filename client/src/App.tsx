@@ -10,6 +10,7 @@ import Dashboard from "@/pages/dashboard";
 import TradingBots from "@/pages/trading-bots";
 import ApiKeys from "@/pages/api-keys";
 import Portfolio from "@/pages/portfolio";
+import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth";
 
@@ -25,6 +26,7 @@ function AuthenticatedApp() {
           <Route path="/bots" component={TradingBots} />
           <Route path="/api-keys" component={ApiKeys} />
           <Route path="/portfolio" component={Portfolio} />
+          <Route path="/settings" component={Settings} />
           <Route component={NotFound} />
         </Switch>
       </main>
