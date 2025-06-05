@@ -2,8 +2,14 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { MarketData } from "@/types";
+import { useAuth } from "@/hooks/useAuth";
 
-export function TopBar() {
+interface TopBarProps {
+  onLogout?: () => void;
+}
+
+export function TopBar({ onLogout }: TopBarProps) {
+  const { user } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const { data: marketData } = useQuery<MarketData>({
@@ -86,6 +92,20 @@ export function TopBar() {
             <i className="fas fa-bell"></i>
             <span className="absolute -top-1 -right-1 w-3 h-3 bg-crypto-danger rounded-full text-xs flex items-center justify-center text-white">3</span>
           </Button>
+          
+          {/* User Menu */}
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-crypto-light">Welcome, {user?.username}</span>
+            <Button 
+              onClick={onLogout}
+              variant="ghost" 
+              size="sm" 
+              className="p-2 text-crypto-light hover:bg-gray-800"
+              title="Logout"
+            >
+              <i className="fas fa-sign-out-alt"></i>
+            </Button>
+          </div>
         </div>
       </div>
     </header>
