@@ -359,7 +359,10 @@ export default function MyExchanges() {
                       size="sm" 
                       variant="ghost" 
                       className="h-6 px-2 text-xs text-crypto-accent hover:bg-crypto-accent/10"
-                      onClick={() => fetchExchangeBalance(exchange)}
+                      onClick={() => {
+                        console.log('Refresh button clicked for exchange:', exchange.id);
+                        fetchExchangeBalance(exchange);
+                      }}
                     >
                       <i className="fas fa-sync-alt mr-1"></i>
                       Refresh
