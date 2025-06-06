@@ -54,18 +54,6 @@ export default function MyExchanges() {
     };
   }, [timeoutRef]);
 
-  // Auto-fetch balances when exchanges are loaded
-  useEffect(() => {
-    if (exchanges && exchanges.length > 0) {
-      exchanges.forEach(exchange => {
-        if (exchange.isActive && exchange.apiKey) {
-          console.log(`Auto-fetching balance for exchange: ${exchange.name}`);
-          fetchExchangeBalance(exchange);
-        }
-      });
-    }
-  }, [exchanges]);
-
   // WebSocket for balance fetching
   const userWs = useUserWebSocket({
     onMessage: (data) => {
@@ -168,7 +156,7 @@ export default function MyExchanges() {
         userWs.connect();
       }
       
-      // Wait for connection to be established
+      // Wait for connection to be established with better retry logic
       const waitForConnection = () => {
         return new Promise<void>((resolve, reject) => {
           if (userWs.status === 'connected') {
@@ -177,12 +165,20 @@ export default function MyExchanges() {
           }
           
           let attempts = 0;
+          const maxAttempts = 50; // 5 seconds max wait
+          
           const checkConnection = () => {
             attempts++;
+            console.log(`Connection check attempt ${attempts}/${maxAttempts}, status: ${userWs.status}`);
+            
             if (userWs.status === 'connected') {
+              console.log('✅ WebSocket connection established successfully');
               resolve();
-            } else if (attempts > 100) { // 10 seconds max wait
-              reject(new Error('Connection timeout'));
+            } else if (userWs.status === 'error') {
+              reject(new Error('WebSocket connection failed'));
+            } else if (attempts >= maxAttempts) {
+              console.warn('⚠️ Connection timeout, proceeding anyway');
+              resolve(); // Proceed even if connection is slow
             } else {
               setTimeout(checkConnection, 100);
             }
@@ -275,6 +271,18 @@ export default function MyExchanges() {
   const { data: exchanges = [], isLoading } = useQuery<Exchange[]>({
     queryKey: ['/api/exchanges'],
   });
+
+  // Auto-fetch balances when exchanges are loaded
+  useEffect(() => {
+    if (exchanges && exchanges.length > 0) {
+      exchanges.forEach(exchange => {
+        if (exchange.isActive && exchange.apiKey) {
+          console.log(`Auto-fetching balance for exchange: ${exchange.name}`);
+          fetchExchangeBalance(exchange);
+        }
+      });
+    }
+  }, [exchanges, fetchExchangeBalance]);
 
   // Add exchange mutation
   const addExchangeMutation = useMutation({
