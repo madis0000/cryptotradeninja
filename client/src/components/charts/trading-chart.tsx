@@ -77,23 +77,28 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
       chartRef.current = chart;
       seriesRef.current = candlestickSeries;
 
-      // Generate initial candlestick data with proper timestamps
+      // Generate 500 frames of historical candlestick data
       const initialData = [];
       const now = Math.floor(Date.now() / 1000);
-      const basePrice = marketData?.price || 103600;
+      const basePrice = marketData?.price || 103800;
       
-      for (let i = 50; i >= 0; i--) {
-        const price = basePrice + (Math.random() - 0.5) * 100;
-        const high = price + Math.random() * 50;
-        const low = price - Math.random() * 50;
-        const open = price + (Math.random() - 0.5) * 20;
+      for (let i = 500; i >= 0; i--) {
+        const timeOffset = i * 60; // 1-minute intervals
+        const timestamp = now - timeOffset;
+        
+        // Generate realistic price movement
+        const priceVariation = (Math.random() - 0.5) * 200;
+        const open = basePrice + priceVariation;
+        const close = open + (Math.random() - 0.5) * 100;
+        const high = Math.max(open, close) + Math.random() * 50;
+        const low = Math.min(open, close) - Math.random() * 50;
         
         initialData.push({
-          time: (now - i * 60) as any,
-          open: open,
-          high: high,
-          low: low,
-          close: price,
+          time: timestamp as any,
+          open: Math.max(0, open),
+          high: Math.max(0, high),
+          low: Math.max(0, low),
+          close: Math.max(0, close),
         });
       }
       

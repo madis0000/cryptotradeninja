@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useAuth } from './useAuth';
 
 interface WebSocketHookOptions {
@@ -99,6 +99,14 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     }
   }, []);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log('[CLIENT WS] Component unmounting - cleaning up WebSocket connection');
+      disconnect();
+    };
+  }, [disconnect]);
+
   return {
     connect,
     disconnect,
@@ -185,6 +193,14 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
       }));
     }
   }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log('[USER WS] Component unmounting - cleaning up WebSocket connection');
+      disconnect();
+    };
+  }, [disconnect]);
 
   return {
     connect,
