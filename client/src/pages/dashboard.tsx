@@ -4,7 +4,7 @@ import { ActiveBots } from "@/components/dashboard/active-bots";
 import { MarketOverview } from "@/components/dashboard/market-overview";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { CreateBotModal } from "@/components/bots/create-bot-modal";
-import { WorkingChartFixed } from "@/components/charts/working-chart-fixed";
+import { CandlestickChart } from "@/components/charts/candlestick-chart";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { usePublicWebSocket } from "@/hooks/useWebSocketService";
@@ -64,11 +64,10 @@ export default function Dashboard() {
         {/* Main Content */}
         <div className="xl:col-span-2 space-y-6">
           {/* TradingView Real-time Chart */}
-          <WorkingChartFixed 
+          <CandlestickChart 
             symbol="BTCUSDT" 
             marketData={currentMarketData}
-            height={500}
-            interval="1m"
+            className="w-full"
           />
 
           {/* Active Bots */}
