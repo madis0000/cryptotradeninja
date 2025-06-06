@@ -157,16 +157,17 @@ export class WebSocketService {
         listenKey
       });
 
-      // Connect to Binance user data stream
-      await this.connectToBinanceUserStream(userId, listenKey);
-
+      // Send initial authentication success
       ws.send(JSON.stringify({
         type: 'authenticated',
-        message: 'Successfully authenticated and connected to user data stream'
+        message: 'Successfully authenticated. Attempting to connect to user data stream...'
       }));
 
+      // Connect to Binance user data stream (async - errors handled in connectToBinanceUserStream)
+      this.connectToBinanceUserStream(userId, listenKey);
+
     } catch (error) {
-      console.error('Authentication error:', error);
+      console.error('[USER STREAM] Authentication error:', error);
       ws.send(JSON.stringify({
         type: 'error',
         message: 'Authentication failed'
@@ -433,39 +434,79 @@ export class WebSocketService {
   }
 
   private async connectToBinanceUserStream(userId: number, listenKey: string) {
-    const wsUrl = `wss://stream.binance.com:9443/ws/${listenKey}`;
+    // Check if testnet - user streams often restricted on testnet
+    const isTestnet = process.env.NODE_ENV === 'development';
+    const wsUrl = isTestnet 
+      ? `wss://testnet.binance.vision/ws/${listenKey}`
+      : `wss://stream.binance.com:9443/ws/${listenKey}`;
     
     // Close existing connection if any
     if (this.binanceUserStreams.has(listenKey)) {
       this.binanceUserStreams.get(listenKey)?.close();
     }
 
-    const userWs = new WebSocket(wsUrl);
+    try {
+      const userWs = new WebSocket(wsUrl);
+      this.binanceUserStreams.set(listenKey, userWs);
 
-    this.binanceUserStreams.set(listenKey, userWs);
+      userWs.on('open', () => {
+        console.log(`[USER STREAM] Connected to Binance user stream for user ${userId}`);
+        
+        // Send confirmation to user
+        const userConnection = this.userConnections.get(userId);
+        if (userConnection) {
+          userConnection.ws.send(JSON.stringify({
+            type: 'user_stream_connected',
+            message: 'User data stream active'
+          }));
+        }
+      });
 
-    userWs.on('open', () => {
-      console.log(`Connected to Binance user stream for user ${userId}`);
-    });
+      userWs.on('message', (data) => {
+        try {
+          const userData = JSON.parse(data.toString());
+          console.log(`[USER STREAM] Received data for user ${userId}:`, userData);
+          this.broadcastUserUpdate(userId, userData);
+        } catch (error) {
+          console.error('[USER STREAM] Error processing Binance user data:', error);
+        }
+      });
 
-    userWs.on('message', (data) => {
-      try {
-        const userData = JSON.parse(data.toString());
-        this.broadcastUserUpdate(userId, userData);
-      } catch (error) {
-        console.error('Error processing Binance user data:', error);
+      userWs.on('close', (code, reason) => {
+        console.log(`[USER STREAM] Binance user stream disconnected for user ${userId} - Code: ${code}, Reason: ${reason}`);
+        this.binanceUserStreams.delete(listenKey);
+      });
+
+      userWs.on('error', (error) => {
+        console.error(`[USER STREAM] Binance user stream error for user ${userId}:`, error);
+        this.binanceUserStreams.delete(listenKey);
+        
+        // Handle specific errors
+        if (error.message.includes('451') || error.message.includes('Unexpected server response')) {
+          console.log(`[USER STREAM] Testnet user streams may be restricted. Notifying client.`);
+          
+          const userConnection = this.userConnections.get(userId);
+          if (userConnection) {
+            userConnection.ws.send(JSON.stringify({
+              type: 'user_stream_unavailable',
+              message: 'User data streams are currently unavailable on testnet. Public market data remains active.',
+              error: 'testnet_restriction'
+            }));
+          }
+        }
+      });
+    } catch (error) {
+      console.error(`[USER STREAM] Failed to create WebSocket connection for user ${userId}:`, error);
+      
+      const userConnection = this.userConnections.get(userId);
+      if (userConnection) {
+        userConnection.ws.send(JSON.stringify({
+          type: 'user_stream_error',
+          message: 'Failed to connect to user data stream',
+          error: 'connection_failed'
+        }));
       }
-    });
-
-    userWs.on('close', () => {
-      console.log(`Binance user stream disconnected for user ${userId}`);
-      this.binanceUserStreams.delete(listenKey);
-    });
-
-    userWs.on('error', (error) => {
-      console.error(`Binance user stream error for user ${userId}:`, error);
-      this.binanceUserStreams.delete(listenKey);
-    });
+    }
   }
 
   private sendMarketDataToClient(ws: WebSocket) {

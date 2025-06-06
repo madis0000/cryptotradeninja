@@ -149,11 +149,25 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log('User WebSocket data:', data);
         setLastMessage(data);
         
         if (data.type === 'authenticated') {
           setStatus('connected');
           options.onConnect?.();
+        } else if (data.type === 'user_stream_connected') {
+          console.log('User data stream connected successfully');
+          options.onMessage?.(data);
+        } else if (data.type === 'user_stream_unavailable') {
+          console.log('User stream unavailable:', data.message);
+          // Still consider connection successful for public data
+          setStatus('connected');
+          options.onMessage?.(data);
+        } else if (data.type === 'user_stream_error') {
+          console.log('User stream error:', data.message);
+          // Connection to our service succeeded, but user stream failed
+          setStatus('connected');
+          options.onMessage?.(data);
         } else if (data.type === 'error') {
           setStatus('error');
           options.onError?.(new Event(data.message));
