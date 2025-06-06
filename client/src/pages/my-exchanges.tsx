@@ -348,7 +348,7 @@ export default function MyExchanges() {
                 ) : balanceInfo?.error ? (
                   <div className="flex items-center space-x-2">
                     <i className="fas fa-exclamation-triangle text-yellow-500"></i>
-                    <span className="text-sm text-yellow-500">{balanceInfo.error}</span>
+                    <span className="text-sm text-yellow-500">{balanceInfo.balance}</span>
                   </div>
                 ) : exchange.isActive ? (
                   <div className="flex items-center justify-between w-full">
