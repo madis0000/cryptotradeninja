@@ -190,7 +190,13 @@ export default function MyExchanges() {
       console.log('Sending authentication request for balance:', authRequest);
       
       // Send authentication message which will trigger balance fetch
-      userWs.sendMessage(authRequest);
+      try {
+        userWs.sendMessage(authRequest);
+        console.log('Authentication message sent successfully');
+      } catch (wsError) {
+        console.error('Error sending WebSocket message:', wsError);
+        throw wsError;
+      }
       
       // Set timeout for error handling - increased to 30 seconds for testnet
       const timeout = setTimeout(() => {
@@ -213,10 +219,20 @@ export default function MyExchanges() {
       setTimeoutRef(timeout);
       
     } catch (error) {
-      console.error('Error fetching balance:', error);
+      console.error('Error in fetchExchangeBalance:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      console.error('Error details:', {
+        message: errorMessage,
+        stack: errorStack,
+        exchangeId: exchange.id
+      });
       // Only set error state if balance wasn't already successfully updated
       setExchangeBalances(prev => {
-        if (prev[exchange.id]?.loading) {
+        const currentState = prev[exchange.id];
+        console.log('Current exchange state when error caught:', currentState);
+        if (currentState?.loading) {
+          console.log('Setting error state for exchange', exchange.id);
           return {
             ...prev,
             [exchange.id]: { 
@@ -226,6 +242,7 @@ export default function MyExchanges() {
             }
           };
         }
+        console.log('Not overriding successful result for exchange', exchange.id);
         return prev; // Don't override successful results
       });
     }
