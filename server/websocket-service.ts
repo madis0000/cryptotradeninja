@@ -439,13 +439,24 @@ export class WebSocketService {
   }
 
   private async connectToBinanceUserStream(userId: number, listenKey: string) {
-    // Use WebSocket API approach instead of Stream API
-    const isTestnet = process.env.NODE_ENV === 'development';
-    const wsUrl = isTestnet 
-      ? `wss://testnet.binance.vision/ws-api/v3`
-      : `wss://ws-api.binance.com:443/ws-api/v3`;
+    // Get user's exchanges to find the correct WebSocket API endpoint
+    const exchanges = await storage.getExchangesByUserId(userId);
+    if (exchanges.length === 0) {
+      console.error(`[USER STREAM] No exchanges found for user ${userId}`);
+      return;
+    }
+
+    // Find the first active exchange with WebSocket API endpoint
+    const activeExchange = exchanges.find(ex => ex.isActive && ex.wsApiEndpoint);
+    if (!activeExchange || !activeExchange.wsApiEndpoint) {
+      console.error(`[USER STREAM] No active exchange with WebSocket API endpoint found for user ${userId}`);
+      return;
+    }
+
+    const wsUrl = activeExchange.wsApiEndpoint;
+    console.log(`[USER STREAM] Using WebSocket API endpoint: ${wsUrl}`);
     
-    // Get user's API credentials for authenticated requests
+    // Get user data
     const user = await storage.getUser(userId);
     if (!user) {
       console.error(`[USER STREAM] User ${userId} not found`);
@@ -526,7 +537,18 @@ export class WebSocketService {
         console.error(`[USER STREAM] WebSocket API error for user ${userId}:`, error);
         this.binanceUserStreams.delete(connectionKey);
         
-        // Handle specific errors
+        // Notify client about WebSocket API unavailability
+        const userConnection = this.userConnections.get(userId);
+        if (userConnection) {
+          const isTestnet = activeExchange.isTestnet;
+          userConnection.ws.send(JSON.stringify({
+            type: 'user_stream_unavailable',
+            message: isTestnet 
+              ? 'WebSocket API is currently unavailable on testnet. Public market data remains active.'
+              : 'WebSocket API access restricted from this location. Balance requests use REST API instead.',
+            error: isTestnet ? 'testnet_restriction' : 'geo_restriction'
+          }));
+        }
         if (error.message.includes('451') || error.message.includes('404') || error.message.includes('Unexpected server response')) {
           console.log(`[USER STREAM] WebSocket API may be restricted on testnet. Notifying client.`);
           
