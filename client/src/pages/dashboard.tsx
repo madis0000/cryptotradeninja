@@ -14,9 +14,10 @@ export default function Dashboard() {
   const [isCreateBotModalOpen, setIsCreateBotModalOpen] = useState(false);
   const [currentMarketData, setCurrentMarketData] = useState<any>(null);
 
-  // WebSocket connection for real-time updates
-  const { connect, disconnect, status } = usePublicWebSocket({
+  // WebSocket connection for real-time updates (manual control)
+  const publicWs = usePublicWebSocket({
     onMessage: (data) => {
+      console.log('[DASHBOARD] Received WebSocket data:', data);
       if (data.type === 'market_update') {
         setCurrentMarketData(data.data);
       }
@@ -29,11 +30,28 @@ export default function Dashboard() {
     }
   });
 
-  // Auto-connect to WebSocket when component mounts
+  // Manual WebSocket connection (no auto-connect to prevent loops)
   useEffect(() => {
-    connect(['BTCUSDT']);
-    return () => disconnect();
-  }, [connect, disconnect]);
+    let mounted = true;
+    
+    const connectWebSocket = () => {
+      if (mounted && publicWs.status === 'disconnected') {
+        console.log('[DASHBOARD] Attempting manual WebSocket connection...');
+        publicWs.connect(['BTCUSDT']);
+      }
+    };
+
+    // Delayed connection to prevent rapid reconnects
+    const timer = setTimeout(connectWebSocket, 2000);
+    
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+      if (publicWs.status === 'connected') {
+        publicWs.disconnect();
+      }
+    };
+  }, []); // No dependencies to prevent reconnection loops
 
   return (
     <div className="flex-1 overflow-auto p-6">
