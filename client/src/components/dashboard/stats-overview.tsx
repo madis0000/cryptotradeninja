@@ -5,7 +5,6 @@ import { UserStats } from "@/types";
 export function StatsOverview() {
   const { data: stats, isLoading } = useQuery<UserStats>({
     queryKey: ['/api/stats'],
-    refetchInterval: 10000, // Refresh every 10 seconds
   });
 
   if (isLoading) {

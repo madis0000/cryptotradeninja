@@ -11,7 +11,6 @@ interface ActiveBotsProps {
 export function ActiveBots({ onCreateBot }: ActiveBotsProps) {
   const { data: bots, isLoading } = useQuery<TradingBot[]>({
     queryKey: ['/api/bots'],
-    refetchInterval: 5000, // Refresh every 5 seconds
   });
 
   if (isLoading) {

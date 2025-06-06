@@ -13,7 +13,6 @@ const cryptoLogos: { [key: string]: { bg: string; symbol: string } } = {
 export function MarketOverview() {
   const { data: marketData, isLoading } = useQuery<MarketData>({
     queryKey: ['/api/market'],
-    refetchInterval: 3000, // Refresh every 3 seconds
   });
 
   if (isLoading) {
