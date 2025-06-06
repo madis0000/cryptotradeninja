@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createChart, ColorType } from 'lightweight-charts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -23,9 +24,8 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
   const chartRef = useRef<any>(null);
   const lineSeriesRef = useRef<any>(null);
   const [timeframe, setTimeframe] = useState('1H');
-  const [lastPrice, setLastPrice] = useState<number>(0);
 
-  // Initialize chart with Lightweight Charts v5
+  // Initialize TradingView Lightweight Charts v5
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -35,12 +35,8 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
         textColor: '#d1d5db',
       },
       grid: {
-        vertLines: {
-          color: '#374151',
-        },
-        horzLines: {
-          color: '#374151',
-        },
+        vertLines: { color: '#374151' },
+        horzLines: { color: '#374151' },
       },
       crosshair: {
         mode: 1,
@@ -64,17 +60,30 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
       },
     });
 
-    // Add line series using v5 API - correct syntax
-    const lineSeries = chart.addSeries('Line', {
-      color: '#10b981',
+    // Add line series - v5 API
+    const lineSeries = chart.addAreaSeries({
+      topColor: 'rgba(16, 185, 129, 0.56)',
+      bottomColor: 'rgba(16, 185, 129, 0.04)',
+      lineColor: 'rgba(16, 185, 129, 1)',
       lineWidth: 2,
     });
 
     chartRef.current = chart;
     lineSeriesRef.current = lineSeries;
 
-    // Generate initial historical data
-    generateInitialData();
+    // Generate initial data
+    const initialData = [];
+    const now = Math.floor(Date.now() / 1000);
+    const basePrice = marketData?.price || 103600;
+    
+    for (let i = 50; i >= 0; i--) {
+      initialData.push({
+        time: (now - i * 60) as any,
+        value: basePrice + (Math.random() - 0.5) * 100,
+      });
+    }
+    
+    lineSeries.setData(initialData);
 
     // Cleanup
     return () => {
@@ -82,50 +91,19 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
     };
   }, []);
 
-  // Generate initial line data
-  const generateInitialData = () => {
-    const data = [];
-    const now = Math.floor(Date.now() / 1000);
-    const basePrice = marketData?.price || 103618;
-    let currentPrice = basePrice;
-
-    // Generate 100 points of historical data
-    for (let i = 100; i >= 0; i--) {
-      const time = now - (i * 60); // 1 minute intervals
-      const volatility = 0.001; // Small volatility for smooth line
-      
-      const change = (Math.random() - 0.5) * 2 * volatility * currentPrice;
-      currentPrice = currentPrice + change;
-
-      data.push({
-        time: time as any,
-        value: Number(currentPrice.toFixed(2)),
-      });
-    }
-
-    if (lineSeriesRef.current) {
-      lineSeriesRef.current.setData(data);
-    }
-    
-    setLastPrice(currentPrice);
-  };
-
   // Update chart with real-time data
   useEffect(() => {
     if (!marketData || !lineSeriesRef.current) return;
 
     const currentTime = Math.floor(marketData.timestamp / 1000);
     
-    // Add new price point
     lineSeriesRef.current.update({
       time: currentTime as any,
       value: marketData.price,
     });
-
-    setLastPrice(marketData.price);
   }, [marketData]);
 
-  // Handle chart resize
+  // Handle resize
   useEffect(() => {
     const handleResize = () => {
       if (chartRef.current && chartContainerRef.current) {
@@ -196,17 +174,12 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
           </div>
         </div>
         
-        {/* TradingView Lightweight Charts Container */}
+        {/* TradingView Lightweight Charts */}
         <div className="h-80 w-full relative bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
           <div 
             ref={chartContainerRef} 
             className="absolute inset-0 rounded-lg overflow-hidden"
           />
-          {!chartRef.current && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-800 rounded-lg border border-gray-700">
-              <div className="text-gray-400">Loading TradingView chart...</div>
-            </div>
-          )}
         </div>
 
         {/* Chart Stats */}
