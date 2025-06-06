@@ -1,0 +1,223 @@
+import { useEffect, useRef, useState } from "react";
+import { createChart, ColorType, CandlestickSeriesOptions } from 'lightweight-charts';
+
+interface WorkingChartFixedProps {
+  symbol?: string;
+  height?: number;
+  interval?: string;
+}
+
+export const WorkingChartFixed = ({ 
+  symbol = 'BTCUSDT',
+  height = 500,
+  interval = '4h'
+}: WorkingChartFixedProps) => {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<any>(null);
+  const seriesRef = useRef<any>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [lastPrice, setLastPrice] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!chartContainerRef.current) return;
+
+    console.log('Initializing chart with lightweight-charts v5...');
+    
+    try {
+      // Create chart with correct v5 configuration
+      const chart = createChart(chartContainerRef.current, {
+        layout: {
+          background: { type: ColorType.Solid, color: '#1a1a1a' },
+          textColor: '#d1d5db',
+        },
+        grid: {
+          vertLines: { color: '#374151' },
+          horzLines: { color: '#374151' },
+        },
+        width: chartContainerRef.current.clientWidth,
+        height: height,
+      });
+
+      console.log('Creating candlestick series with correct v5 API...');
+      
+      // Use correct v5 API - addCandlestickSeries method
+      const candlestickSeries = chart.addCandlestickSeries({
+        upColor: '#10b981',
+        downColor: '#ef4444', 
+        wickUpColor: '#10b981',
+        wickDownColor: '#ef4444',
+        borderVisible: false,
+      });
+
+      chartRef.current = chart;
+      seriesRef.current = candlestickSeries;
+
+      console.log('Chart created successfully');
+
+      // Load historical data
+      loadHistoricalData();
+
+      // Connect to market WebSocket 
+      connectMarketWebSocket();
+
+      // Handle resize
+      const handleResize = () => {
+        if (chartContainerRef.current && chart) {
+          chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+        }
+      };
+
+      window.addEventListener('resize', handleResize);
+
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        if (wsRef.current) {
+          wsRef.current.close();
+        }
+        if (chart) {
+          chart.remove();
+        }
+      };
+    } catch (error) {
+      console.error('Chart initialization error:', error);
+    }
+  }, [symbol, interval, height]);
+
+  const loadHistoricalData = async () => {
+    try {
+      console.log(`Loading historical data for ${symbol} ${interval}...`);
+      
+      const response = await fetch(`/api/markets/${symbol}/klines?interval=${interval}&limit=500`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const klines = await response.json();
+      console.log(`Loaded ${klines.length} historical klines`);
+
+      if (klines.length > 0 && seriesRef.current) {
+        const formattedData = klines.map((kline: any) => ({
+          time: Math.floor(kline.openTime / 1000) as any,
+          open: parseFloat(kline.open),
+          high: parseFloat(kline.high), 
+          low: parseFloat(kline.low),
+          close: parseFloat(kline.close),
+        }));
+
+        seriesRef.current.setData(formattedData);
+        setLastPrice(formattedData[formattedData.length - 1]?.close || null);
+        console.log('Historical data set successfully');
+      }
+    } catch (error) {
+      console.error('Failed to load historical data:', error);
+    }
+  };
+
+  const connectMarketWebSocket = () => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
+    const wsUrl = `${protocol}//${window.location.hostname}:${port}/api/market-ws`;
+    
+    console.log(`Connecting to market WebSocket: ${wsUrl}`);
+    setConnectionStatus('connecting');
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('Market WebSocket connected');
+      setConnectionStatus('connected');
+      
+      // Subscribe to kline data
+      ws.send(JSON.stringify({
+        type: 'subscribe_market',
+        symbol: symbol,
+        interval: interval
+      }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log('Market WebSocket message:', message);
+        
+        if (message.type === 'kline_update' && seriesRef.current) {
+          const klineData = message.data;
+          const candleData = {
+            time: Math.floor(klineData.time / 1000),
+            open: parseFloat(klineData.open),
+            high: parseFloat(klineData.high),
+            low: parseFloat(klineData.low), 
+            close: parseFloat(klineData.close),
+          };
+
+          seriesRef.current.update(candleData);
+          setLastPrice(candleData.close);
+          console.log('Updated chart with real-time data');
+        }
+        
+        if (message.type === 'historical_data' && seriesRef.current) {
+          const historicalData = message.data.data;
+          if (historicalData && historicalData.length > 0) {
+            seriesRef.current.setData(historicalData);
+            setLastPrice(historicalData[historicalData.length - 1]?.close || null);
+            console.log('Set historical data from WebSocket');
+          }
+        }
+      } catch (error) {
+        console.error('Error processing market WebSocket message:', error);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('Market WebSocket disconnected');
+      setConnectionStatus('disconnected');
+      
+      // Reconnect after 3 seconds
+      setTimeout(() => {
+        if (chartRef.current) {
+          connectMarketWebSocket();
+        }
+      }, 3000);
+    };
+
+    ws.onerror = (error) => {
+      console.error('Market WebSocket error:', error);
+      setConnectionStatus('disconnected');
+    };
+  };
+
+  const getStatusColor = () => {
+    switch (connectionStatus) {
+      case 'connected': return 'text-green-500';
+      case 'connecting': return 'text-yellow-500';
+      default: return 'text-red-500';
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <h3 className="text-lg font-semibold">{symbol} {interval.toUpperCase()}</h3>
+          {lastPrice && (
+            <div className="text-lg font-bold">
+              ${lastPrice.toFixed(2)}
+            </div>
+          )}
+        </div>
+        <div className={`text-sm ${getStatusColor()}`}>
+          {connectionStatus === 'connected' && '● Connected'}
+          {connectionStatus === 'connecting' && '○ Connecting'}
+          {connectionStatus === 'disconnected' && '● Disconnected'}
+        </div>
+      </div>
+      <div 
+        ref={chartContainerRef}
+        style={{ height: `${height}px` }}
+        className="w-full"
+      />
+    </div>
+  );
+};
