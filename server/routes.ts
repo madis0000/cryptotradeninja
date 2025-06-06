@@ -371,6 +371,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Configure stream connection - Public endpoint for market data configuration
+  // Proxy route for Binance API to bypass geo-restrictions
+  app.get("/api/proxy/binance/*", async (req: Request, res: Response) => {
+    const path = req.params[0];
+    const queryString = req.url.split('?')[1] || '';
+    const fullPath = path + (queryString ? `?${queryString}` : '');
+    
+    // Try alternative endpoints
+    const alternatives = [
+      `https://api.binance.cc/api/v3/${fullPath}`,
+      `https://dapi.binance.com/dapi/v1/${fullPath}`,
+      `https://api-gcp.binance.com/api/v3/${fullPath}`
+    ];
+    
+    for (const url of alternatives) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; TradingBot/1.0)',
+            'Accept': 'application/json'
+          },
+          signal: AbortSignal.timeout(3000)
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          return res.json(data);
+        }
+      } catch (error) {
+        console.log(`[PROXY] ${url} failed:`, error.message);
+        continue;
+      }
+    }
+    
+    res.status(451).json({
+      error: 'All proxy endpoints failed',
+      alternatives: 'Try deploying to production for different server location'
+    });
+  });
+
   app.post("/api/websocket/configure-stream", async (req: Request, res: Response) => {
     try {
       const { dataType, symbols, interval, depth } = req.body;
