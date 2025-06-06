@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useUserWebSocket } from "@/hooks/useWebSocketService";
 
 interface Exchange {
   id: number;
@@ -35,9 +36,90 @@ export default function MyExchanges() {
   const [wsStreamEndpoint, setWsStreamEndpoint] = useState('');
   const [restApiEndpoint, setRestApiEndpoint] = useState('');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [exchangeBalances, setExchangeBalances] = useState<Record<number, { balance: string; loading: boolean; error?: string }>>({});
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // WebSocket for balance fetching
+  const userWs = useUserWebSocket({
+    onMessage: (data) => {
+      if (data.type === 'api_response' && data.data?.balances) {
+        // Handle account balance response
+        const exchangeId = data.exchangeId; // We'll need to track which exchange requested this
+        if (exchangeId) {
+          const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
+          setExchangeBalances(prev => ({
+            ...prev,
+            [exchangeId]: { balance: totalUsdtValue, loading: false }
+          }));
+        }
+      } else if (data.type === 'user_stream_unavailable' || data.type === 'user_stream_error') {
+        // Handle connection errors gracefully
+        console.log('User stream unavailable:', data.message);
+      }
+    }
+  });
+
+  // Calculate total USDT value from balance array
+  const calculateTotalUsdtBalance = (balances: any[]) => {
+    if (!Array.isArray(balances)) return '0.00';
+    
+    let total = 0;
+    balances.forEach(balance => {
+      if (balance.asset === 'USDT') {
+        total += parseFloat(balance.free || 0) + parseFloat(balance.locked || 0);
+      }
+      // For other assets, we'd need price conversion which requires market data
+      // For now, just show USDT balance
+    });
+    
+    return total.toFixed(2);
+  };
+
+  // Function to fetch balance for a specific exchange
+  const fetchExchangeBalance = async (exchange: Exchange) => {
+    if (!exchange.isActive || !exchange.apiKey) return;
+    
+    setExchangeBalances(prev => ({
+      ...prev,
+      [exchange.id]: { balance: '0.00', loading: true }
+    }));
+
+    try {
+      // Connect to user WebSocket and request account info
+      userWs.connect(exchange.apiKey);
+      
+      // The balance will be updated via WebSocket onMessage callback
+      setTimeout(() => {
+        // If no response after 10 seconds, mark as error
+        setExchangeBalances(prev => ({
+          ...prev,
+          [exchange.id]: { 
+            balance: '0.00', 
+            loading: false, 
+            error: 'Unable to fetch balance data'
+          }
+        }));
+      }, 10000);
+      
+    } catch (error) {
+      setExchangeBalances(prev => ({
+        ...prev,
+        [exchange.id]: { 
+          balance: '0.00', 
+          loading: false, 
+          error: 'Connection failed'
+        }
+      }));
+    }
+  };
+
+  // Mask API key to show only first 3 characters
+  const maskApiKey = (apiKey: string) => {
+    if (!apiKey || apiKey.length < 3) return '***';
+    return apiKey.substring(0, 3) + '***' + '*'.repeat(Math.max(0, apiKey.length - 6));
+  };
 
   // Fetch exchanges
   const { data: exchanges = [], isLoading } = useQuery<Exchange[]>({
@@ -171,59 +253,97 @@ export default function MyExchanges() {
     </div>
   );
 
-  const renderExchangeCard = (exchange: Exchange) => (
-    <Card key={exchange.id} className="bg-crypto-darker border-gray-800">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-white flex items-center space-x-2">
-            <i className="fas fa-exchange-alt text-crypto-accent"></i>
-            <span>{exchange.name}</span>
-          </CardTitle>
-          <Badge variant={exchange.isActive ? "default" : "secondary"} className={exchange.isActive ? "bg-crypto-success" : ""}>
-            {exchange.isActive ? 'Active' : 'Inactive'}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          <div>
-            <Label className="text-crypto-light text-sm">API Key</Label>
-            <p className="text-white font-mono text-sm bg-crypto-dark p-2 rounded mt-1">
-              {exchange.apiKey}
-            </p>
+  const renderExchangeCard = (exchange: Exchange) => {
+    const balanceInfo = exchangeBalances[exchange.id];
+    
+    return (
+      <Card key={exchange.id} className="bg-crypto-darker border-gray-800">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-white flex items-center space-x-2">
+              <i className="fas fa-exchange-alt text-crypto-accent"></i>
+              <span>{exchange.name}</span>
+            </CardTitle>
+            <Badge variant={exchange.isActive ? "default" : "secondary"} className={exchange.isActive ? "bg-crypto-success" : ""}>
+              {exchange.isActive ? 'Active' : 'Inactive'}
+            </Badge>
           </div>
-          
-          <div>
-            <Label className="text-crypto-light text-sm">Status</Label>
-            <div className="flex items-center space-x-2 mt-1">
-              <div className={`w-2 h-2 rounded-full ${exchange.isActive ? 'bg-crypto-success' : 'bg-gray-500'}`}></div>
-              <span className="text-sm text-crypto-light">
-                {exchange.isActive ? 'Connected' : 'Disconnected'}
-              </span>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-crypto-light text-sm">API Key</Label>
+              <p className="text-white font-mono text-sm bg-crypto-dark p-2 rounded mt-1">
+                {maskApiKey(exchange.apiKey)}
+              </p>
             </div>
-          </div>
-          
-          <div>
-            <Label className="text-crypto-light text-sm">Added</Label>
-            <p className="text-crypto-light text-sm mt-1">
-              {new Date(exchange.createdAt).toLocaleDateString()}
-            </p>
-          </div>
-          
-          <div className="flex space-x-2 pt-2">
-            <Button size="sm" variant="outline" className="border-gray-700 text-crypto-light hover:bg-gray-800">
-              <i className="fas fa-edit mr-2"></i>
-              Edit
-            </Button>
-            <Button size="sm" variant="outline" className="border-red-700 text-red-400 hover:bg-red-900">
-              <i className="fas fa-trash mr-2"></i>
-              Remove
+
+            <div>
+              <Label className="text-crypto-light text-sm">Available Balance</Label>
+              <div className="flex items-center space-x-2 mt-1">
+                {balanceInfo?.loading ? (
+                  <div className="flex items-center space-x-2">
+                    <i className="fas fa-spinner fa-spin text-crypto-accent"></i>
+                    <span className="text-sm text-crypto-light">Loading...</span>
+                  </div>
+                ) : balanceInfo?.error ? (
+                  <div className="flex items-center space-x-2">
+                    <i className="fas fa-exclamation-triangle text-yellow-500"></i>
+                    <span className="text-sm text-yellow-500">{balanceInfo.error}</span>
+                  </div>
+                ) : exchange.isActive ? (
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-white font-semibold">
+                      ${balanceInfo?.balance || '0.00'} USDT
+                    </span>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="h-6 px-2 text-xs text-crypto-accent hover:bg-crypto-accent/10"
+                      onClick={() => fetchExchangeBalance(exchange)}
+                    >
+                      <i className="fas fa-sync-alt mr-1"></i>
+                      Refresh
+                    </Button>
+                  </div>
+                ) : (
+                  <span className="text-sm text-gray-500">Connect to view balance</span>
+                )}
+              </div>
+            </div>
+            
+            <div>
+              <Label className="text-crypto-light text-sm">Status</Label>
+              <div className="flex items-center space-x-2 mt-1">
+                <div className={`w-2 h-2 rounded-full ${exchange.isActive ? 'bg-crypto-success' : 'bg-gray-500'}`}></div>
+                <span className="text-sm text-crypto-light">
+                  {exchange.isActive ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
+            </div>
+            
+            <div>
+              <Label className="text-crypto-light text-sm">Added</Label>
+              <p className="text-crypto-light text-sm mt-1">
+                {new Date(exchange.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+            
+            <div className="flex space-x-2 pt-2">
+              <Button size="sm" variant="outline" className="border-gray-700 text-crypto-light hover:bg-gray-800">
+                <i className="fas fa-edit mr-2"></i>
+                Edit
+              </Button>
+              <Button size="sm" variant="outline" className="border-red-700 text-red-400 hover:bg-red-900">
+                <i className="fas fa-trash mr-2"></i>
+                Remove
             </Button>
           </div>
         </div>
       </CardContent>
     </Card>
-  );
+    );
+  };
 
   const renderAddExchangeDialog = () => (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
