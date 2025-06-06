@@ -49,14 +49,26 @@ export default function MyExchanges() {
     onMessage: (data) => {
       console.log('Balance WebSocket response:', data);
       
-      if (data.type === 'balance_update' && data.data?.balances && currentExchangeId) {
-        // Handle balance update from REST API or WebSocket API
-        const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
-        setExchangeBalances(prev => ({
-          ...prev,
-          [currentExchangeId]: { balance: totalUsdtValue, loading: false }
-        }));
-        console.log('Balance updated successfully:', totalUsdtValue);
+      if (data.type === 'balance_update' && data.data?.balances) {
+        console.log('Processing balance_update:', { 
+          currentExchangeId, 
+          hasBalances: !!data.data.balances,
+          balanceCount: data.data.balances?.length 
+        });
+        
+        if (currentExchangeId) {
+          // Handle balance update from REST API or WebSocket API
+          const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
+          console.log('Calculated USDT balance:', totalUsdtValue);
+          
+          setExchangeBalances(prev => ({
+            ...prev,
+            [currentExchangeId]: { balance: totalUsdtValue, loading: false }
+          }));
+          console.log('Balance updated successfully for exchange', currentExchangeId, ':', totalUsdtValue);
+        } else {
+          console.warn('Received balance_update but currentExchangeId is null');
+        }
       } else if (data.type === 'api_response' && data.data?.balances && data.exchangeId) {
         // Handle real account balance response (legacy format)
         const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
@@ -149,19 +161,19 @@ export default function MyExchanges() {
 
       await waitForConnection();
       
-      // Send real balance request to backend via WebSocket
-      const balanceRequest = {
-        type: 'account_balance',
+      // Authenticate with the backend to trigger balance fetch
+      const authRequest = {
+        type: 'authenticate',
         userId: 1, // This should come from auth context
-        exchangeId: exchange.id
+        apiKey: exchange.apiKey
       };
       
-      console.log('Sending balance request:', balanceRequest);
+      console.log('Sending authentication request for balance:', authRequest);
       
-      // Send message through user WebSocket
-      userWs.sendMessage(balanceRequest);
+      // Send authentication message which will trigger balance fetch
+      userWs.sendMessage(authRequest);
       
-      // Set timeout for error handling
+      // Set timeout for error handling - increased to 30 seconds for testnet
       setTimeout(() => {
         setExchangeBalances(prev => {
           if (prev[exchange.id]?.loading) {
@@ -176,7 +188,7 @@ export default function MyExchanges() {
           }
           return prev;
         });
-      }, 15000);
+      }, 30000);
       
     } catch (error) {
       console.error('Error fetching balance:', error);
