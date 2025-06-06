@@ -55,15 +55,12 @@ export default function MyExchanges() {
         }));
       } else if (data.type === 'api_error' && data.exchangeId) {
         // Handle API errors
-        const errorMessage = data.error || 'Failed to fetch balance';
-        const isGeoRestricted = errorMessage.includes('restricted location') || errorMessage.includes('451');
-        
         setExchangeBalances(prev => ({
           ...prev,
           [data.exchangeId]: { 
-            balance: isGeoRestricted ? 'Geo-restricted' : 'Connection failed', 
+            balance: '0.00', 
             loading: false, 
-            error: errorMessage
+            error: data.error || 'Failed to fetch balance'
           }
         }));
       } else if (data.type === 'user_stream_unavailable' || data.type === 'user_stream_error') {
@@ -359,10 +356,7 @@ export default function MyExchanges() {
                       size="sm" 
                       variant="ghost" 
                       className="h-6 px-2 text-xs text-crypto-accent hover:bg-crypto-accent/10"
-                      onClick={() => {
-                        console.log('Refresh button clicked for exchange:', exchange.id);
-                        fetchExchangeBalance(exchange);
-                      }}
+                      onClick={() => fetchExchangeBalance(exchange)}
                     >
                       <i className="fas fa-sync-alt mr-1"></i>
                       Refresh
