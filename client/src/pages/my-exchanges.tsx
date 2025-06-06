@@ -28,6 +28,8 @@ interface Exchange {
 export default function MyExchanges() {
   const [activeSection, setActiveSection] = useState('general');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingExchange, setEditingExchange] = useState<Exchange | null>(null);
   const [selectedExchange, setSelectedExchange] = useState('');
   const [mode, setMode] = useState('testnet');
   const [apiKey, setApiKey] = useState('');
@@ -228,6 +230,30 @@ export default function MyExchanges() {
     },
   });
 
+  // Update exchange mutation
+  const updateExchangeMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const response = await apiRequest(`/api/exchanges/${id}`, 'PUT', data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
+      setIsEditDialogOpen(false);
+      resetEditForm();
+      toast({
+        title: "Exchange Updated",
+        description: "Exchange has been successfully updated.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update exchange",
+        variant: "destructive",
+      });
+    },
+  });
+
   const resetForm = () => {
     setSelectedExchange('');
     setMode('testnet');
@@ -236,6 +262,47 @@ export default function MyExchanges() {
     setWsApiEndpoint('');
     setWsStreamEndpoint('');
     setRestApiEndpoint('');
+  };
+
+  const resetEditForm = () => {
+    setEditingExchange(null);
+    setApiKey('');
+    setApiSecret('');
+    setWsApiEndpoint('');
+    setWsStreamEndpoint('');
+    setRestApiEndpoint('');
+  };
+
+  const handleEditExchange = (exchange: Exchange) => {
+    setEditingExchange(exchange);
+    setApiKey(''); // Don't prefill for security
+    setApiSecret(''); // Don't prefill for security
+    setWsApiEndpoint(exchange.wsApiEndpoint || '');
+    setWsStreamEndpoint(exchange.wsStreamEndpoint || '');
+    setRestApiEndpoint(exchange.restApiEndpoint || '');
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateExchange = () => {
+    if (!editingExchange || !apiKey || !apiSecret) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    updateExchangeMutation.mutate({
+      id: editingExchange.id,
+      data: {
+        apiKey,
+        apiSecret,
+        wsApiEndpoint: wsApiEndpoint || null,
+        wsStreamEndpoint: wsStreamEndpoint || null,
+        restApiEndpoint: restApiEndpoint || null,
+      }
+    });
   };
 
   const testConnection = async () => {
@@ -414,7 +481,12 @@ export default function MyExchanges() {
             </div>
             
             <div className="flex space-x-2 pt-2">
-              <Button size="sm" variant="outline" className="border-gray-700 text-crypto-light hover:bg-gray-800">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="border-gray-700 text-crypto-light hover:bg-gray-800"
+                onClick={() => handleEditExchange(exchange)}
+              >
                 <i className="fas fa-edit mr-2"></i>
                 Edit
               </Button>
@@ -589,6 +661,113 @@ export default function MyExchanges() {
     </Dialog>
   );
 
+  const renderEditExchangeDialog = () => (
+    <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <DialogContent className="bg-crypto-darker border-gray-800 text-white max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-white">
+            Edit Exchange: {editingExchange?.name}
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          <div>
+            <Label htmlFor="edit-api-key" className="text-crypto-light">API Key</Label>
+            <Input
+              id="edit-api-key"
+              type="text"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Enter new API key"
+              className="mt-1 bg-crypto-dark border-gray-700 text-white"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="edit-api-secret" className="text-crypto-light">API Secret</Label>
+            <Input
+              id="edit-api-secret"
+              type="password"
+              value={apiSecret}
+              onChange={(e) => setApiSecret(e.target.value)}
+              placeholder="Enter new API secret"
+              className="mt-1 bg-crypto-dark border-gray-700 text-white"
+            />
+          </div>
+
+          <Separator className="bg-gray-800" />
+
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-crypto-light">Optional Endpoints</h4>
+            
+            <div>
+              <Label htmlFor="edit-ws-api" className="text-crypto-light text-xs">WebSocket API Endpoint</Label>
+              <Input
+                id="edit-ws-api"
+                type="text"
+                value={wsApiEndpoint}
+                onChange={(e) => setWsApiEndpoint(e.target.value)}
+                placeholder="wss://ws-api.binance.com:9443/ws-api/v3"
+                className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-ws-stream" className="text-crypto-light text-xs">WebSocket Stream Endpoint</Label>
+              <Input
+                id="edit-ws-stream"
+                type="text"
+                value={wsStreamEndpoint}
+                onChange={(e) => setWsStreamEndpoint(e.target.value)}
+                placeholder="wss://stream.binance.com:9443/ws"
+                className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-rest-api" className="text-crypto-light text-xs">REST API Endpoint</Label>
+              <Input
+                id="edit-rest-api"
+                type="text"
+                value={restApiEndpoint}
+                onChange={(e) => setRestApiEndpoint(e.target.value)}
+                placeholder="https://api.binance.com"
+                className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="flex space-x-2 pt-4">
+            <Button
+              onClick={handleUpdateExchange}
+              disabled={updateExchangeMutation.isPending}
+              className="flex-1 bg-crypto-accent hover:bg-crypto-accent/80"
+            >
+              {updateExchangeMutation.isPending ? (
+                <>
+                  <i className="fas fa-spinner fa-spin mr-2"></i>
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-save mr-2"></i>
+                  Update Exchange
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditDialogOpen(false)}
+              className="border-gray-700 text-crypto-light hover:bg-gray-800"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   const renderGeneralSection = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -651,6 +830,9 @@ export default function MyExchanges() {
           </div>
         </div>
       </div>
+      
+      {/* Dialogs */}
+      {renderEditExchangeDialog()}
     </div>
   );
 }
