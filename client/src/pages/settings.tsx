@@ -102,7 +102,7 @@ export default function Settings() {
     }
   });
 
-  // WebSocket testing functions using stored exchange endpoints
+  // WebSocket testing functions using WebSocket API approach
   const testUserWebSocket = () => {
     if (!selectedExchangeId || !selectedExchange) {
       toast({
@@ -122,8 +122,9 @@ export default function Settings() {
       return;
     }
     
-    // Connect using the exchange's stored WebSocket API endpoint
-    userWs.connect(selectedExchangeId);
+    // Connect using WebSocket API (no listen key required)
+    // API key will be retrieved from stored exchange credentials
+    userWs.connect(selectedExchange.apiKey);
   };
 
   const sidebarItems = [
