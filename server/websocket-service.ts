@@ -477,133 +477,487 @@ export class WebSocketService {
     }
 
     try {
-      // Check if this is a testnet environment and WebSocket API is restricted
-      if (binanceExchange.isTestnet) {
-        console.log(`[USER STREAM] 🌐 BALANCE FETCH METHOD: Testnet detected - WebSocket API unavailable, using REST API fallback`);
-        
-        // Send immediate notification about testnet limitations
-        const userConnection = this.userConnections.get(userId);
-        if (userConnection) {
-          userConnection.ws.send(JSON.stringify({
-            type: 'user_stream_unavailable',
-            message: 'WebSocket API is currently unavailable on testnet. Using REST API for balance requests.',
-            error: 'testnet_restriction',
-            fallback: 'rest_api'
-          }));
-        }
-        
-        // For testnet, we'll use REST API calls instead of WebSocket API
-        this.handleTestnetBalanceRequest(userId, binanceExchange);
-        return;
+      console.log(`[USER STREAM] 🌐 BALANCE FETCH METHOD: Attempting WebSocket API connection to ${wsUrl}`);
+      
+      // Try WebSocket API first
+      await this.attemptWebSocketApiConnection(userId, binanceExchange, wsUrl);
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.log(`[USER STREAM] ⚠️ WebSocket API failed, falling back to REST API:`, errorMessage);
+      
+      // Send notification about fallback
+      const userConnection = this.userConnections.get(userId);
+      if (userConnection) {
+        userConnection.ws.send(JSON.stringify({
+          type: 'user_stream_unavailable',
+          message: 'WebSocket API connection failed. Using REST API for balance requests.',
+          error: 'websocket_failed',
+          fallback: 'rest_api'
+        }));
+      }
+      
+      // Fallback to REST API
+      this.handleTestnetBalanceRequest(userId, binanceExchange);
+    }
+  }
+
+  private async attemptWebSocketApiConnection(userId: number, binanceExchange: any, wsUrl: string) {
+    return new Promise<void>((resolve, reject) => {
+      const connectionKey = `user_${userId}`;
+      
+      // Close existing connection if any
+      if (this.binanceUserStreams.has(connectionKey)) {
+        this.binanceUserStreams.get(connectionKey)?.close();
       }
 
       const userWs = new WebSocket(wsUrl);
       this.binanceUserStreams.set(connectionKey, userWs);
 
+      // Set connection timeout
+      const timeout = setTimeout(() => {
+        userWs.close();
+        reject(new Error('WebSocket connection timeout'));
+      }, 10000);
+
       userWs.on('open', () => {
-        console.log(`[USER STREAM] Connected to Binance WebSocket API for user ${userId}`);
+        clearTimeout(timeout);
+        console.log(`[USER STREAM] ✅ Connected to Binance WebSocket API for user ${userId}`);
         
-        const userConnection = this.userConnections.get(userId);
-        if (userConnection) {
-          userConnection.ws.send(JSON.stringify({
-            type: 'user_stream_connected',
-            message: 'WebSocket API connection established. Ready for authenticated requests.',
-            method: 'websocket_api'
-          }));
-        }
+        // Send account balance request immediately
+        this.requestAccountBalanceViaWebSocket(userWs, userId, binanceExchange)
+          .then(() => resolve())
+          .catch(reject);
+      });
+
+      userWs.on('error', (error) => {
+        clearTimeout(timeout);
+        console.error(`[USER STREAM] WebSocket connection error:`, error);
+        reject(error);
+      });
+
+      userWs.on('close', () => {
+        clearTimeout(timeout);
+        this.binanceUserStreams.delete(connectionKey);
       });
 
       userWs.on('message', (data) => {
         try {
           const response = JSON.parse(data.toString());
-          console.log(`[USER STREAM] WebSocket API response for user ${userId}:`, response);
+          console.log(`[USER STREAM] WebSocket API response:`, response);
           
-          // Process different types of responses
-          if (response.result) {
-            // Successful API response
-            this.broadcastUserUpdate(userId, {
-              type: 'api_response',
-              data: response.result,
-              id: response.id
-            });
-          } else if (response.error) {
-            // API error response
-            console.error(`[USER STREAM] API error for user ${userId}:`, response.error);
-            this.broadcastUserUpdate(userId, {
-              type: 'api_error',
-              error: response.error,
-              id: response.id
-            });
+          // Handle account balance response
+          if (response.result && response.result.balances) {
+            const userConnection = this.userConnections.get(userId);
+            if (userConnection) {
+              userConnection.ws.send(JSON.stringify({
+                type: 'balance_update',
+                data: {
+                  balances: response.result.balances,
+                  method: 'websocket_api'
+                }
+              }));
+              console.log(`[USER STREAM] ✅ Successfully fetched balance via WebSocket API for user ${userId}`);
+            }
           }
         } catch (error) {
-          console.error('[USER STREAM] Error processing WebSocket API data:', error);
+          console.error(`[USER STREAM] Error parsing WebSocket message:`, error);
         }
       });
+    });
+  }
 
-      userWs.on('close', (code, reason) => {
-        console.log(`[USER STREAM] WebSocket API disconnected for user ${userId} - Code: ${code}, Reason: ${reason}`);
-        this.binanceUserStreams.delete(connectionKey);
-      });
-
-      userWs.on('error', (error) => {
-        console.error(`[USER STREAM] WebSocket API error for user ${userId}:`, error);
-        this.binanceUserStreams.delete(connectionKey);
+  private async requestAccountBalanceViaWebSocket(userWs: WebSocket, userId: number, binanceExchange: any) {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const { decrypt } = require('./encryption');
+        const crypto = require('crypto');
         
-        // Handle specific errors
-        if (error.message.includes('451') || error.message.includes('404') || error.message.includes('Unexpected server response')) {
-          console.log(`[USER STREAM] WebSocket API may be restricted on testnet. Notifying client.`);
-          
-          const userConnection = this.userConnections.get(userId);
-          if (userConnection) {
-            userConnection.ws.send(JSON.stringify({
-              type: 'user_stream_unavailable',
-              message: 'WebSocket API is currently unavailable on testnet. Public market data remains active.',
-              error: 'testnet_restriction'
-            }));
+        // Decrypt API credentials
+        const decryptedApiKey = decrypt(binanceExchange.apiKey, binanceExchange.encryptionIv);
+        const decryptedApiSecret = decrypt(binanceExchange.apiSecret, binanceExchange.encryptionIv);
+        
+        // Create signed request for account information via WebSocket API
+        const timestamp = Date.now();
+        const params = { timestamp };
+        const queryString = Object.keys(params)
+          .map(key => `${key}=${params[key]}`)
+          .join('&');
+        
+        const signature = crypto.createHmac('sha256', decryptedApiSecret)
+          .update(queryString)
+          .digest('hex');
+        
+        const request = {
+          id: `balance_${Date.now()}`,
+          method: 'account.status',
+          params: {
+            timestamp,
+            signature,
+            apiKey: decryptedApiKey
           }
+        };
+        
+        console.log(`[USER STREAM] Sending WebSocket API balance request for user ${userId}`);
+        userWs.send(JSON.stringify(request));
+        
+        // Set timeout for response
+        setTimeout(() => {
+          resolve(); // Don't reject here, let the response handler deal with it
+        }, 5000);
+        
+      } catch (error) {
+        console.error(`[USER STREAM] Error creating WebSocket API request:`, error);
+        reject(error);
+      }
+    });
+  }
+
+  private async handleTestnetBalanceRequest(userId: number, exchange: any) {
+    try {
+      console.log(`[USER STREAM] Handling REST API balance request for user ${userId}`);
+      
+      // Import required modules for REST API calls
+      const crypto = await import('crypto');
+      const { decrypt } = await import('./encryption');
+      
+      // Decrypt API credentials
+      const decryptedApiKey = decrypt(exchange.apiKey, exchange.encryptionIv);
+      const decryptedApiSecret = decrypt(exchange.apiSecret, exchange.encryptionIv);
+      
+      // Create signed request for account information
+      const timestamp = Date.now();
+      const queryString = `timestamp=${timestamp}`;
+      const signature = crypto.createHmac('sha256', decryptedApiSecret)
+        .update(queryString)
+        .digest('hex');
+      
+      const url = `${exchange.restApiEndpoint}/api/v3/account?${queryString}&signature=${signature}`;
+      
+      // Make REST API call
+      const response = await fetch(url, {
+        headers: {
+          'X-MBX-APIKEY': decryptedApiKey
         }
       });
+      
+      if (response.ok) {
+        const accountData = await response.json();
+        
+        // Send balance data to client
+        const userConnection = this.userConnections.get(userId);
+        if (userConnection) {
+          userConnection.ws.send(JSON.stringify({
+            type: 'balance_update',
+            data: {
+              balances: accountData.balances,
+              totalBTC: accountData.totalWalletBalance || '0',
+              method: 'rest_api'
+            }
+          }));
+        }
+        
+        console.log(`[USER STREAM] ✅ Successfully fetched testnet balance via REST API for user ${userId}`);
+      } else {
+        throw new Error(`REST API error: ${response.status} ${response.statusText}`);
+      }
+      
     } catch (error) {
-      console.error(`[USER STREAM] Failed to create WebSocket API connection for user ${userId}:`, error);
+      console.error(`[USER STREAM] REST API balance request failed for user ${userId}:`, error);
       
       const userConnection = this.userConnections.get(userId);
       if (userConnection) {
         userConnection.ws.send(JSON.stringify({
-          type: 'user_stream_error',
-          message: 'Failed to connect to WebSocket API',
-          error: 'connection_failed'
+          type: 'balance_error',
+          message: 'Failed to fetch balance from REST API',
+          error: error instanceof Error ? error.message : String(error)
         }));
       }
     }
   }
 
-  private sendMarketDataToClient(ws: WebSocket) {
-    console.log('[PUBLIC WS] Attempting to send market data to client');
-    console.log(`[PUBLIC WS] WebSocket ready state: ${ws.readyState}`);
+  private async requestAccountBalance(ws: WebSocket, userId: number, exchangeId: number) {
+    try {
+      console.log(`[WEBSOCKET] Requesting account balance for user ${userId}, exchange ${exchangeId}`);
+      
+      // Get user's exchange configuration
+      const exchanges = await storage.getExchangesByUserId(userId);
+      const exchange = exchanges.find(ex => ex.id === exchangeId);
+      
+      if (!exchange) {
+        throw new Error('Exchange configuration not found');
+      }
+
+      const { decrypt } = await import('./encryption');
+      const crypto = await import('crypto');
+      
+      // Decrypt API credentials
+      const decryptedApiKey = decrypt(exchange.apiKey, exchange.encryptionIv);
+      const decryptedApiSecret = decrypt(exchange.apiSecret, exchange.encryptionIv);
+      
+      // Create signed request for account information
+      const timestamp = Date.now();
+      const queryString = `timestamp=${timestamp}`;
+      const signature = crypto.createHmac('sha256', decryptedApiSecret)
+        .update(queryString)
+        .digest('hex');
+      
+      const url = `${exchange.restApiEndpoint}/api/v3/account?${queryString}&signature=${signature}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'X-MBX-APIKEY': decryptedApiKey
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const accountData = await response.json();
+      
+      // Send the real balance data to the client
+      ws.send(JSON.stringify({
+        type: 'api_response',
+        data: { 
+          balances: accountData.balances,
+          accountType: accountData.accountType,
+          canTrade: accountData.canTrade,
+          canWithdraw: accountData.canWithdraw,
+          canDeposit: accountData.canDeposit,
+          method: 'rest_api'
+        }
+      }));
+      
+    } catch (error) {
+      console.error(`[WEBSOCKET] Balance request failed:`, error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Failed to fetch account balance'
+      }));
+    }
+  }
+
+  // Helper methods for broadcasting updates to users
+  private broadcastUserUpdate(userId: number, data: any) {
+    const userConnection = this.userConnections.get(userId);
+    if (userConnection && userConnection.ws.readyState === WebSocket.OPEN) {
+      userConnection.ws.send(JSON.stringify(data));
+    }
+  }
+
+  // Method to send market data to a specific client
+  private sendMarketDataToClient(ws: WebSocket, symbols: string[] = []) {
+    try {
+      console.log('[PUBLIC WS] Attempting to send market data to client');
+      console.log('[PUBLIC WS] WebSocket ready state:', ws.readyState);
+      console.log('[PUBLIC WS] Client subscribed to:', symbols.join(', '));
+
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.log('[PUBLIC WS] WebSocket not ready, skipping market data send');
+        return;
+      }
+
+      // Filter market data based on client subscriptions
+      const filteredData = [];
+      for (const [symbol, data] of this.marketData.entries()) {
+        if (symbols.length === 0 || symbols.includes(symbol)) {
+          filteredData.push(data);
+        }
+      }
+
+      console.log('[PUBLIC WS] Filtered market data entries:', filteredData.length);
+
+      if (filteredData.length === 0) {
+        console.log('[PUBLIC WS] No relevant market data available for subscribed symbols');
+        return;
+      }
+
+      const message = JSON.stringify({
+        type: 'market_data',
+        data: filteredData
+      });
+
+      console.log('[PUBLIC WS] Sending filtered market data (' + message.length + ' chars)');
+      ws.send(message);
+      console.log('[PUBLIC WS] Filtered market data sent successfully');
+
+    } catch (error) {
+      console.error('[PUBLIC WS] Error sending market data to client:', error);
+    }
+  }
+
+  // Method to stop all Binance streams
+  private stopBinanceStreams() {
+    console.log('[WEBSOCKET] Stopping all Binance streams');
     
-    // Find the subscription for this WebSocket to get subscribed symbols
-    const subscription = Array.from(this.marketSubscriptions).find(sub => sub.ws === ws);
-    if (!subscription) {
-      console.log('[PUBLIC WS] No subscription found for this client');
-      return;
+    if (this.binancePublicWs) {
+      console.log('[WEBSOCKET] Closing Binance public stream');
+      this.binancePublicWs.close();
+      this.binancePublicWs = null;
     }
 
-    // Filter market data to only include subscribed symbols
-    const subscribedSymbols = Array.from(subscription.symbols);
-    const filteredData = Array.from(this.marketData.values()).filter(data => 
-      subscribedSymbols.length === 0 || subscribedSymbols.includes(data.symbol.toLowerCase())
-    );
+    // Stop user streams
+    this.binanceUserStreams.forEach((ws, key) => {
+      console.log(`[WEBSOCKET] Closing user stream: ${key}`);
+      ws.close();
+    });
+    this.binanceUserStreams.clear();
+
+    // Clear mock data interval
+    if (this.mockDataInterval) {
+      clearInterval(this.mockDataInterval);
+      this.mockDataInterval = null;
+    }
+
+    this.isStreamsActive = false;
+    console.log('[WEBSOCKET] All Binance streams stopped');
+  }
+
+  // Method to send historical data to clients
+  private sendHistoricalDataToClients(symbols: string[]) {
+    console.log('[WEBSOCKET] Sending historical data for symbols:', symbols);
     
-    console.log(`[PUBLIC WS] Client subscribed to: ${subscribedSymbols.join(', ')}`);
-    console.log(`[PUBLIC WS] Filtered market data entries: ${filteredData.length}`);
+    this.marketSubscriptions.forEach(subscription => {
+      if (subscription.ws.readyState === WebSocket.OPEN) {
+        const relevantData = symbols.filter(symbol => 
+          subscription.symbols.has(symbol) || subscription.symbols.size === 0
+        );
+        
+        if (relevantData.length > 0) {
+          relevantData.forEach(symbol => {
+            const intervalData = this.historicalData.get(symbol);
+            if (intervalData) {
+              intervalData.forEach((klines, interval) => {
+                if (klines.length > 0) {
+                  subscription.ws.send(JSON.stringify({
+                    type: 'historical_klines',
+                    symbol,
+                    interval,
+                    data: klines
+                  }));
+                }
+              });
+            }
+          });
+        }
+      }
+    });
+  }
+
+  // Method to broadcast market updates
+  private broadcastMarketUpdate(symbol: string, data: any) {
+    console.log(`[WEBSOCKET] Broadcasting update for ${symbol} to ${this.marketSubscriptions.size} clients`);
     
-    if (filteredData.length > 0) {
-      try {
-        const message = JSON.stringify({
-          type: 'market_data',
-          data: filteredData
-        });
-        console.log(`[PUBLIC WS] Sending filtered market data (${message.length} chars)`);
+    let successCount = 0;
+    this.marketSubscriptions.forEach((subscription, index) => {
+      if (subscription.ws.readyState === WebSocket.OPEN) {
+        console.log(`[WEBSOCKET] Checking client ${index + 1}, readyState: ${subscription.ws.readyState}, subscribed symbols: [${Array.from(subscription.symbols).join(', ')}]`);
+        
+        // Send if client subscribed to this symbol or subscribed to all symbols
+        if (subscription.symbols.has(symbol) || subscription.symbols.size === 0) {
+          try {
+            subscription.ws.send(JSON.stringify({
+              type: 'market_data',
+              data: [data]
+            }));
+            console.log(`[WEBSOCKET] Successfully sent update to client ${index + 1} for ${symbol}`);
+            successCount++;
+          } catch (error) {
+            console.error(`[WEBSOCKET] Failed to send to client ${index + 1}:`, error);
+          }
+        } else {
+          console.log(`[WEBSOCKET] Client ${index + 1} not subscribed to ${symbol}`);
+        }
+      } else {
+        console.log(`[WEBSOCKET] Client ${index + 1} WebSocket not ready (state: ${subscription.ws.readyState})`);
+      }
+    });
+    
+    console.log(`[WEBSOCKET] Successfully sent to ${successCount} out of ${this.marketSubscriptions.size} clients`);
+  }
+
+  // Method to store historical kline data
+  private storeHistoricalKlineData(symbol: string, interval: string, klineData: any) {
+    if (!this.historicalData.has(symbol)) {
+      this.historicalData.set(symbol, new Map());
+    }
+    
+    const symbolData = this.historicalData.get(symbol)!;
+    if (!symbolData.has(interval)) {
+      symbolData.set(interval, []);
+    }
+    
+    const klines = symbolData.get(interval)!;
+    
+    // Convert kline data to our format
+    const formattedKline = {
+      openTime: klineData.t,
+      closeTime: klineData.T,
+      open: parseFloat(klineData.o),
+      high: parseFloat(klineData.h),
+      low: parseFloat(klineData.l),
+      close: parseFloat(klineData.c),
+      volume: parseFloat(klineData.v),
+      trades: klineData.n
+    };
+    
+    // Add or update the kline (replace if same timestamp)
+    const existingIndex = klines.findIndex(k => k.openTime === formattedKline.openTime);
+    if (existingIndex >= 0) {
+      klines[existingIndex] = formattedKline;
+    } else {
+      klines.push(formattedKline);
+      // Keep only last 1000 klines per interval
+      if (klines.length > 1000) {
+        klines.shift();
+      }
+    }
+    
+    // Sort by openTime to ensure chronological order
+    klines.sort((a, b) => a.openTime - b.openTime);
+  }
+
+  // Method to broadcast kline updates
+  private broadcastKlineUpdate(symbol: string, interval: string, klineData: any) {
+    console.log(`[WEBSOCKET] Broadcasting kline update for ${symbol} to ${this.marketSubscriptions.size} clients`);
+    
+    let successCount = 0;
+    this.marketSubscriptions.forEach((subscription, index) => {
+      if (subscription.ws.readyState === WebSocket.OPEN) {
+        console.log(`[WEBSOCKET] Kline symbol: ${symbol}, subscribed: [${Array.from(subscription.symbols).join(', ')}], matched: ${subscription.symbols.has(symbol) || subscription.symbols.size === 0}`);
+        
+        if (subscription.symbols.has(symbol) || subscription.symbols.size === 0) {
+          try {
+            console.log(`[WEBSOCKET] Sending kline to client ${index + 1}, readyState: ${subscription.ws.readyState}`);
+            subscription.ws.send(JSON.stringify({
+              type: 'kline_update',
+              symbol,
+              interval,
+              data: {
+                openTime: klineData.t,
+                closeTime: klineData.T,
+                open: parseFloat(klineData.o),
+                high: parseFloat(klineData.h),
+                low: parseFloat(klineData.l),
+                close: parseFloat(klineData.c),
+                volume: parseFloat(klineData.v),
+                trades: klineData.n,
+                isFinal: klineData.x
+              }
+            }));
+            console.log(`[WEBSOCKET] Successfully sent kline update to client ${index + 1} for ${symbol}`);
+            successCount++;
+          } catch (error) {
+            console.error(`[WEBSOCKET] Failed to send kline to client ${index + 1}:`, error);
+          }
+        }
+      }
+    });
+    
+    console.log(`[WEBSOCKET] Successfully sent kline update to ${successCount} out of ${this.marketSubscriptions.size} clients`);
+  }
+}
         ws.send(message);
         console.log('[PUBLIC WS] Filtered market data sent successfully');
       } catch (error) {
