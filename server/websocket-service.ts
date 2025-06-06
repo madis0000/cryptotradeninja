@@ -183,8 +183,11 @@ export class WebSocketService {
     this.currentStreamType = dataType;
     this.currentInterval = interval || '1m';
     
-    // Stop existing streams
-    this.stopBinanceStreams();
+    // Stop existing streams but keep streams active for reconnection during interval switching
+    this.stopBinanceStreams(false);
+    
+    // Ensure streams remain active during interval switching
+    this.isStreamsActive = true;
     
     // Start new streams with updated configuration
     const baseUrl = 'wss://stream.testnet.binance.vision/stream?streams=';
@@ -688,9 +691,13 @@ export class WebSocketService {
     return this.userConnections;
   }
 
-  public stopBinanceStreams() {
+  public stopBinanceStreams(deactivate: boolean = true) {
     console.log('[WEBSOCKET] Stopping all Binance streams');
-    this.isStreamsActive = false;
+    
+    // Only deactivate streams when fully stopping, not during interval switching
+    if (deactivate) {
+      this.isStreamsActive = false;
+    }
     
     // Clear cached market data to prevent stale data
     console.log('[WEBSOCKET] Clearing cached market data');
