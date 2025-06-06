@@ -40,9 +40,19 @@ export default function MyExchanges() {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [exchangeBalances, setExchangeBalances] = useState<Record<number, { balance: string; loading: boolean; error?: string }>>({});
   const [currentExchangeId, setCurrentExchangeId] = useState<number | null>(null);
+  const [timeoutRef, setTimeoutRef] = useState<NodeJS.Timeout | null>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef) {
+        clearTimeout(timeoutRef);
+      }
+    };
+  }, [timeoutRef]);
 
   // WebSocket for balance fetching
   const userWs = useUserWebSocket({
@@ -60,6 +70,12 @@ export default function MyExchanges() {
         const targetExchangeId = currentExchangeId || (exchanges?.length > 0 ? exchanges[0].id : null);
         
         if (targetExchangeId) {
+          // Clear any pending timeout since we received a successful response
+          if (timeoutRef) {
+            clearTimeout(timeoutRef);
+            setTimeoutRef(null);
+          }
+          
           // Handle balance update from REST API or WebSocket API
           const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
           console.log('Calculated USDT balance:', totalUsdtValue);
@@ -177,7 +193,7 @@ export default function MyExchanges() {
       userWs.sendMessage(authRequest);
       
       // Set timeout for error handling - increased to 30 seconds for testnet
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         setExchangeBalances(prev => {
           if (prev[exchange.id]?.loading) {
             return {
@@ -191,7 +207,10 @@ export default function MyExchanges() {
           }
           return prev;
         });
+        setTimeoutRef(null);
       }, 30000);
+      
+      setTimeoutRef(timeout);
       
     } catch (error) {
       console.error('Error fetching balance:', error);
