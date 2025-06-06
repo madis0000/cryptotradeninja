@@ -61,7 +61,7 @@ export default function MyExchanges() {
         setExchangeBalances(prev => ({
           ...prev,
           [data.exchangeId]: { 
-            balance: isGeoRestricted ? 'Geo-restricted' : 'Connection failed', 
+            balance: isGeoRestricted ? 'Region blocked' : 'Connection failed', 
             loading: false, 
             error: errorMessage
           }
