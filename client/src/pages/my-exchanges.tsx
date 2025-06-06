@@ -55,12 +55,15 @@ export default function MyExchanges() {
         }));
       } else if (data.type === 'api_error' && data.exchangeId) {
         // Handle API errors
+        const errorMessage = data.error || 'Failed to fetch balance';
+        const isGeoRestricted = errorMessage.includes('restricted location') || errorMessage.includes('451');
+        
         setExchangeBalances(prev => ({
           ...prev,
           [data.exchangeId]: { 
-            balance: '0.00', 
+            balance: isGeoRestricted ? 'Geo-restricted' : 'Connection failed', 
             loading: false, 
-            error: data.error || 'Failed to fetch balance'
+            error: errorMessage
           }
         }));
       } else if (data.type === 'user_stream_unavailable' || data.type === 'user_stream_error') {
