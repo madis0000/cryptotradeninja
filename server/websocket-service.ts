@@ -473,7 +473,7 @@ export class WebSocketService {
     }
 
     try {
-      const userWs = new WebSocket(wsUrl);
+      const userWs = new WebSocket(wsUrl as string);
       this.binanceUserStreams.set(connectionKey, userWs);
 
       userWs.on('open', () => {
