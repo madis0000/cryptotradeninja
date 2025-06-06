@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, LineStyle } from 'lightweight-charts';
+import { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -20,129 +19,24 @@ interface TradingChartProps {
 }
 
 export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: TradingChartProps) {
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
-  const lineSeriesRef = useRef<any>(null);
   const [timeframe, setTimeframe] = useState('1H');
-  const [lastPrice, setLastPrice] = useState<number>(0);
+  const [priceHistory, setPriceHistory] = useState<Array<{time: number, price: number}>>([]);
 
-  // Initialize chart
+  // Store real-time price updates
   useEffect(() => {
-    if (!chartContainerRef.current) return;
-
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#d1d5db',
-        fontSize: 12,
-      },
-      grid: {
-        vertLines: {
-          color: '#374151',
-        },
-        horzLines: {
-          color: '#374151',
-        },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: '#4b5563',
-        textColor: '#d1d5db',
-      },
-      timeScale: {
-        borderColor: '#4b5563',
-        timeVisible: true,
-        secondsVisible: false,
-      },
-      handleScroll: {
-        mouseWheel: true,
-        pressedMouseMove: true,
-      },
-      handleScale: {
-        axisPressedMouseMove: true,
-        mouseWheel: true,
-        pinch: true,
-      },
-    });
-
-    // Add line series for real-time price display using v5 API
-    const lineSeries = chart.addSeries('Line', {
-      color: '#10b981',
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-    });
-
-    chartRef.current = chart;
-    lineSeriesRef.current = lineSeries;
-
-    // Generate initial historical data
-    generateInitialData();
-
-    // Cleanup
-    return () => {
-      chart.remove();
-    };
-  }, []);
-
-  // Generate initial line data
-  const generateInitialData = () => {
-    const data = [];
-    const now = Math.floor(Date.now() / 1000);
-    const basePrice = marketData?.price || 103647;
-    let currentPrice = basePrice;
-
-    // Generate 100 points of historical data
-    for (let i = 100; i >= 0; i--) {
-      const time = now - (i * 60); // 1 minute intervals
-      const volatility = 0.001; // Small volatility for smooth line
+    if (marketData) {
+      const newPoint = {
+        time: marketData.timestamp,
+        price: marketData.price
+      };
       
-      const change = (Math.random() - 0.5) * 2 * volatility * currentPrice;
-      currentPrice = currentPrice + change;
-
-      data.push({
-        time: time as any,
-        value: Number(currentPrice.toFixed(2)),
+      setPriceHistory(prev => {
+        const updated = [...prev, newPoint];
+        // Keep last 100 points
+        return updated.slice(-100);
       });
     }
-
-    if (lineSeriesRef.current) {
-      lineSeriesRef.current.setData(data);
-    }
-    
-    setLastPrice(currentPrice);
-  };
-
-  // Update chart with real-time data
-  useEffect(() => {
-    if (!marketData || !lineSeriesRef.current) return;
-
-    const currentTime = Math.floor(marketData.timestamp / 1000);
-    
-    // Add new price point
-    lineSeriesRef.current.update({
-      time: currentTime as any,
-      value: marketData.price,
-    });
-
-    setLastPrice(marketData.price);
   }, [marketData]);
-
-  // Handle chart resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (chartRef.current && chartContainerRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -163,6 +57,87 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
       }`}>
         {isPositive ? '+' : ''}{change.toFixed(2)}%
       </span>
+    );
+  };
+
+  // Simple SVG chart visualization
+  const renderSimpleChart = () => {
+    if (priceHistory.length < 2) {
+      return (
+        <div className="flex items-center justify-center h-full text-gray-400">
+          <div className="text-center">
+            <div className="text-lg mb-2">📈</div>
+            <div>Waiting for price data...</div>
+          </div>
+        </div>
+      );
+    }
+
+    const minPrice = Math.min(...priceHistory.map(p => p.price));
+    const maxPrice = Math.max(...priceHistory.map(p => p.price));
+    const priceRange = maxPrice - minPrice || 1;
+
+    const chartWidth = 600;
+    const chartHeight = 300;
+    const padding = 20;
+
+    const points = priceHistory.map((point, index) => {
+      const x = padding + (index / (priceHistory.length - 1)) * (chartWidth - 2 * padding);
+      const y = padding + ((maxPrice - point.price) / priceRange) * (chartHeight - 2 * padding);
+      return `${x},${y}`;
+    }).join(' ');
+
+    return (
+      <svg width="100%" height="100%" viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="absolute inset-0">
+        <defs>
+          <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.2"/>
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        
+        {/* Grid lines */}
+        {[0, 1, 2, 3, 4].map(i => (
+          <line
+            key={`h-${i}`}
+            x1={padding}
+            y1={padding + (i * (chartHeight - 2 * padding) / 4)}
+            x2={chartWidth - padding}
+            y2={padding + (i * (chartHeight - 2 * padding) / 4)}
+            stroke="#374151"
+            strokeWidth="1"
+            opacity="0.3"
+          />
+        ))}
+        
+        {/* Price line */}
+        <polyline
+          points={points}
+          fill="none"
+          stroke="#10b981"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        
+        {/* Area fill */}
+        <polygon
+          points={`${padding},${chartHeight - padding} ${points} ${chartWidth - padding},${chartHeight - padding}`}
+          fill="url(#priceGradient)"
+        />
+        
+        {/* Current price indicator */}
+        {priceHistory.length > 0 && (
+          <circle
+            cx={padding + ((priceHistory.length - 1) / (priceHistory.length - 1)) * (chartWidth - 2 * padding)}
+            cy={padding + ((maxPrice - priceHistory[priceHistory.length - 1].price) / priceRange) * (chartHeight - 2 * padding)}
+            r="4"
+            fill="#10b981"
+            stroke="#ffffff"
+            strokeWidth="2"
+          />
+        )}
+      </svg>
     );
   };
 
@@ -198,17 +173,9 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
           </div>
         </div>
         
-        {/* Chart Container */}
-        <div className="h-80 w-full relative">
-          <div 
-            ref={chartContainerRef} 
-            className="absolute inset-0 rounded-lg overflow-hidden"
-          />
-          {!chartRef.current && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-800 rounded-lg border border-gray-700">
-              <div className="text-gray-400">Loading chart...</div>
-            </div>
-          )}
+        {/* Simple Chart Container */}
+        <div className="h-80 w-full relative bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+          {renderSimpleChart()}
         </div>
 
         {/* Chart Stats */}
@@ -219,7 +186,7 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
             <span>Low: {marketData ? formatPrice(marketData.low) : 'Loading...'}</span>
           </div>
           <div className="text-xs text-gray-500">
-            Real-time data • {timeframe} intervals
+            Real-time data • {timeframe} intervals • {priceHistory.length} points
           </div>
         </div>
       </CardContent>
