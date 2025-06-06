@@ -438,18 +438,34 @@ export class WebSocketService {
   }
 
   private async connectToBinanceUserStream(userId: number, listenKey: string) {
-    // Use WebSocket API approach instead of Stream API
-    const isTestnet = process.env.NODE_ENV === 'development';
-    const wsUrl = isTestnet 
-      ? `wss://testnet.binance.vision/ws-api/v3`
-      : `wss://ws-api.binance.com:443/ws-api/v3`;
-    
-    // Get user's API credentials for authenticated requests
+    // Get user's API credentials and exchange configuration
     const user = await storage.getUser(userId);
     if (!user) {
       console.error(`[USER STREAM] User ${userId} not found`);
       return;
     }
+
+    // Get user's exchanges to find the correct WebSocket API endpoint
+    const exchanges = await storage.getExchangesByUserId(userId);
+    const binanceExchange = exchanges.find(ex => ex.exchangeType === 'binance' && ex.isActive);
+    
+    if (!binanceExchange) {
+      console.error(`[USER STREAM] No active Binance exchange found for user ${userId}`);
+      const userConnection = this.userConnections.get(userId);
+      if (userConnection) {
+        userConnection.ws.send(JSON.stringify({
+          type: 'error',
+          message: 'No active Binance exchange configuration found'
+        }));
+      }
+      return;
+    }
+
+    // Use exchange-specific WebSocket API endpoint
+    const wsUrl = binanceExchange.wsApiEndpoint || 
+      (binanceExchange.isTestnet 
+        ? 'wss://ws-api.testnet.binance.vision/ws-api/v3'
+        : 'wss://ws-api.binance.com:443/ws-api/v3');
 
     // For now, we'll implement account info subscription via WebSocket API
     // This doesn't require listen keys and works with API key/secret
@@ -461,24 +477,32 @@ export class WebSocketService {
     }
 
     try {
+      // Check if this is a testnet environment and WebSocket API is restricted
+      if (binanceExchange.isTestnet) {
+        console.log(`[USER STREAM] Testnet detected. WebSocket API may be unavailable. Using REST API fallback.`);
+        
+        // Send immediate notification about testnet limitations
+        const userConnection = this.userConnections.get(userId);
+        if (userConnection) {
+          userConnection.ws.send(JSON.stringify({
+            type: 'user_stream_unavailable',
+            message: 'WebSocket API is currently unavailable on testnet. Using REST API for balance requests.',
+            error: 'testnet_restriction',
+            fallback: 'rest_api'
+          }));
+        }
+        
+        // For testnet, we'll use REST API calls instead of WebSocket API
+        this.handleTestnetBalanceRequest(userId, binanceExchange);
+        return;
+      }
+
       const userWs = new WebSocket(wsUrl);
       this.binanceUserStreams.set(connectionKey, userWs);
 
       userWs.on('open', () => {
         console.log(`[USER STREAM] Connected to Binance WebSocket API for user ${userId}`);
         
-        // Send account status request (this is a simple request that works without listen key)
-        const accountRequest = {
-          id: `account_${Date.now()}`,
-          method: "account.status",
-          params: {
-            apiKey: "demo_key", // In real implementation, use encrypted user's API key
-            timestamp: Date.now()
-            // signature would be required for authenticated requests
-          }
-        };
-
-        // For demo purposes, we'll just notify the client that connection is ready
         const userConnection = this.userConnections.get(userId);
         if (userConnection) {
           userConnection.ws.send(JSON.stringify({
@@ -741,6 +765,70 @@ export class WebSocketService {
         type: 'user_update',
         data: userData
       }));
+    }
+  }
+
+  private async handleTestnetBalanceRequest(userId: number, exchange: any) {
+    try {
+      console.log(`[USER STREAM] Handling testnet balance request for user ${userId}`);
+      
+      // Import required modules for REST API calls
+      const crypto = await import('crypto');
+      const https = await import('https');
+      const { decrypt } = await import('./encryption');
+      
+      // Decrypt API credentials
+      const decryptedApiKey = decrypt(exchange.apiKey, exchange.encryptionIv);
+      const decryptedApiSecret = decrypt(exchange.apiSecret, exchange.encryptionIv);
+      
+      // Create signed request for account information
+      const timestamp = Date.now();
+      const queryString = `timestamp=${timestamp}`;
+      const signature = crypto.createHmac('sha256', decryptedApiSecret)
+        .update(queryString)
+        .digest('hex');
+      
+      const url = `${exchange.restApiEndpoint}/api/v3/account?${queryString}&signature=${signature}`;
+      
+      // Make REST API call
+      const response = await fetch(url, {
+        headers: {
+          'X-MBX-APIKEY': decryptedApiKey
+        }
+      });
+      
+      if (response.ok) {
+        const accountData = await response.json();
+        
+        // Send balance data to client
+        const userConnection = this.userConnections.get(userId);
+        if (userConnection) {
+          userConnection.ws.send(JSON.stringify({
+            type: 'balance_update',
+            data: {
+              balances: accountData.balances,
+              totalBTC: accountData.totalWalletBalance || '0',
+              method: 'rest_api'
+            }
+          }));
+        }
+        
+        console.log(`[USER STREAM] Successfully fetched testnet balance for user ${userId}`);
+      } else {
+        throw new Error(`REST API error: ${response.status} ${response.statusText}`);
+      }
+      
+    } catch (error) {
+      console.error(`[USER STREAM] Testnet balance request failed for user ${userId}:`, error);
+      
+      const userConnection = this.userConnections.get(userId);
+      if (userConnection) {
+        userConnection.ws.send(JSON.stringify({
+          type: 'balance_error',
+          message: 'Failed to fetch balance from testnet REST API',
+          error: error instanceof Error ? error.message : String(error)
+        }));
+      }
     }
   }
 
