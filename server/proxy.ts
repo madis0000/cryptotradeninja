@@ -23,7 +23,7 @@ export class BinanceProxy {
           return;
         }
       } catch (error) {
-        console.log(`[PROXY] ${host} failed:`, error.message);
+        console.log(`[PROXY] ${host} failed:`, error instanceof Error ? error.message : 'Unknown error');
         continue;
       }
     }
