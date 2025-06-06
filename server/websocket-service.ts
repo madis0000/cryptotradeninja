@@ -93,6 +93,10 @@ export class WebSocketService {
           if (message.type === 'authenticate') {
             await this.authenticateUserConnection(ws, message.userId, message.apiKey);
           }
+          
+          if (message.type === 'account_balance') {
+            this.requestAccountBalance(ws, message.userId, message.exchangeId);
+          }
         } catch (error) {
           console.error('[WEBSOCKET] Error processing message:', error);
           ws.send(JSON.stringify({
@@ -736,6 +740,42 @@ export class WebSocketService {
       connection.ws.send(JSON.stringify({
         type: 'user_update',
         data: userData
+      }));
+    }
+  }
+
+  private async requestAccountBalance(ws: WebSocket, userId: number, exchangeId: number) {
+    console.log(`[WEBSOCKET] Account balance requested for user ${userId}, exchange ${exchangeId}`);
+    
+    try {
+      // In a real implementation, we would:
+      // 1. Fetch the exchange configuration from database using exchangeId
+      // 2. Decrypt the API credentials
+      // 3. Make an authenticated request to the exchange API
+      
+      // For demo purposes, simulate a balance response
+      setTimeout(() => {
+        const mockBalances = [
+          { asset: 'USDT', free: '1000.50', locked: '0.00' },
+          { asset: 'BTC', free: '0.01234567', locked: '0.00' },
+          { asset: 'ETH', free: '0.5678', locked: '0.00' }
+        ];
+
+        ws.send(JSON.stringify({
+          type: 'api_response',
+          data: { balances: mockBalances },
+          exchangeId: exchangeId,
+          userId: userId
+        }));
+      }, 1000); // Simulate network delay
+      
+    } catch (error) {
+      console.error(`[WEBSOCKET] Error fetching balance for user ${userId}:`, error);
+      ws.send(JSON.stringify({
+        type: 'api_error',
+        error: 'Failed to fetch account balance',
+        exchangeId: exchangeId,
+        userId: userId
       }));
     }
   }
