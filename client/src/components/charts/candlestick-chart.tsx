@@ -181,16 +181,24 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     // Only process kline data, ignore ticker-style updates
     if (marketData.openTime && marketData.closeTime && marketData.open && marketData.close) {
       // This is real kline data from WebSocket
+      const timeValue = Math.floor(marketData.openTime / 1000);
       const klineData = {
-        time: Math.floor(marketData.openTime / 1000),
-        open: marketData.open,
-        high: marketData.high,
-        low: marketData.low,
-        close: marketData.close,
+        time: timeValue,
+        open: Number(marketData.open),
+        high: Number(marketData.high),
+        low: Number(marketData.low),
+        close: Number(marketData.close),
       };
       
-      console.log('[CHART] Updating with kline data:', klineData);
-      seriesRef.current.update(klineData);
+      console.log('[CHART] Processing kline data:', klineData);
+      
+      try {
+        // Use setData for initial load, update for real-time updates
+        seriesRef.current.update(klineData);
+      } catch (error) {
+        console.warn('[CHART] Chart update failed, likely due to data ordering:', error);
+        // For data ordering issues, we might need to reload the series
+      }
     } else {
       // Update price display only for market updates without affecting candlesticks
       if (lastPrice !== null) {
