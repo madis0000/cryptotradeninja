@@ -67,7 +67,7 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
       });
 
       // Create candlestick series using correct v5 API from working sample
-      const candlestickSeries = chart.addCandlestickSeries({
+      const candlestickSeries = chart.addSeries('candlestick', {
         upColor: '#26a69a',
         downColor: '#ef5350',
         wickUpColor: '#26a69a',
