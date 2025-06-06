@@ -448,99 +448,79 @@ export class WebSocketService {
         return;
       }
       
-      // Sort exchanges: testnet first (higher success rate), then live
-      const sortedExchanges = activeExchanges.sort((a, b) => {
-        if (a.isTestnet && !b.isTestnet) return -1;
-        if (!a.isTestnet && b.isTestnet) return 1;
-        return 0;
-      });
+      console.log(`[USER STREAM] Connecting to ${activeExchanges.length} exchanges for user ${userId}`);
       
-      console.log(`[USER STREAM] Trying ${sortedExchanges.length} exchanges for user ${userId}`);
-      
-      for (const exchange of sortedExchanges) {
-        console.log(`[USER STREAM] Attempting ${exchange.name} (testnet: ${exchange.isTestnet})`);
-        
-        const success = await this.attemptConnection(userId, exchange);
-        if (success) {
-          console.log(`[USER STREAM] Successfully connected to ${exchange.name}`);
-          return;
-        }
+      // Connect to each exchange independently without fallback logic
+      for (const exchange of activeExchanges) {
+        console.log(`[USER STREAM] Connecting to ${exchange.name} (testnet: ${exchange.isTestnet})`);
+        this.attemptConnection(userId, exchange);
       }
       
-      // All connections failed
-      this.notifyUserStreamUnavailable(userId, 'All WebSocket endpoints restricted from this location');
-      
     } catch (error) {
-      console.error(`[USER STREAM] Error in connection fallback:`, error);
+      console.error(`[USER STREAM] Error in connection setup:`, error);
       this.notifyUserStreamUnavailable(userId, 'Connection setup failed');
     }
   }
   
-  private async attemptConnection(userId: number, exchange: any): Promise<boolean> {
-    return new Promise((resolve) => {
-      const wsUrl = exchange.wsApiEndpoint;
-      const connectionKey = `user_${userId}_${exchange.id}`;
-      
-      try {
-        // Close existing connection
-        if (this.binanceUserStreams.has(connectionKey)) {
-          this.binanceUserStreams.get(connectionKey)?.close();
-        }
-        
-        const userWs = new WebSocket(wsUrl);
-        this.binanceUserStreams.set(connectionKey, userWs);
-        
-        let resolved = false;
-        
-        const timeoutId = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            userWs.close();
-            resolve(false);
-          }
-        }, 3000);
-        
-        userWs.on('open', () => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeoutId);
-            
-            console.log(`[USER STREAM] Connected to ${exchange.name} WebSocket API`);
-            
-            const userConnection = this.userConnections.get(userId);
-            if (userConnection) {
-              userConnection.ws.send(JSON.stringify({
-                type: 'user_stream_connected',
-                message: `Connected to ${exchange.name} WebSocket API`,
-                exchange: exchange.name
-              }));
-            }
-            
-            resolve(true);
-          }
-        });
-        
-        userWs.on('error', (error) => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeoutId);
-            
-            console.log(`[USER STREAM] ${exchange.name} connection failed: ${error.message}`);
-            this.binanceUserStreams.delete(connectionKey);
-            resolve(false);
-          }
-        });
-        
-        userWs.on('close', (code, reason) => {
-          console.log(`[USER STREAM] ${exchange.name} disconnected - Code: ${code}`);
-          this.binanceUserStreams.delete(connectionKey);
-        });
-        
-      } catch (error) {
-        console.error(`[USER STREAM] Failed to create connection to ${exchange.name}:`, error);
-        resolve(false);
+  private async attemptConnection(userId: number, exchange: any): Promise<void> {
+    const wsUrl = exchange.wsApiEndpoint;
+    const connectionKey = `user_${userId}_${exchange.id}`;
+    
+    try {
+      // Close existing connection for this specific exchange
+      if (this.binanceUserStreams.has(connectionKey)) {
+        this.binanceUserStreams.get(connectionKey)?.close();
       }
-    });
+      
+      console.log(`[USER STREAM] Connecting to ${exchange.name} at ${wsUrl}`);
+      const userWs = new WebSocket(wsUrl);
+      this.binanceUserStreams.set(connectionKey, userWs);
+      
+      const timeoutId = setTimeout(() => {
+        console.log(`[USER STREAM] Connection timeout for ${exchange.name}`);
+        userWs.close();
+      }, 5000);
+      
+      userWs.on('open', () => {
+        clearTimeout(timeoutId);
+        console.log(`[USER STREAM] ✓ Connected to ${exchange.name} WebSocket API`);
+        
+        const userConnection = this.userConnections.get(userId);
+        if (userConnection) {
+          userConnection.ws.send(JSON.stringify({
+            type: 'user_stream_connected',
+            message: `Connected to ${exchange.name} WebSocket API`,
+            exchange: exchange.name
+          }));
+        }
+      });
+      
+      userWs.on('error', (error) => {
+        clearTimeout(timeoutId);
+        console.log(`[USER STREAM] ✗ ${exchange.name} connection failed: ${error.message}`);
+        this.binanceUserStreams.delete(connectionKey);
+        
+        // Notify about this specific exchange connection issue
+        const userConnection = this.userConnections.get(userId);
+        if (userConnection) {
+          userConnection.ws.send(JSON.stringify({
+            type: 'exchange_connection_failed',
+            message: `${exchange.name} WebSocket connection failed`,
+            exchange: exchange.name,
+            error: error.message
+          }));
+        }
+      });
+      
+      userWs.on('close', (code, reason) => {
+        clearTimeout(timeoutId);
+        console.log(`[USER STREAM] ${exchange.name} disconnected - Code: ${code}`);
+        this.binanceUserStreams.delete(connectionKey);
+      });
+      
+    } catch (error) {
+      console.error(`[USER STREAM] Failed to create connection to ${exchange.name}:`, error);
+    }
   }
   
   private notifyUserStreamUnavailable(userId: number, message: string) {
