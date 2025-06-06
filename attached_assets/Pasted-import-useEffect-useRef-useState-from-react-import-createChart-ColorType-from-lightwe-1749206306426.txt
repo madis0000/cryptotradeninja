@@ -1,0 +1,294 @@
+import { useEffect, useRef, useState } from "react";
+import { createChart, ColorType } from 'lightweight-charts';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { TrendingUp, TrendingDown, Expand } from "lucide-react";
+
+interface LightweightChartV5Props {
+  symbol?: string;
+  height?: number;
+  defaultInterval?: string;
+  showControls?: boolean;
+  onPriceUpdate?: (price: number) => void;
+}
+
+export const LightweightChartV5 = ({ 
+  symbol = 'BTCUSDT', 
+  height = 500, 
+  defaultInterval = '4h',
+  showControls = true,
+  onPriceUpdate 
+}: LightweightChartV5Props) => {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<any>(null);
+  const seriesRef = useRef<any>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  
+  const [selectedInterval, setSelectedInterval] = useState(defaultInterval);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [priceChange, setPriceChange] = useState<number>(0);
+
+  // Initialize chart with lightweight-charts v5
+  useEffect(() => {
+    if (!chartContainerRef.current) return;
+
+    try {
+      const chart = createChart(chartContainerRef.current, {
+        width: chartContainerRef.current.clientWidth,
+        height: height,
+        layout: {
+          background: { type: ColorType.Solid, color: 'transparent' },
+          textColor: '#d1d4dc',
+        },
+        grid: {
+          vertLines: { color: '#2B2B43' },
+          horzLines: { color: '#2B2B43' },
+        },
+        crosshair: {
+          mode: 1,
+        },
+        rightPriceScale: {
+          borderColor: '#485158',
+        },
+        timeScale: {
+          borderColor: '#485158',
+          timeVisible: true,
+          secondsVisible: false,
+        },
+      });
+
+      // Create candlestick series using correct v5 API
+      const candlestickSeries = chart.addSeries('candlestick', {
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        wickUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
+      });
+
+      // Set initial data to show chart is working (using string timestamps for v5)
+      const now = Math.floor(Date.now() / 1000);
+      const sampleData = [
+        { time: `${now - 14400}` as any, open: 95000, high: 96000, low: 94000, close: 95500 },
+        { time: `${now - 10800}` as any, open: 95500, high: 97000, low: 95000, close: 96500 },
+        { time: `${now - 7200}` as any, open: 96500, high: 97500, low: 95500, close: 97000 },
+        { time: `${now - 3600}` as any, open: 97000, high: 98000, low: 96500, close: 97500 },
+        { time: `${now}` as any, open: 97500, high: 98500, low: 97000, close: 98000 }
+      ];
+      
+      candlestickSeries.setData(sampleData);
+      setCurrentPrice(98000);
+
+      chartRef.current = chart;
+      seriesRef.current = candlestickSeries;
+
+      // Handle resize
+      const handleResize = () => {
+        if (chartContainerRef.current && chartRef.current) {
+          chartRef.current.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+          });
+        }
+      };
+
+      window.addEventListener('resize', handleResize);
+
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        if (chartRef.current) {
+          chartRef.current.remove();
+        }
+      };
+    } catch (error) {
+      console.error('Chart initialization error:', error);
+    }
+  }, [height]);
+
+  // Connect to WebSocket for real-time data
+  useEffect(() => {
+    connectWebSocket();
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [symbol, selectedInterval]);
+
+  const connectWebSocket = () => {
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+
+    setConnectionStatus('connecting');
+    
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
+    const wsUrl = `${protocol}//${window.location.hostname}:${port}/api/ws`;
+    
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('📡 Chart WebSocket connected');
+        setConnectionStatus('connected');
+        
+        // Subscribe to market data
+        console.log(`📨 Subscribing to market data: ${symbol} ${selectedInterval}`);
+        ws.send(JSON.stringify({
+          type: 'subscribe_market',
+          data: { symbol, interval: selectedInterval }
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          console.log('📊 Chart received message:', message);
+          
+          if (message.type === 'market_update' && message.data.symbol === symbol) {
+            console.log('📈 Processing market update for chart:', message.data);
+            
+            const klineData: CandlestickData<Time> = {
+              time: Math.floor(message.data.openTime / 1000) as Time,
+              open: parseFloat(message.data.open),
+              high: parseFloat(message.data.high),
+              low: parseFloat(message.data.low),
+              close: parseFloat(message.data.close),
+            };
+            
+            if (seriesRef.current) {
+              console.log('📊 Updating chart with kline data:', klineData);
+              seriesRef.current.update(klineData);
+            }
+            
+            // Update current price
+            const newPrice = klineData.close;
+            if (currentPrice) {
+              setPriceChange(newPrice - currentPrice);
+            }
+            setCurrentPrice(newPrice);
+            
+            if (onPriceUpdate) {
+              onPriceUpdate(newPrice);
+            }
+          }
+        } catch (error) {
+          console.error('Chart WebSocket message error:', error);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log('📡 Chart WebSocket disconnected');
+        setConnectionStatus('disconnected');
+        
+        // Attempt to reconnect after 3 seconds
+        setTimeout(() => {
+          if (wsRef.current === ws) {
+            connectWebSocket();
+          }
+        }, 3000);
+      };
+
+      ws.onerror = (error) => {
+        console.error('📡 Chart WebSocket error:', error);
+        setConnectionStatus('disconnected');
+      };
+
+    } catch (error) {
+      console.error('Failed to create WebSocket connection:', error);
+      setConnectionStatus('disconnected');
+    }
+  };
+
+  const intervals = [
+    { value: '1m', label: '1m' },
+    { value: '5m', label: '5m' },
+    { value: '15m', label: '15m' },
+    { value: '1h', label: '1h' },
+    { value: '4h', label: '4h' },
+    { value: '1d', label: '1d' },
+  ];
+
+  const handleIntervalChange = (newInterval: string) => {
+    setSelectedInterval(newInterval);
+  };
+
+  const getConnectionStatusColor = () => {
+    switch (connectionStatus) {
+      case 'connected': return 'text-green-500';
+      case 'connecting': return 'text-yellow-500';
+      case 'disconnected': return 'text-red-500';
+      default: return 'text-gray-500';
+    }
+  };
+
+  const getPriceChangeColor = () => {
+    if (priceChange > 0) return 'text-green-500';
+    if (priceChange < 0) return 'text-red-500';
+    return 'text-gray-500';
+  };
+
+  const getPriceIcon = () => {
+    if (priceChange > 0) return <TrendingUp className="w-4 h-4" />;
+    if (priceChange < 0) return <TrendingDown className="w-4 h-4" />;
+    return null;
+  };
+
+  return (
+    <div className="w-full">
+      {showControls && (
+        <div className="flex items-center justify-between mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-sm font-medium">{symbol}</span>
+              <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' : connectionStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'}`} />
+              <span className={`text-xs ${getConnectionStatusColor()}`}>
+                {connectionStatus}
+              </span>
+            </div>
+            
+            {currentPrice && (
+              <div className="flex items-center space-x-2">
+                <span className="text-lg font-bold">
+                  ${currentPrice.toFixed(2)}
+                </span>
+                <div className={`flex items-center space-x-1 ${getPriceChangeColor()}`}>
+                  {getPriceIcon()}
+                  <span className="text-sm">
+                    {priceChange > 0 ? '+' : ''}{priceChange.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Select value={selectedInterval} onValueChange={handleIntervalChange}>
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {intervals.map((interval) => (
+                  <SelectItem key={interval.value} value={interval.value}>
+                    {interval.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Button variant="outline" size="sm">
+              <Expand className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div 
+        ref={chartContainerRef} 
+        className="w-full border border-gray-200 dark:border-gray-700 rounded-lg"
+        style={{ height: `${height}px` }}
+      />
+    </div>
+  );
+};
