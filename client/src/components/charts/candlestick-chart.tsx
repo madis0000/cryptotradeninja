@@ -139,6 +139,11 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
 
       // Load historical klines data
       loadHistoricalData();
+      
+      // Configure WebSocket for kline streams on initial load
+      setTimeout(() => {
+        configureKlineStream(selectedInterval);
+      }, 1000);
 
       // Handle resize
       const handleResize = () => {
