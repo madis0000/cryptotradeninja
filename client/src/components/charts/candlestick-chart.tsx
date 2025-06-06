@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TrendingUp, TrendingDown } from 'lucide-react';
@@ -66,9 +66,10 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
       });
 
       // Create candlestick series using correct v5 API
-      const candlestickSeries = chart.addCandlestickSeries({
+      const candlestickSeries = chart.addSeries(CandlestickSeries, {
         upColor: '#26a69a',
         downColor: '#ef5350',
+        borderVisible: false,
         wickUpColor: '#26a69a',
         wickDownColor: '#ef5350',
       });
@@ -92,7 +93,7 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
         const low = Math.min(open, close) - Math.random() * 50;
         
         initialData.push({
-          time: timestamp as any,
+          time: timestamp,
           open: Math.max(0, open),
           high: Math.max(0, high),
           low: Math.max(0, low),
@@ -133,10 +134,10 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     
     // Create candlestick data from ticker update
     const candlestickData = {
-      time: currentTime as any,
+      time: currentTime,
       open: marketData.price * 0.999,
-      high: marketData.high,
-      low: marketData.low,
+      high: marketData.price * 1.001,
+      low: marketData.price * 0.998,
       close: marketData.price,
     };
     
