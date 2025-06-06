@@ -399,7 +399,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-
+  // Historical klines data endpoint
+  app.get("/api/klines", async (req, res) => {
+    try {
+      const { symbol = 'BTCUSDT', interval = '1m', limit = 100 } = req.query;
+      
+      // Fetch historical data from Binance testnet
+      const binanceUrl = `https://testnet.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+      
+      const response = await fetch(binanceUrl);
+      if (!response.ok) {
+        throw new Error(`Binance API error: ${response.status}`);
+      }
+      
+      const rawData = await response.json();
+      
+      // Transform to match expected format
+      const klineData = rawData.map((item: any[]) => ({
+        openTime: parseInt(item[0]),
+        closeTime: parseInt(item[6]),
+        open: item[1],
+        high: item[2],
+        low: item[3],
+        close: item[4],
+        volume: item[5],
+        trades: parseInt(item[8]),
+        quoteVolume: item[7],
+        isFinal: true
+      }));
+      
+      res.json(klineData);
+    } catch (error) {
+      console.error("Failed to fetch klines:", error);
+      res.status(500).json({ error: "Failed to fetch historical data" });
+    }
+  });
 
   return httpServer;
 }
