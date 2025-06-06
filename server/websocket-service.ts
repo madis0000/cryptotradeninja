@@ -19,6 +19,7 @@ export class WebSocketService {
   private userConnections = new Map<number, UserConnection>();
   private marketSubscriptions = new Set<MarketSubscription>();
   private marketData = new Map<string, any>();
+  private historicalData = new Map<string, Map<string, any[]>>(); // symbol -> interval -> kline data
   private binancePublicWs: WebSocket | null = null;
   private binanceUserStreams = new Map<string, WebSocket>();
   private mockDataInterval: NodeJS.Timeout | null = null;
@@ -213,6 +214,12 @@ export class WebSocketService {
     const streamUrl = baseUrl + streamPaths.join('/');
     console.log(`[BINANCE] Connecting to ${dataType} stream: ${streamUrl}`);
     this.connectToBinancePublic(streamUrl);
+    
+    // Send historical data for the new interval to connected clients
+    if (dataType === 'kline' && this.marketSubscriptions.size > 0) {
+      console.log(`[WEBSOCKET] Sending historical data for interval: ${interval || '1m'}`);
+      this.sendHistoricalDataToClients(symbols, interval || '1m');
+    }
     
     // Restart streams for existing subscriptions with new configuration
     if (this.marketSubscriptions.size > 0) {
@@ -496,6 +503,9 @@ export class WebSocketService {
       return;
     }
 
+    // Store historical data for this symbol and interval
+    this.storeHistoricalKlineData(klineUpdate);
+
     const message = JSON.stringify({
       type: 'kline_update',
       data: klineUpdate
@@ -521,6 +531,66 @@ export class WebSocketService {
     });
     
     console.log(`[WEBSOCKET] Successfully sent kline update to ${sentCount} out of ${this.marketSubscriptions.size} clients`);
+  }
+
+  private storeHistoricalKlineData(klineUpdate: any) {
+    const symbol = klineUpdate.symbol;
+    const interval = klineUpdate.interval;
+    
+    if (!this.historicalData.has(symbol)) {
+      this.historicalData.set(symbol, new Map());
+    }
+    
+    const symbolData = this.historicalData.get(symbol)!;
+    if (!symbolData.has(interval)) {
+      symbolData.set(interval, []);
+    }
+    
+    const intervalData = symbolData.get(interval)!;
+    
+    // Update or add kline data (replace if same openTime exists)
+    const existingIndex = intervalData.findIndex(k => k.openTime === klineUpdate.openTime);
+    if (existingIndex >= 0) {
+      intervalData[existingIndex] = klineUpdate;
+    } else {
+      intervalData.push(klineUpdate);
+      // Keep only last 500 candles to manage memory
+      if (intervalData.length > 500) {
+        intervalData.shift();
+      }
+    }
+    
+    console.log(`[WEBSOCKET] Stored kline data for ${symbol} ${interval}: ${intervalData.length} candles`);
+  }
+
+  private sendHistoricalDataToClients(symbols: string[], interval: string) {
+    symbols.forEach(symbol => {
+      const symbolData = this.historicalData.get(symbol.toUpperCase());
+      if (symbolData && symbolData.has(interval)) {
+        const intervalData = symbolData.get(interval)!;
+        console.log(`[WEBSOCKET] Sending ${intervalData.length} historical candles for ${symbol} ${interval}`);
+        
+        // Send historical data to all connected clients
+        this.marketSubscriptions.forEach((subscription) => {
+          if (subscription.ws.readyState === WebSocket.OPEN) {
+            const subscribedSymbols = Array.from(subscription.symbols).map(s => s.toUpperCase());
+            if (subscription.symbols.size === 0 || subscribedSymbols.includes(symbol.toUpperCase())) {
+              const message = JSON.stringify({
+                type: 'historical_klines',
+                data: {
+                  symbol: symbol.toUpperCase(),
+                  interval: interval,
+                  klines: intervalData.slice(-100) // Send last 100 candles
+                }
+              });
+              subscription.ws.send(message);
+            }
+          }
+        });
+      } else {
+        console.log(`[WEBSOCKET] No historical data available for ${symbol} ${interval}`);
+      }
+    });
   }
 
   private broadcastMarketUpdate(marketUpdate: any) {

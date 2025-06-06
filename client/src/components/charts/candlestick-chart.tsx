@@ -174,11 +174,28 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     }
   }, []);
 
-  // Update chart with real-time kline data
+  // Update chart with real-time kline data and handle historical data
   useEffect(() => {
     if (!marketData || !seriesRef.current) return;
 
-    // Only process kline data, ignore ticker-style updates
+    // Handle historical klines data when switching intervals
+    if (marketData.type === 'historical_klines') {
+      console.log(`[CHART] Loading historical data for ${marketData.data.interval}:`, marketData.data.klines.length, 'candles');
+      const klineData = marketData.data.klines.map((kline: any) => ({
+        time: Math.floor(kline.openTime / 1000),
+        open: Number(kline.open),
+        high: Number(kline.high),
+        low: Number(kline.low),
+        close: Number(kline.close),
+      }));
+      
+      // Replace chart data with historical data for new interval
+      seriesRef.current.setData(klineData);
+      chartRef.current?.timeScale().fitContent();
+      return;
+    }
+
+    // Only process real-time kline data, ignore ticker-style updates
     if (marketData.openTime && marketData.closeTime && marketData.open && marketData.close) {
       // This is real kline data from WebSocket
       const timeValue = Math.floor(marketData.openTime / 1000);
@@ -193,7 +210,7 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
       console.log('[CHART] Processing kline data:', klineData);
       
       try {
-        // Use setData for initial load, update for real-time updates
+        // Use update for real-time updates
         seriesRef.current.update(klineData);
       } catch (error) {
         console.warn('[CHART] Chart update failed, likely due to data ordering:', error);
