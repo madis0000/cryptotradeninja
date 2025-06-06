@@ -748,32 +748,72 @@ export class WebSocketService {
     console.log(`[WEBSOCKET] Account balance requested for user ${userId}, exchange ${exchangeId}`);
     
     try {
-      // In a real implementation, we would:
-      // 1. Fetch the exchange configuration from database using exchangeId
-      // 2. Decrypt the API credentials
-      // 3. Make an authenticated request to the exchange API
+      // Fetch the exchange configuration from database
+      const exchanges = await storage.getExchangesByUserId(userId);
+      const targetExchange = exchanges.find(ex => ex.id === exchangeId);
       
-      // For demo purposes, simulate a balance response
-      setTimeout(() => {
-        const mockBalances = [
-          { asset: 'USDT', free: '1000.50', locked: '0.00' },
-          { asset: 'BTC', free: '0.01234567', locked: '0.00' },
-          { asset: 'ETH', free: '0.5678', locked: '0.00' }
-        ];
+      if (!targetExchange) {
+        throw new Error('Exchange not found');
+      }
 
-        ws.send(JSON.stringify({
-          type: 'api_response',
-          data: { balances: mockBalances },
-          exchangeId: exchangeId,
-          userId: userId
-        }));
-      }, 1000); // Simulate network delay
+      // Decrypt the API credentials
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        targetExchange.apiKey,
+        targetExchange.apiSecret,
+        targetExchange.encryptionIv
+      );
+
+      console.log(`[WEBSOCKET] Fetching balance for exchange: ${targetExchange.name}`);
+
+      // Make authenticated request to Binance API
+      const timestamp = Date.now();
+      const queryString = `timestamp=${timestamp}`;
+      
+      // Create signature for authenticated request
+      const crypto = require('crypto');
+      const signature = crypto.createHmac('sha256', apiSecret).update(queryString).digest('hex');
+      const finalQuery = `${queryString}&signature=${signature}`;
+
+      // Determine the correct API endpoint
+      const baseUrl = targetExchange.restApiEndpoint || 
+        (targetExchange.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com');
+      
+      const response = await fetch(`${baseUrl}/api/v3/account?${finalQuery}`, {
+        method: 'GET',
+        headers: {
+          'X-MBX-APIKEY': apiKey
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[WEBSOCKET] Binance API error ${response.status}:`, errorText);
+        throw new Error(`API request failed: ${response.status} - ${errorText}`);
+      }
+
+      const accountData = await response.json();
+      console.log(`[WEBSOCKET] Successfully fetched account data for user ${userId}`);
+
+      // Send the real balance data to the client
+      ws.send(JSON.stringify({
+        type: 'api_response',
+        data: { 
+          balances: accountData.balances,
+          accountType: accountData.accountType,
+          canTrade: accountData.canTrade,
+          canWithdraw: accountData.canWithdraw,
+          canDeposit: accountData.canDeposit
+        },
+        exchangeId: exchangeId,
+        userId: userId
+      }));
       
     } catch (error) {
       console.error(`[WEBSOCKET] Error fetching balance for user ${userId}:`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch account balance';
       ws.send(JSON.stringify({
         type: 'api_error',
-        error: 'Failed to fetch account balance',
+        error: errorMessage,
         exchangeId: exchangeId,
         userId: userId
       }));

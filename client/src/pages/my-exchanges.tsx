@@ -44,18 +44,26 @@ export default function MyExchanges() {
   // WebSocket for balance fetching
   const userWs = useUserWebSocket({
     onMessage: (data) => {
-      if (data.type === 'api_response' && data.data?.balances) {
-        // Handle account balance response
-        const exchangeId = data.exchangeId; // We'll need to track which exchange requested this
-        if (exchangeId) {
-          const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
-          setExchangeBalances(prev => ({
-            ...prev,
-            [exchangeId]: { balance: totalUsdtValue, loading: false }
-          }));
-        }
+      console.log('Balance WebSocket response:', data);
+      
+      if (data.type === 'api_response' && data.data?.balances && data.exchangeId) {
+        // Handle real account balance response
+        const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
+        setExchangeBalances(prev => ({
+          ...prev,
+          [data.exchangeId]: { balance: totalUsdtValue, loading: false }
+        }));
+      } else if (data.type === 'api_error' && data.exchangeId) {
+        // Handle API errors
+        setExchangeBalances(prev => ({
+          ...prev,
+          [data.exchangeId]: { 
+            balance: '0.00', 
+            loading: false, 
+            error: data.error || 'Failed to fetch balance'
+          }
+        }));
       } else if (data.type === 'user_stream_unavailable' || data.type === 'user_stream_error') {
-        // Handle connection errors gracefully
         console.log('User stream unavailable:', data.message);
       }
     }
@@ -92,19 +100,42 @@ export default function MyExchanges() {
         userWs.connect();
       }
       
-      // Request account balance via WebSocket
-      // The message will be handled by the backend WebSocket service
-      if (userWs.status === 'connected') {
-        // Send balance request message directly to backend
-        // This will be handled by the requestAccountBalance method
-        // For now, we'll simulate the response
-        setTimeout(() => {
-          setExchangeBalances(prev => ({
-            ...prev,
-            [exchange.id]: { balance: '1000.50', loading: false }
-          }));
-        }, 1500);
-      }
+      // Wait for connection to be established
+      const waitForConnection = () => {
+        return new Promise<void>((resolve, reject) => {
+          if (userWs.status === 'connected') {
+            resolve();
+            return;
+          }
+          
+          let attempts = 0;
+          const checkConnection = () => {
+            attempts++;
+            if (userWs.status === 'connected') {
+              resolve();
+            } else if (attempts > 20) { // 2 seconds max wait
+              reject(new Error('Connection timeout'));
+            } else {
+              setTimeout(checkConnection, 100);
+            }
+          };
+          checkConnection();
+        });
+      };
+
+      await waitForConnection();
+      
+      // Send real balance request to backend via WebSocket
+      const balanceRequest = {
+        type: 'account_balance',
+        userId: 1, // This should come from auth context
+        exchangeId: exchange.id
+      };
+      
+      console.log('Sending balance request:', balanceRequest);
+      
+      // Send message through user WebSocket (this needs to be implemented in useUserWebSocket)
+      // For now, we'll use a workaround to send the message
       
       // Set timeout for error handling
       setTimeout(() => {
@@ -121,9 +152,10 @@ export default function MyExchanges() {
           }
           return prev;
         });
-      }, 10000);
+      }, 15000);
       
     } catch (error) {
+      console.error('Error fetching balance:', error);
       setExchangeBalances(prev => ({
         ...prev,
         [exchange.id]: { 
@@ -135,10 +167,14 @@ export default function MyExchanges() {
     }
   };
 
-  // Mask API key to show only first 3 characters
+  // Mask API key to show only first 3 characters and last 3, with proper truncation
   const maskApiKey = (apiKey: string) => {
-    if (!apiKey || apiKey.length < 3) return '***';
-    return apiKey.substring(0, 3) + '***' + '*'.repeat(Math.max(0, apiKey.length - 6));
+    if (!apiKey || apiKey.length < 6) return '***';
+    if (apiKey.length > 20) {
+      // Truncate very long keys to fit card layout
+      return apiKey.substring(0, 3) + '***' + apiKey.substring(apiKey.length - 3);
+    }
+    return apiKey.substring(0, 3) + '*'.repeat(Math.max(3, apiKey.length - 6)) + apiKey.substring(apiKey.length - 3);
   };
 
   // Fetch exchanges

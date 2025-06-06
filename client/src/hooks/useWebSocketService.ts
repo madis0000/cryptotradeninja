@@ -20,6 +20,7 @@ interface UserWebSocketService {
   connect: (apiKey?: string) => void;
   disconnect: () => void;
   authenticate: (userId: number, apiKey?: string) => void;
+  sendMessage: (message: any) => void;
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
   lastMessage: any;
 }
