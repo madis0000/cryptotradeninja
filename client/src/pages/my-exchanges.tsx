@@ -214,14 +214,20 @@ export default function MyExchanges() {
       
     } catch (error) {
       console.error('Error fetching balance:', error);
-      setExchangeBalances(prev => ({
-        ...prev,
-        [exchange.id]: { 
-          balance: '0.00', 
-          loading: false, 
-          error: 'Connection failed'
+      // Only set error state if balance wasn't already successfully updated
+      setExchangeBalances(prev => {
+        if (prev[exchange.id]?.loading) {
+          return {
+            ...prev,
+            [exchange.id]: { 
+              balance: '0.00', 
+              loading: false, 
+              error: 'Connection failed'
+            }
+          };
         }
-      }));
+        return prev; // Don't override successful results
+      });
     }
   };
 
