@@ -368,22 +368,27 @@ export class WebSocketService {
                 timestamp: Date.now()
               };
               
-              // Broadcast kline data for real-time chart updates
+              // Always store historical data for all intervals
+              this.storeHistoricalKlineData(klineUpdate);
+              
+              // Broadcast will filter by active interval
               this.broadcastKlineUpdate(klineUpdate);
               
-              // Also update market data with latest price
-              const marketUpdate = {
-                symbol: symbol,
-                price: parseFloat(kline.c),
-                change: 0, // Will be calculated if needed
-                volume: parseFloat(kline.v),
-                high: parseFloat(kline.h),
-                low: parseFloat(kline.l),
-                timestamp: Date.now()
-              };
-              
-              this.marketData.set(symbol, marketUpdate);
-              this.broadcastMarketUpdate(marketUpdate);
+              // Only update market data for active interval
+              if (kline.i === this.currentInterval) {
+                const marketUpdate = {
+                  symbol: symbol,
+                  price: parseFloat(kline.c),
+                  change: 0, // Will be calculated if needed
+                  volume: parseFloat(kline.v),
+                  high: parseFloat(kline.h),
+                  low: parseFloat(kline.l),
+                  timestamp: Date.now()
+                };
+                
+                this.marketData.set(symbol, marketUpdate);
+                this.broadcastMarketUpdate(marketUpdate);
+              }
             }
           }
         }
@@ -503,6 +508,12 @@ export class WebSocketService {
   private broadcastKlineUpdate(klineUpdate: any) {
     // Only broadcast if there are connected clients
     if (this.marketSubscriptions.size === 0) {
+      return;
+    }
+
+    // Critical fix: Only broadcast kline updates for the currently active interval
+    if (klineUpdate.interval !== this.currentInterval) {
+      console.log(`[WEBSOCKET] Filtering out non-active interval: ${klineUpdate.symbol} (${klineUpdate.interval}) - current: ${this.currentInterval}`);
       return;
     }
 
