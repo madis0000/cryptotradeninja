@@ -43,7 +43,8 @@ export class WebSocketService {
     
     this.wss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;
-      console.log(`[WEBSOCKET] ===== NEW CLIENT CONNECTED ===== from ${clientIP}`);
+      const clientId = Math.random().toString(36).substr(2, 9);
+      console.log(`[WEBSOCKET] ===== NEW CLIENT CONNECTED ===== ID: ${clientId} from ${clientIP}`);
 
       const subscription: MarketSubscription = {
         ws,
@@ -52,6 +53,13 @@ export class WebSocketService {
 
       this.marketSubscriptions.add(subscription);
       console.log(`[WEBSOCKET] Total active subscriptions: ${this.marketSubscriptions.size}`);
+      
+      // Send immediate welcome message to confirm connection
+      ws.send(JSON.stringify({
+        type: 'connected',
+        clientId: clientId,
+        message: 'Connected to backend WebSocket server'
+      }));
 
       // Don't start streams automatically - wait for frontend subscription
 
@@ -92,7 +100,7 @@ export class WebSocketService {
       });
 
       ws.on('close', (code, reason) => {
-        console.log(`[WEBSOCKET] ===== CLIENT DISCONNECT EVENT ===== Code: ${code}, Reason: ${reason}`);
+        console.log(`[WEBSOCKET] ===== CLIENT DISCONNECT EVENT ===== ID: ${clientId} Code: ${code}, Reason: ${reason}`);
         console.log(`[WEBSOCKET] Subscriptions before removal: ${this.marketSubscriptions.size}`);
         this.marketSubscriptions.delete(subscription);
         console.log(`[WEBSOCKET] Subscriptions after removal: ${this.marketSubscriptions.size}`);
@@ -432,18 +440,32 @@ export class WebSocketService {
 
     console.log(`[WEBSOCKET] Broadcasting update for ${marketUpdate.symbol} to ${this.marketSubscriptions.size} clients`);
     
-    this.marketSubscriptions.forEach(subscription => {
+    let sentCount = 0;
+    this.marketSubscriptions.forEach((subscription, index) => {
+      console.log(`[WEBSOCKET] Checking client ${index + 1}, readyState: ${subscription.ws.readyState}, subscribed symbols: [${Array.from(subscription.symbols).join(', ')}]`);
+      
       if (subscription.ws.readyState === WebSocket.OPEN) {
         // Check if client is subscribed to this symbol
         const isSubscribed = subscription.symbols.size === 0 || 
                            subscription.symbols.has(marketUpdate.symbol.toLowerCase());
         
         if (isSubscribed) {
-          subscription.ws.send(message);
-          console.log(`[WEBSOCKET] Sent update to client for ${marketUpdate.symbol}`);
+          try {
+            subscription.ws.send(message);
+            sentCount++;
+            console.log(`[WEBSOCKET] Successfully sent update to client ${index + 1} for ${marketUpdate.symbol}`);
+          } catch (error) {
+            console.error(`[WEBSOCKET] Failed to send to client ${index + 1}:`, error);
+          }
+        } else {
+          console.log(`[WEBSOCKET] Client ${index + 1} not subscribed to ${marketUpdate.symbol}`);
         }
+      } else {
+        console.log(`[WEBSOCKET] Client ${index + 1} connection not open, readyState: ${subscription.ws.readyState}`);
       }
     });
+    
+    console.log(`[WEBSOCKET] Successfully sent to ${sentCount} out of ${this.marketSubscriptions.size} clients`);
   }
 
   private broadcastUserUpdate(userId: number, userData: any) {
