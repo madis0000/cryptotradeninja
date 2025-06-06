@@ -54,6 +54,18 @@ export default function MyExchanges() {
     };
   }, [timeoutRef]);
 
+  // Auto-fetch balances when exchanges are loaded
+  useEffect(() => {
+    if (exchanges && exchanges.length > 0) {
+      exchanges.forEach(exchange => {
+        if (exchange.isActive && exchange.apiKey) {
+          console.log(`Auto-fetching balance for exchange: ${exchange.name}`);
+          fetchExchangeBalance(exchange);
+        }
+      });
+    }
+  }, [exchanges]);
+
   // WebSocket for balance fetching
   const userWs = useUserWebSocket({
     onMessage: (data) => {
