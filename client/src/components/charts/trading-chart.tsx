@@ -66,10 +66,12 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
         },
       });
 
-      // Create line series first to establish working chart, then upgrade to candlestick
-      const lineSeries = chart.addLineSeries({
-        color: '#26a69a',
-        lineWidth: 2,
+      // Create candlestick series using correct v5 API from provided example
+      const candlestickSeries = chart.addSeries('candlestick', {
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        wickUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
       });
 
       chartRef.current = chart;
