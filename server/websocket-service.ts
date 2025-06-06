@@ -213,6 +213,11 @@ export class WebSocketService {
     const streamUrl = baseUrl + streamPaths.join('/');
     console.log(`[BINANCE] Connecting to ${dataType} stream: ${streamUrl}`);
     this.connectToBinancePublic(streamUrl);
+    
+    // Restart streams for existing subscriptions with new configuration
+    if (this.marketSubscriptions.size > 0) {
+      console.log(`[WEBSOCKET] Restarting streams for ${this.marketSubscriptions.size} existing subscriptions`);
+    }
   }
 
   // Mock data generation removed - only real exchange data
@@ -307,23 +312,69 @@ export class WebSocketService {
         
         // Handle combined stream format: {"stream":"<streamName>","data":<rawPayload>}
         if (message.stream && message.data) {
-          const ticker = message.data;
-          const symbol = ticker.s;
+          const streamName = message.stream;
+          const data = message.data;
           
-          if (symbol) {
-            const marketUpdate = {
-              symbol,
-              price: parseFloat(ticker.c),
-              change: parseFloat(ticker.P),
-              volume: parseFloat(ticker.v),
-              high: parseFloat(ticker.h),
-              low: parseFloat(ticker.l),
-              timestamp: Date.now()
-            };
+          // Handle ticker data
+          if (streamName.includes('@ticker')) {
+            const symbol = data.s;
+            
+            if (symbol) {
+              const marketUpdate = {
+                symbol,
+                price: parseFloat(data.c),
+                change: parseFloat(data.P),
+                volume: parseFloat(data.v),
+                high: parseFloat(data.h),
+                low: parseFloat(data.l),
+                timestamp: Date.now()
+              };
 
-            console.log(`[BINANCE STREAM] Market update for ${symbol}: ${ticker.c}`);
-            this.marketData.set(symbol, marketUpdate);
-            this.broadcastMarketUpdate(marketUpdate);
+              console.log(`[BINANCE STREAM] Market update for ${symbol}: ${data.c}`);
+              this.marketData.set(symbol, marketUpdate);
+              this.broadcastMarketUpdate(marketUpdate);
+            }
+          }
+          
+          // Handle kline data
+          if (streamName.includes('@kline')) {
+            const symbol = data.s;
+            const kline = data.k;
+            
+            if (symbol && kline) {
+              console.log(`[BINANCE STREAM] Kline update for ${symbol} (${kline.i}): ${kline.c}`);
+              
+              const klineUpdate = {
+                symbol: symbol,
+                openTime: kline.t,
+                closeTime: kline.T,
+                open: parseFloat(kline.o),
+                high: parseFloat(kline.h),
+                low: parseFloat(kline.l),
+                close: parseFloat(kline.c),
+                volume: parseFloat(kline.v),
+                interval: kline.i,
+                isFinal: kline.x, // true when kline is closed
+                timestamp: Date.now()
+              };
+              
+              // Broadcast kline data for real-time chart updates
+              this.broadcastKlineUpdate(klineUpdate);
+              
+              // Also update market data with latest price
+              const marketUpdate = {
+                symbol: symbol,
+                price: parseFloat(kline.c),
+                change: 0, // Will be calculated if needed
+                volume: parseFloat(kline.v),
+                high: parseFloat(kline.h),
+                low: parseFloat(kline.l),
+                timestamp: Date.now()
+              };
+              
+              this.marketData.set(symbol, marketUpdate);
+              this.broadcastMarketUpdate(marketUpdate);
+            }
           }
         }
         // Handle single stream format
@@ -437,6 +488,35 @@ export class WebSocketService {
     } else {
       console.log('[PUBLIC WS] No relevant market data available for subscribed symbols');
     }
+  }
+
+  private broadcastKlineUpdate(klineUpdate: any) {
+    // Only broadcast if there are connected clients
+    if (this.marketSubscriptions.size === 0) {
+      return;
+    }
+
+    const message = JSON.stringify({
+      type: 'kline_update',
+      data: klineUpdate
+    });
+
+    console.log(`[WEBSOCKET] Broadcasting kline update for ${klineUpdate.symbol} to ${this.marketSubscriptions.size} clients`);
+    
+    let sentCount = 0;
+    this.marketSubscriptions.forEach((subscription) => {
+      if (subscription.ws.readyState === WebSocket.OPEN) {
+        // Check if client is subscribed to this symbol
+        if (subscription.symbols.size === 0 || subscription.symbols.has(klineUpdate.symbol.toLowerCase())) {
+          console.log(`[WEBSOCKET] Checking client ${sentCount + 1}, readyState: ${subscription.ws.readyState}, subscribed symbols: [${Array.from(subscription.symbols).join(', ')}]`);
+          subscription.ws.send(message);
+          sentCount++;
+          console.log(`[WEBSOCKET] Successfully sent kline update to client ${sentCount} for ${klineUpdate.symbol}`);
+        }
+      }
+    });
+    
+    console.log(`[WEBSOCKET] Successfully sent kline update to ${sentCount} out of ${this.marketSubscriptions.size} clients`);
   }
 
   private broadcastMarketUpdate(marketUpdate: any) {
