@@ -134,8 +134,8 @@ export default function MyExchanges() {
       
       console.log('Sending balance request:', balanceRequest);
       
-      // Send message through user WebSocket (this needs to be implemented in useUserWebSocket)
-      // For now, we'll use a workaround to send the message
+      // Send message through user WebSocket
+      userWs.sendMessage(balanceRequest);
       
       // Set timeout for error handling
       setTimeout(() => {

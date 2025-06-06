@@ -209,6 +209,15 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     }
   }, []);
 
+  const sendMessage = useCallback((message: any) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('[USER WS] Sending message:', message);
+      wsRef.current.send(JSON.stringify(message));
+    } else {
+      console.error('[USER WS] Cannot send message - WebSocket not connected');
+    }
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -221,6 +230,7 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     connect,
     disconnect,
     authenticate,
+    sendMessage,
     status,
     lastMessage
   };
