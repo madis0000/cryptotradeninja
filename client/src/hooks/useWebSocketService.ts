@@ -17,9 +17,9 @@ interface PublicWebSocketService {
 }
 
 interface UserWebSocketService {
-  connect: (listenKey: string) => void;
+  connect: (apiKey?: string) => void;
   disconnect: () => void;
-  authenticate: (userId: number, listenKey: string) => void;
+  authenticate: (userId: number, apiKey?: string) => void;
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
   lastMessage: any;
 }
@@ -122,7 +122,7 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
   const wsRef = useRef<WebSocket | null>(null);
   const { user } = useAuth();
 
-  const connect = useCallback((listenKey: string) => {
+  const connect = useCallback((apiKey?: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
@@ -136,12 +136,12 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     wsRef.current = ws;
 
     ws.onopen = () => {
-      // Authenticate with user ID and listen key
-      if (user?.id && listenKey) {
+      // Authenticate with user ID and optional API key for WebSocket API
+      if (user?.id) {
         ws.send(JSON.stringify({
           type: 'authenticate',
           userId: user.id,
-          listenKey
+          apiKey: apiKey || undefined
         }));
       }
     };
@@ -198,12 +198,12 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     setStatus('disconnected');
   }, []);
 
-  const authenticate = useCallback((userId: number, listenKey: string) => {
+  const authenticate = useCallback((userId: number, apiKey?: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'authenticate',
         userId,
-        listenKey
+        apiKey
       }));
     }
   }, []);
