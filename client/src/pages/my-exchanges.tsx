@@ -39,6 +39,7 @@ export default function MyExchanges() {
   const [restApiEndpoint, setRestApiEndpoint] = useState('');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [exchangeBalances, setExchangeBalances] = useState<Record<number, { balance: string; loading: boolean; error?: string }>>({});
+  const [currentExchangeId, setCurrentExchangeId] = useState<number | null>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -48,15 +49,33 @@ export default function MyExchanges() {
     onMessage: (data) => {
       console.log('Balance WebSocket response:', data);
       
-      if (data.type === 'api_response' && data.data?.balances && data.exchangeId) {
-        // Handle real account balance response
+      if (data.type === 'balance_update' && data.data?.balances && currentExchangeId) {
+        // Handle balance update from REST API or WebSocket API
+        const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
+        setExchangeBalances(prev => ({
+          ...prev,
+          [currentExchangeId]: { balance: totalUsdtValue, loading: false }
+        }));
+        console.log('Balance updated successfully:', totalUsdtValue);
+      } else if (data.type === 'api_response' && data.data?.balances && data.exchangeId) {
+        // Handle real account balance response (legacy format)
         const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
         setExchangeBalances(prev => ({
           ...prev,
           [data.exchangeId]: { balance: totalUsdtValue, loading: false }
         }));
+      } else if (data.type === 'balance_error' && currentExchangeId) {
+        // Handle balance errors
+        setExchangeBalances(prev => ({
+          ...prev,
+          [currentExchangeId]: { 
+            balance: '0.00', 
+            loading: false, 
+            error: data.error || 'Failed to fetch balance'
+          }
+        }));
       } else if (data.type === 'api_error' && data.exchangeId) {
-        // Handle API errors
+        // Handle API errors (legacy format)
         setExchangeBalances(prev => ({
           ...prev,
           [data.exchangeId]: { 
@@ -90,6 +109,9 @@ export default function MyExchanges() {
   // Function to fetch balance for a specific exchange
   const fetchExchangeBalance = async (exchange: Exchange) => {
     if (!exchange.isActive || !exchange.apiKey) return;
+    
+    // Set current exchange ID for tracking responses
+    setCurrentExchangeId(exchange.id);
     
     setExchangeBalances(prev => ({
       ...prev,
