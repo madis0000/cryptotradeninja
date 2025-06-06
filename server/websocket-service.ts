@@ -479,7 +479,7 @@ export class WebSocketService {
     try {
       // Check if this is a testnet environment and WebSocket API is restricted
       if (binanceExchange.isTestnet) {
-        console.log(`[USER STREAM] Testnet detected. WebSocket API may be unavailable. Using REST API fallback.`);
+        console.log(`[USER STREAM] 🌐 BALANCE FETCH METHOD: Testnet detected - WebSocket API unavailable, using REST API fallback`);
         
         // Send immediate notification about testnet limitations
         const userConnection = this.userConnections.get(userId);
@@ -813,7 +813,7 @@ export class WebSocketService {
           }));
         }
         
-        console.log(`[USER STREAM] Successfully fetched testnet balance for user ${userId}`);
+        console.log(`[USER STREAM] ✅ Successfully fetched testnet balance via REST API for user ${userId}`);
       } else {
         throw new Error(`REST API error: ${response.status} ${response.statusText}`);
       }

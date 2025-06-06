@@ -78,7 +78,8 @@ export default function MyExchanges() {
           
           // Handle balance update from REST API or WebSocket API
           const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
-          console.log('Calculated USDT balance:', totalUsdtValue);
+          const fetchMethod = data.data.method || 'websocket_api';
+          console.log(`✅ Balance fetched via ${fetchMethod.toUpperCase()}:`, totalUsdtValue, 'USDT');
           
           setExchangeBalances(prev => ({
             ...prev,
@@ -168,7 +169,7 @@ export default function MyExchanges() {
             attempts++;
             if (userWs.status === 'connected') {
               resolve();
-            } else if (attempts > 20) { // 2 seconds max wait
+            } else if (attempts > 100) { // 10 seconds max wait
               reject(new Error('Connection timeout'));
             } else {
               setTimeout(checkConnection, 100);
