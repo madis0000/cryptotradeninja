@@ -4,9 +4,8 @@ import { ActiveBots } from "@/components/dashboard/active-bots";
 import { MarketOverview } from "@/components/dashboard/market-overview";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { CreateBotModal } from "@/components/bots/create-bot-modal";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { useWebSocket } from "@/hooks/use-websocket";
+import { TradingChart } from "@/components/charts/trading-chart";
+import { usePublicWebSocket } from "@/hooks/useWebSocketService";
 import { MarketData } from "@/types";
 
 export default function Dashboard() {
