@@ -66,8 +66,8 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
         },
       });
 
-      // Create candlestick series using correct v5 API from working sample
-      const candlestickSeries = chart.addSeries('candlestick', {
+      // Create candlestick series using TradingView v5 API
+      const candlestickSeries = chart.addCandlestickSeries({
         upColor: '#26a69a',
         downColor: '#ef5350',
         wickUpColor: '#26a69a',
@@ -77,7 +77,7 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
       chartRef.current = chart;
       seriesRef.current = candlestickSeries;
 
-      // Generate 500 frames of historical candlestick data
+      // Generate 500 frames of historical candlestick data using string timestamps for v5
       const initialData = [];
       const now = Math.floor(Date.now() / 1000);
       const basePrice = marketData?.price || 103800;
@@ -94,7 +94,7 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
         const low = Math.min(open, close) - Math.random() * 50;
         
         initialData.push({
-          time: timestamp as any,
+          time: `${timestamp}` as any,
           open: Math.max(0, open),
           high: Math.max(0, high),
           low: Math.max(0, low),
