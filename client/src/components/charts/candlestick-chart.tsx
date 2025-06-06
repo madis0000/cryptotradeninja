@@ -77,14 +77,13 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
       chartRef.current = chart;
       seriesRef.current = candlestickSeries;
 
-      // Generate initial candlestick data
-      const now = Math.floor(Date.now() / 1000);
+      // Generate initial candlestick data with minute intervals
+      const now = Date.now();
       const basePrice = marketData?.price || 103800;
       const initialData = [];
       
       for (let i = 100; i >= 0; i--) {
-        const timeOffset = i * 60; // 1-minute intervals
-        const timestamp = now - timeOffset;
+        const timestamp = Math.floor((now - i * 60000) / 60000) * 60; // Minute intervals
         
         const priceVariation = (Math.random() - 0.5) * 200;
         const open = basePrice + priceVariation;
@@ -93,7 +92,7 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
         const low = Math.min(open, close) - Math.random() * 50;
         
         initialData.push({
-          time: timestamp,
+          time: timestamp as any,
           open: Math.max(0, open),
           high: Math.max(0, high),
           low: Math.max(0, low),
@@ -130,14 +129,15 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
   useEffect(() => {
     if (!marketData || !seriesRef.current) return;
 
-    const currentTime = Math.floor(marketData.timestamp / 1000);
+    // Convert timestamp to seconds and round to minute intervals
+    const currentTime = Math.floor(marketData.timestamp / 60000) * 60;
     
-    // Create candlestick data from ticker update
+    // Create candlestick data from ticker update with realistic OHLC
     const candlestickData = {
-      time: currentTime,
-      open: marketData.price * 0.999,
-      high: marketData.price * 1.001,
-      low: marketData.price * 0.998,
+      time: currentTime as any,
+      open: lastPrice || marketData.price * 0.9995,
+      high: marketData.price * 1.0005,
+      low: marketData.price * 0.9995,
       close: marketData.price,
     };
     
