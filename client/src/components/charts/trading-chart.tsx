@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType } from 'lightweight-charts';
+import { createChart, ColorType, LineStyle } from 'lightweight-charts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -67,16 +67,15 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
       },
     });
 
-    // Add area series for real-time price display using v5 syntax
-    const areaSeries = chart.addSeries('Area', {
-      topColor: '#10b981',
-      bottomColor: 'rgba(16, 185, 129, 0.1)',
-      lineColor: '#10b981',
+    // Add line series for real-time price display using v5 API
+    const lineSeries = chart.addSeries('Line', {
+      color: '#10b981',
       lineWidth: 2,
+      lineStyle: LineStyle.Solid,
     });
 
     chartRef.current = chart;
-    lineSeriesRef.current = areaSeries;
+    lineSeriesRef.current = lineSeries;
 
     // Generate initial historical data
     generateInitialData();

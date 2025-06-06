@@ -43,58 +43,12 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Main Content */}
         <div className="xl:col-span-2 space-y-6">
-          {/* Price Chart Placeholder */}
-          <Card className="bg-crypto-dark border-gray-800">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-4">
-                  <h2 className="text-lg font-semibold text-white">BTC/USDT</h2>
-                  <div className="flex items-center space-x-2">
-                    <span className="font-mono text-xl font-bold text-crypto-success">
-                      ${marketData['BTC/USDT']?.price?.toFixed(2) || '43,285.12'}
-                    </span>
-                    <span className="text-sm text-crypto-success bg-crypto-success/10 px-2 py-1 rounded">
-                      +{marketData['BTC/USDT']?.change?.toFixed(2) || '2.34'}%
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button variant="ghost" size="sm" className="px-3 py-1 text-xs bg-crypto-accent/10 text-crypto-accent border border-crypto-accent/20">
-                    1H
-                  </Button>
-                  <Button variant="ghost" size="sm" className="px-3 py-1 text-xs text-crypto-light hover:bg-gray-800">
-                    4H
-                  </Button>
-                  <Button variant="ghost" size="sm" className="px-3 py-1 text-xs text-crypto-light hover:bg-gray-800">
-                    1D
-                  </Button>
-                  <Button variant="ghost" size="sm" className="px-3 py-1 text-xs text-crypto-light hover:bg-gray-800">
-                    1W
-                  </Button>
-                </div>
-              </div>
-              
-              {/* Mock Chart Area */}
-              <div className="h-80 bg-gradient-to-b from-crypto-darker to-crypto-dark rounded-lg border border-gray-800 relative overflow-hidden">
-                <div className="absolute inset-0 flex items-end justify-between px-4 pb-4">
-                  {/* Mock candlestick chart bars */}
-                  {[60, 45, 75, 80, 55, 70, 85, 65, 90, 95].map((height, index) => {
-                    const isPositive = Math.random() > 0.5;
-                    return (
-                      <div
-                        key={index}
-                        className={`w-2 rounded-t ${isPositive ? 'bg-crypto-success' : 'bg-crypto-danger'}`}
-                        style={{ height: `${height}%` }}
-                      ></div>
-                    );
-                  })}
-                </div>
-                <div className="absolute top-4 left-4 text-xs text-crypto-light">
-                  Real-time Price Chart
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* TradingView Real-time Chart */}
+          <TradingChart 
+            symbol="BTCUSDT" 
+            marketData={currentMarketData}
+            className="w-full"
+          />
 
           {/* Active Bots */}
           <ActiveBots onCreateBot={() => setIsCreateBotModalOpen(true)} />
