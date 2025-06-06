@@ -28,7 +28,7 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
   const [priceChange, setPriceChange] = useState<number>(0);
   const [lastPrice, setLastPrice] = useState<number | null>(null);
 
-  // Initialize TradingView Lightweight Charts v5 using working pattern
+  // Initialize TradingView Lightweight Charts
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -66,7 +66,7 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
         },
       });
 
-      // Create area series using correct v5 API syntax from working sample
+      // Create area series using TradingView v5 API
       const areaSeries = chart.addAreaSeries({
         topColor: 'rgba(16, 185, 129, 0.56)',
         bottomColor: 'rgba(16, 185, 129, 0.04)',
@@ -75,7 +75,7 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
       });
 
       chartRef.current = chart;
-      seriesRef.current = areaSeries;
+      seriesRef.current = lineSeries;
 
       // Generate initial data with proper timestamps
       const initialData = [];
@@ -89,7 +89,7 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
         });
       }
       
-      areaSeries.setData(initialData);
+      lineSeries.setData(initialData);
       setLastPrice(basePrice);
 
       // Handle resize
