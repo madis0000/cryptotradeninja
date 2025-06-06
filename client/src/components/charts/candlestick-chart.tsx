@@ -12,6 +12,13 @@ interface MarketData {
   high: number;
   low: number;
   timestamp: number;
+  // Kline-specific fields for candlestick data
+  openTime?: number;
+  closeTime?: number;
+  open?: number;
+  close?: number;
+  interval?: string;
+  isFinal?: boolean;
 }
 
 interface CandlestickChartProps {
@@ -167,28 +174,30 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     }
   }, []);
 
-  // Update chart with real-time data
+  // Update chart with real-time kline data
   useEffect(() => {
     if (!marketData || !seriesRef.current) return;
 
-    // Convert timestamp to seconds for TradingView format
-    const currentTime = Math.floor(marketData.timestamp / 1000);
-    
-    // Create candlestick data from ticker update
-    const candlestickData = {
-      time: currentTime,
-      open: lastPrice || marketData.price * 0.9995,
-      high: marketData.price * 1.0005,
-      low: marketData.price * 0.9995,
-      close: marketData.price,
-    };
-    
-    seriesRef.current.update(candlestickData);
-
-    if (lastPrice !== null) {
-      setPriceChange(marketData.price - lastPrice);
+    // Only process kline data, ignore ticker-style updates
+    if (marketData.openTime && marketData.closeTime && marketData.open && marketData.close) {
+      // This is real kline data from WebSocket
+      const klineData = {
+        time: Math.floor(marketData.openTime / 1000),
+        open: marketData.open,
+        high: marketData.high,
+        low: marketData.low,
+        close: marketData.close,
+      };
+      
+      console.log('[CHART] Updating with kline data:', klineData);
+      seriesRef.current.update(klineData);
+    } else {
+      // Update price display only for market updates without affecting candlesticks
+      if (lastPrice !== null) {
+        setPriceChange(marketData.price - lastPrice);
+      }
+      setLastPrice(marketData.price);
     }
-    setLastPrice(marketData.price);
   }, [marketData, lastPrice]);
 
   const formatPrice = (price: number) => {

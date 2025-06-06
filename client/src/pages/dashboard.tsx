@@ -20,6 +20,9 @@ export default function Dashboard() {
       console.log('[DASHBOARD] Received WebSocket data:', data);
       if (data.type === 'market_update') {
         setCurrentMarketData(data.data);
+      } else if (data.type === 'kline_update') {
+        // Handle kline data for chart updates
+        setCurrentMarketData(data.data);
       }
     },
     onConnect: () => {
