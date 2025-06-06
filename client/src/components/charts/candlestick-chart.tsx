@@ -27,6 +27,65 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
   const [lastPrice, setLastPrice] = useState<number | null>(null);
   const [priceChange, setPriceChange] = useState<number>(0);
 
+  const loadHistoricalData = async () => {
+    try {
+      const response = await fetch(`/api/klines?symbol=${symbol}&interval=1m&limit=100`);
+      if (!response.ok) throw new Error('Failed to fetch historical data');
+      
+      const data = await response.json();
+      
+      if (data.length > 0 && seriesRef.current) {
+        // Convert to TradingView format
+        const chartData = data.map((candle: any) => ({
+          time: Math.floor(candle.openTime / 1000),
+          open: parseFloat(candle.open),
+          high: parseFloat(candle.high),
+          low: parseFloat(candle.low),
+          close: parseFloat(candle.close),
+        }));
+
+        seriesRef.current.setData(chartData);
+        
+        // Update current price display
+        const latestPrice = parseFloat(data[data.length - 1].close);
+        setLastPrice(latestPrice);
+      }
+    } catch (error) {
+      console.error('Failed to load historical data:', error);
+      // Fallback to simple data if historical data fails
+      generateFallbackData();
+    }
+  };
+
+  const generateFallbackData = () => {
+    if (!seriesRef.current) return;
+    
+    const now = Math.floor(Date.now() / 1000);
+    const basePrice = marketData?.price || 103800;
+    const initialData = [];
+    
+    for (let i = 100; i >= 0; i--) {
+      const timestamp = now - (i * 60); // 1-minute intervals
+      
+      const priceVariation = (Math.random() - 0.5) * 200;
+      const open = basePrice + priceVariation;
+      const close = open + (Math.random() - 0.5) * 100;
+      const high = Math.max(open, close) + Math.random() * 50;
+      const low = Math.min(open, close) - Math.random() * 50;
+      
+      initialData.push({
+        time: timestamp,
+        open: Math.max(0, open),
+        high: Math.max(0, high),
+        low: Math.max(0, low),
+        close: Math.max(0, close),
+      });
+    }
+    
+    seriesRef.current.setData(initialData);
+    setLastPrice(basePrice);
+  };
+
   // Initialize chart
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -77,31 +136,8 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
       chartRef.current = chart;
       seriesRef.current = candlestickSeries;
 
-      // Generate initial candlestick data with minute intervals
-      const now = Date.now();
-      const basePrice = marketData?.price || 103800;
-      const initialData = [];
-      
-      for (let i = 100; i >= 0; i--) {
-        const timestamp = Math.floor((now - i * 60000) / 60000) * 60; // Minute intervals
-        
-        const priceVariation = (Math.random() - 0.5) * 200;
-        const open = basePrice + priceVariation;
-        const close = open + (Math.random() - 0.5) * 100;
-        const high = Math.max(open, close) + Math.random() * 50;
-        const low = Math.min(open, close) - Math.random() * 50;
-        
-        initialData.push({
-          time: timestamp as any,
-          open: Math.max(0, open),
-          high: Math.max(0, high),
-          low: Math.max(0, low),
-          close: Math.max(0, close),
-        });
-      }
-      
-      candlestickSeries.setData(initialData);
-      setLastPrice(basePrice);
+      // Load historical klines data
+      loadHistoricalData();
 
       // Handle resize
       const handleResize = () => {
@@ -129,12 +165,12 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
   useEffect(() => {
     if (!marketData || !seriesRef.current) return;
 
-    // Convert timestamp to seconds and round to minute intervals
-    const currentTime = Math.floor(marketData.timestamp / 60000) * 60;
+    // Convert timestamp to seconds for TradingView format
+    const currentTime = Math.floor(marketData.timestamp / 1000);
     
-    // Create candlestick data from ticker update with realistic OHLC
+    // Create candlestick data from ticker update
     const candlestickData = {
-      time: currentTime as any,
+      time: currentTime,
       open: lastPrice || marketData.price * 0.9995,
       high: marketData.price * 1.0005,
       low: marketData.price * 0.9995,
