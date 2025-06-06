@@ -56,18 +56,21 @@ export default function MyExchanges() {
           balanceCount: data.data.balances?.length 
         });
         
-        if (currentExchangeId) {
+        // Find the first active exchange if currentExchangeId is null
+        const targetExchangeId = currentExchangeId || (exchanges?.length > 0 ? exchanges[0].id : null);
+        
+        if (targetExchangeId) {
           // Handle balance update from REST API or WebSocket API
           const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
           console.log('Calculated USDT balance:', totalUsdtValue);
           
           setExchangeBalances(prev => ({
             ...prev,
-            [currentExchangeId]: { balance: totalUsdtValue, loading: false }
+            [targetExchangeId]: { balance: totalUsdtValue, loading: false }
           }));
-          console.log('Balance updated successfully for exchange', currentExchangeId, ':', totalUsdtValue);
+          console.log('Balance updated successfully for exchange', targetExchangeId, ':', totalUsdtValue);
         } else {
-          console.warn('Received balance_update but currentExchangeId is null');
+          console.warn('Received balance_update but no valid exchange ID found');
         }
       } else if (data.type === 'api_response' && data.data?.balances && data.exchangeId) {
         // Handle real account balance response (legacy format)
