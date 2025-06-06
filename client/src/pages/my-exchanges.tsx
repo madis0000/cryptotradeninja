@@ -206,6 +206,28 @@ export default function MyExchanges() {
     },
   });
 
+  // Delete exchange mutation
+  const deleteExchangeMutation = useMutation({
+    mutationFn: async (exchangeId: number) => {
+      const response = await apiRequest(`/api/exchanges/${exchangeId}`, 'DELETE');
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
+      toast({
+        title: "Exchange Removed",
+        description: "Exchange has been successfully removed.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove exchange",
+        variant: "destructive",
+      });
+    },
+  });
+
   const resetForm = () => {
     setSelectedExchange('');
     setMode('testnet');
@@ -269,6 +291,12 @@ export default function MyExchanges() {
       exchangeType: selectedExchange.toLowerCase(),
       isTestnet: mode === 'testnet',
     });
+  };
+
+  const handleDeleteExchange = (exchangeId: number) => {
+    if (window.confirm('Are you sure you want to remove this exchange? This action cannot be undone.')) {
+      deleteExchangeMutation.mutate(exchangeId);
+    }
   };
 
   const sidebarItems = [
@@ -390,10 +418,16 @@ export default function MyExchanges() {
                 <i className="fas fa-edit mr-2"></i>
                 Edit
               </Button>
-              <Button size="sm" variant="outline" className="border-red-700 text-red-400 hover:bg-red-900">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="border-red-700 text-red-400 hover:bg-red-900"
+                onClick={() => handleDeleteExchange(exchange.id)}
+                disabled={deleteExchangeMutation.isPending}
+              >
                 <i className="fas fa-trash mr-2"></i>
-                Remove
-            </Button>
+                {deleteExchangeMutation.isPending ? 'Removing...' : 'Remove'}
+              </Button>
           </div>
         </div>
       </CardContent>
