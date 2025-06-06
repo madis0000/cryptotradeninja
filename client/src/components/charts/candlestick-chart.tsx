@@ -204,14 +204,7 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     { label: '1D', value: '1d' }
   ];
 
-  const handleTimeframeChange = async (interval: string) => {
-    console.log('[CHART] Switching to interval:', interval);
-    setSelectedInterval(interval);
-    
-    // Reload historical data with new interval
-    await loadHistoricalData(interval);
-    
-    // Configure WebSocket stream for kline data with the selected interval
+  const configureKlineStream = async (interval: string) => {
     try {
       const response = await fetch('/api/websocket/configure-stream', {
         method: 'POST',
@@ -234,6 +227,17 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     } catch (error) {
       console.error('[CHART] Error configuring kline stream:', error);
     }
+  };
+
+  const handleTimeframeChange = async (interval: string) => {
+    console.log('[CHART] Switching to interval:', interval);
+    setSelectedInterval(interval);
+    
+    // Reload historical data with new interval
+    await loadHistoricalData(interval);
+    
+    // Configure WebSocket stream for kline data with the selected interval
+    await configureKlineStream(interval);
   };
 
   return (

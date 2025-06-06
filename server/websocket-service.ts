@@ -78,10 +78,10 @@ export class WebSocketService {
               subscription.symbols.add(symbol.toUpperCase());
             });
             
-            // Start Binance streams with the requested symbols
+            // Start Binance streams with the requested symbols - Default to kline data for charts
             if (!this.isStreamsActive) {
-              console.log(`[WEBSOCKET] Starting streams for symbols:`, symbols);
-              this.connectConfigurableStream('ticker', symbols);
+              console.log(`[WEBSOCKET] Starting kline streams for symbols:`, symbols);
+              this.connectConfigurableStream('kline', symbols, '1m');
               this.isStreamsActive = true;
             }
             

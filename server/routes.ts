@@ -370,8 +370,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Configure stream connection
-  app.post("/api/websocket/configure-stream", requireAuth, async (req: AuthenticatedRequest, res) => {
+  // Configure stream connection - Public endpoint for market data configuration
+  app.post("/api/websocket/configure-stream", async (req: Request, res: Response) => {
     try {
       const { dataType, symbols, interval, depth } = req.body;
       
