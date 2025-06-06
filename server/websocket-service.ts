@@ -23,6 +23,8 @@ export class WebSocketService {
   private binanceUserStreams = new Map<string, WebSocket>();
   private mockDataInterval: NodeJS.Timeout | null = null;
   private isStreamsActive = false;
+  private currentStreamType: string = 'ticker';
+  private currentInterval: string = '1m';
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -174,6 +176,16 @@ export class WebSocketService {
   // Removed - streams now started on-demand when frontend subscribes
 
   public connectConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
+    console.log(`[WEBSOCKET] Configuring stream: ${dataType}, symbols: ${symbols}, interval: ${interval}`);
+    
+    // Update current stream configuration
+    this.currentStreamType = dataType;
+    this.currentInterval = interval || '1m';
+    
+    // Stop existing streams
+    this.stopBinanceStreams();
+    
+    // Start new streams with updated configuration
     const baseUrl = 'wss://stream.testnet.binance.vision/stream?streams=';
     
     const streamPaths = symbols.map(symbol => {

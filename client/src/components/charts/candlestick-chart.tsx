@@ -26,10 +26,11 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
   const seriesRef = useRef<any>(null);
   const [lastPrice, setLastPrice] = useState<number | null>(null);
   const [priceChange, setPriceChange] = useState<number>(0);
+  const [selectedInterval, setSelectedInterval] = useState<string>('1m');
 
-  const loadHistoricalData = async () => {
+  const loadHistoricalData = async (interval: string = selectedInterval) => {
     try {
-      const response = await fetch(`/api/klines?symbol=${symbol}&interval=1m&limit=100`);
+      const response = await fetch(`/api/klines?symbol=${symbol}&interval=${interval}&limit=100`);
       if (!response.ok) throw new Error('Failed to fetch historical data');
       
       const data = await response.json();
@@ -194,7 +195,38 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     }).format(price);
   };
 
-  const timeframes = ['1M', '5M', '15M', '1H', '4H', '1D'];
+  const timeframes = [
+    { label: '1M', value: '1m' },
+    { label: '5M', value: '5m' },
+    { label: '15M', value: '15m' },
+    { label: '1H', value: '1h' },
+    { label: '4H', value: '4h' },
+    { label: '1D', value: '1d' }
+  ];
+
+  const handleTimeframeChange = async (interval: string) => {
+    setSelectedInterval(interval);
+    
+    // Reload historical data with new interval
+    await loadHistoricalData(interval);
+    
+    // Send interval change to WebSocket service for real-time updates
+    try {
+      await fetch('/api/websocket/configure-stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dataType: 'kline',
+          symbols: [symbol],
+          interval: interval
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to configure WebSocket stream:', error);
+    }
+  };
 
   return (
     <Card className={`bg-gray-900 border-gray-700 ${className}`}>
@@ -225,12 +257,17 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
           <div className="flex space-x-1">
             {timeframes.map((timeframe) => (
               <Button
-                key={timeframe}
-                variant="outline"
+                key={timeframe.value}
+                variant={selectedInterval === timeframe.value ? "default" : "outline"}
                 size="sm"
-                className="px-3 py-1 text-xs border-gray-600 text-gray-300 hover:bg-gray-700"
+                onClick={() => handleTimeframeChange(timeframe.value)}
+                className={`px-3 py-1 text-xs border-gray-600 hover:bg-gray-700 ${
+                  selectedInterval === timeframe.value 
+                    ? 'bg-blue-600 text-white border-blue-600' 
+                    : 'text-gray-300'
+                }`}
               >
-                {timeframe}
+                {timeframe.label}
               </Button>
             ))}
           </div>
