@@ -506,9 +506,13 @@ export class WebSocketService {
     let sentCount = 0;
     this.marketSubscriptions.forEach((subscription) => {
       if (subscription.ws.readyState === WebSocket.OPEN) {
-        // Check if client is subscribed to this symbol
-        if (subscription.symbols.size === 0 || subscription.symbols.has(klineUpdate.symbol.toLowerCase())) {
-          console.log(`[WEBSOCKET] Checking client ${sentCount + 1}, readyState: ${subscription.ws.readyState}, subscribed symbols: [${Array.from(subscription.symbols).join(', ')}]`);
+        // Check if client is subscribed to this symbol (case-insensitive matching)
+        const subscribedSymbols = Array.from(subscription.symbols).map(s => s.toUpperCase());
+        const isMatched = subscription.symbols.size === 0 || subscribedSymbols.includes(klineUpdate.symbol.toUpperCase());
+        console.log(`[WEBSOCKET] Kline symbol: ${klineUpdate.symbol}, subscribed: [${Array.from(subscription.symbols).join(', ')}], matched: ${isMatched}`);
+        
+        if (isMatched) {
+          console.log(`[WEBSOCKET] Sending kline to client ${sentCount + 1}, readyState: ${subscription.ws.readyState}`);
           subscription.ws.send(message);
           sentCount++;
           console.log(`[WEBSOCKET] Successfully sent kline update to client ${sentCount} for ${klineUpdate.symbol}`);
