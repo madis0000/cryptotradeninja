@@ -441,27 +441,28 @@ export class WebSocketService {
     console.log(`[WEBSOCKET] Broadcasting update for ${marketUpdate.symbol} to ${this.marketSubscriptions.size} clients`);
     
     let sentCount = 0;
-    this.marketSubscriptions.forEach((subscription, index) => {
-      console.log(`[WEBSOCKET] Checking client ${index + 1}, readyState: ${subscription.ws.readyState}, subscribed symbols: [${Array.from(subscription.symbols).join(', ')}]`);
+    Array.from(this.marketSubscriptions).forEach((subscription, index) => {
+      const clientIndex = index + 1;
+      console.log(`[WEBSOCKET] Checking client ${clientIndex}, readyState: ${subscription.ws.readyState}, subscribed symbols: [${Array.from(subscription.symbols).join(', ')}]`);
       
       if (subscription.ws.readyState === WebSocket.OPEN) {
-        // Check if client is subscribed to this symbol
+        // Check if client is subscribed to this symbol (normalize to uppercase for comparison)
         const isSubscribed = subscription.symbols.size === 0 || 
-                           subscription.symbols.has(marketUpdate.symbol.toLowerCase());
+                           subscription.symbols.has(marketUpdate.symbol.toUpperCase());
         
         if (isSubscribed) {
           try {
             subscription.ws.send(message);
             sentCount++;
-            console.log(`[WEBSOCKET] Successfully sent update to client ${index + 1} for ${marketUpdate.symbol}`);
+            console.log(`[WEBSOCKET] Successfully sent update to client ${clientIndex} for ${marketUpdate.symbol}`);
           } catch (error) {
-            console.error(`[WEBSOCKET] Failed to send to client ${index + 1}:`, error);
+            console.error(`[WEBSOCKET] Failed to send to client ${clientIndex}:`, error);
           }
         } else {
-          console.log(`[WEBSOCKET] Client ${index + 1} not subscribed to ${marketUpdate.symbol}`);
+          console.log(`[WEBSOCKET] Client ${clientIndex} not subscribed to ${marketUpdate.symbol}`);
         }
       } else {
-        console.log(`[WEBSOCKET] Client ${index + 1} connection not open, readyState: ${subscription.ws.readyState}`);
+        console.log(`[WEBSOCKET] Client ${clientIndex} connection not open, readyState: ${subscription.ws.readyState}`);
       }
     });
     
