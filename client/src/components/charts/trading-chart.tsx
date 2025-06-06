@@ -66,30 +66,38 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
         },
       });
 
-      // Create area series using TradingView v5 API
-      const areaSeries = chart.addAreaSeries({
-        topColor: 'rgba(16, 185, 129, 0.56)',
-        bottomColor: 'rgba(16, 185, 129, 0.04)',
-        lineColor: 'rgba(16, 185, 129, 1)',
-        lineWidth: 2,
+      // Create candlestick series using correct v5 API from working sample
+      const candlestickSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        wickUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
       });
 
       chartRef.current = chart;
-      seriesRef.current = lineSeries;
+      seriesRef.current = candlestickSeries;
 
-      // Generate initial data with proper timestamps
+      // Generate initial candlestick data with proper timestamps
       const initialData = [];
       const now = Math.floor(Date.now() / 1000);
       const basePrice = marketData?.price || 103600;
       
       for (let i = 50; i >= 0; i--) {
+        const price = basePrice + (Math.random() - 0.5) * 100;
+        const high = price + Math.random() * 50;
+        const low = price - Math.random() * 50;
+        const open = price + (Math.random() - 0.5) * 20;
+        
         initialData.push({
           time: (now - i * 60) as any,
-          value: basePrice + (Math.random() - 0.5) * 100,
+          open: open,
+          high: high,
+          low: low,
+          close: price,
         });
       }
       
-      lineSeries.setData(initialData);
+      candlestickSeries.setData(initialData);
       setLastPrice(basePrice);
 
       // Handle resize
@@ -114,17 +122,23 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
     }
   }, []);
 
-  // Update chart with real-time data
+  // Update chart with real-time candlestick data
   useEffect(() => {
     if (!marketData || !seriesRef.current) return;
 
     const currentTime = Math.floor(marketData.timestamp / 1000);
     
-    // Update chart with real-time price
-    seriesRef.current.update({
+    // Create candlestick data from ticker update
+    const candlestickData = {
       time: currentTime as any,
-      value: marketData.price,
-    });
+      open: marketData.price * 0.999, // Approximate open
+      high: marketData.high,
+      low: marketData.low,
+      close: marketData.price,
+    };
+    
+    // Update chart with real-time candlestick data
+    seriesRef.current.update(candlestickData);
 
     // Calculate price change
     if (lastPrice !== null) {
