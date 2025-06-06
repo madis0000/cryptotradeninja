@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { StatsOverview } from "@/components/dashboard/stats-overview";
 import { ActiveBots } from "@/components/dashboard/active-bots";
 import { MarketOverview } from "@/components/dashboard/market-overview";
@@ -10,14 +10,28 @@ import { MarketData } from "@/types";
 
 export default function Dashboard() {
   const [isCreateBotModalOpen, setIsCreateBotModalOpen] = useState(false);
-  const [marketData, setMarketData] = useState<MarketData>({});
+  const [currentMarketData, setCurrentMarketData] = useState<any>(null);
 
   // WebSocket connection for real-time updates
-  useWebSocket({
-    onMarketUpdate: (data: MarketData) => {
-      setMarketData(data);
+  const { connect, disconnect, status } = usePublicWebSocket({
+    onMessage: (data) => {
+      if (data.type === 'market_update') {
+        setCurrentMarketData(data.data);
+      }
     },
+    onConnect: () => {
+      console.log('[DASHBOARD] Connected to WebSocket');
+    },
+    onDisconnect: () => {
+      console.log('[DASHBOARD] Disconnected from WebSocket');
+    }
   });
+
+  // Auto-connect to WebSocket when component mounts
+  useEffect(() => {
+    connect(['BTCUSDT']);
+    return () => disconnect();
+  }, [connect, disconnect]);
 
   return (
     <div className="flex-1 overflow-auto p-6">

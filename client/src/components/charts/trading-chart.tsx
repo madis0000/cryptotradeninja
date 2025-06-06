@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, Time } from 'lightweight-charts';
+import { createChart, ColorType } from 'lightweight-charts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -19,20 +19,12 @@ interface TradingChartProps {
   className?: string;
 }
 
-interface CandlestickData {
-  time: Time;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-}
-
 export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const chartRef = useRef<any>(null);
+  const lineSeriesRef = useRef<any>(null);
   const [timeframe, setTimeframe] = useState('1H');
-  const [chartData, setChartData] = useState<CandlestickData[]>([]);
+  const [lastPrice, setLastPrice] = useState<number>(0);
 
   // Initialize chart
   useEffect(() => {
@@ -64,9 +56,6 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
         timeVisible: true,
         secondsVisible: false,
       },
-      watermark: {
-        visible: false,
-      },
       handleScroll: {
         mouseWheel: true,
         pressedMouseMove: true,
@@ -78,19 +67,18 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
       },
     });
 
-    // Add candlestick series using v5 syntax
-    const candlestickSeries = chart.addCandlestickSeries({
-      upColor: '#10b981',
-      downColor: '#ef4444',
-      borderVisible: false,
-      wickUpColor: '#10b981',
-      wickDownColor: '#ef4444',
+    // Add area series for real-time price display using v5 syntax
+    const areaSeries = chart.addSeries('Area', {
+      topColor: '#10b981',
+      bottomColor: 'rgba(16, 185, 129, 0.1)',
+      lineColor: '#10b981',
+      lineWidth: 2,
     });
 
     chartRef.current = chart;
-    candlestickSeriesRef.current = candlestickSeries;
+    lineSeriesRef.current = areaSeries;
 
-    // Generate initial data from live price
+    // Generate initial historical data
     generateInitialData();
 
     // Cleanup
@@ -99,83 +87,48 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
     };
   }, []);
 
-  // Generate realistic initial candlestick data based on current market price
+  // Generate initial line data
   const generateInitialData = () => {
-    const data: CandlestickData[] = [];
+    const data = [];
     const now = Math.floor(Date.now() / 1000);
-    const basePrice = marketData?.price || 103647; // Use live price if available
+    const basePrice = marketData?.price || 103647;
     let currentPrice = basePrice;
 
-    // Generate 100 candles of historical data
+    // Generate 100 points of historical data
     for (let i = 100; i >= 0; i--) {
-      const time = now - (i * 3600); // 1 hour intervals
-      const volatility = 0.02; // 2% volatility
+      const time = now - (i * 60); // 1 minute intervals
+      const volatility = 0.001; // Small volatility for smooth line
       
-      const open = currentPrice;
       const change = (Math.random() - 0.5) * 2 * volatility * currentPrice;
-      const close = open + change;
-      
-      const high = Math.max(open, close) + Math.random() * 0.005 * currentPrice;
-      const low = Math.min(open, close) - Math.random() * 0.005 * currentPrice;
+      currentPrice = currentPrice + change;
 
       data.push({
-        time,
-        open: Number(open.toFixed(2)),
-        high: Number(high.toFixed(2)),
-        low: Number(low.toFixed(2)),
-        close: Number(close.toFixed(2)),
+        time: time as any,
+        value: Number(currentPrice.toFixed(2)),
       });
-
-      currentPrice = close;
     }
 
-    setChartData(data);
+    if (lineSeriesRef.current) {
+      lineSeriesRef.current.setData(data);
+    }
     
-    if (candlestickSeriesRef.current) {
-      candlestickSeriesRef.current.setData(data);
-    }
+    setLastPrice(currentPrice);
   };
 
   // Update chart with real-time data
   useEffect(() => {
-    if (!marketData || !candlestickSeriesRef.current) return;
+    if (!marketData || !lineSeriesRef.current) return;
 
     const currentTime = Math.floor(marketData.timestamp / 1000);
-    const latestCandle = chartData[chartData.length - 1];
     
-    if (!latestCandle) return;
+    // Add new price point
+    lineSeriesRef.current.update({
+      time: currentTime as any,
+      value: marketData.price,
+    });
 
-    // Check if we should update the current candle or create a new one
-    const hoursSinceLastCandle = (currentTime - latestCandle.time) / 3600;
-    
-    if (hoursSinceLastCandle >= 1) {
-      // Create new candle
-      const newCandle: CandlestickData = {
-        time: currentTime,
-        open: latestCandle.close,
-        high: Math.max(latestCandle.close, marketData.price),
-        low: Math.min(latestCandle.close, marketData.price),
-        close: marketData.price,
-      };
-
-      const updatedData = [...chartData, newCandle];
-      setChartData(updatedData);
-      candlestickSeriesRef.current.update(newCandle);
-    } else {
-      // Update current candle
-      const updatedCandle: CandlestickData = {
-        ...latestCandle,
-        high: Math.max(latestCandle.high, marketData.price),
-        low: Math.min(latestCandle.low, marketData.price),
-        close: marketData.price,
-      };
-
-      const updatedData = [...chartData];
-      updatedData[updatedData.length - 1] = updatedCandle;
-      setChartData(updatedData);
-      candlestickSeriesRef.current.update(updatedCandle);
-    }
-  }, [marketData, chartData]);
+    setLastPrice(marketData.price);
+  }, [marketData]);
 
   // Handle chart resize
   useEffect(() => {
@@ -206,8 +159,8 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
     return (
       <span className={`text-sm px-2 py-1 rounded ${
         isPositive 
-          ? 'text-crypto-success bg-crypto-success/10' 
-          : 'text-crypto-danger bg-crypto-danger/10'
+          ? 'text-green-400 bg-green-400/10' 
+          : 'text-red-400 bg-red-400/10'
       }`}>
         {isPositive ? '+' : ''}{change.toFixed(2)}%
       </span>
@@ -215,13 +168,13 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
   };
 
   return (
-    <Card className={`bg-crypto-dark border-gray-800 ${className}`}>
+    <Card className={`bg-gray-900 border-gray-800 ${className}`}>
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
             <h2 className="text-lg font-semibold text-white">{symbol}</h2>
             <div className="flex items-center space-x-2">
-              <span className="font-mono text-xl font-bold text-crypto-success">
+              <span className="font-mono text-xl font-bold text-green-400">
                 {marketData ? formatPrice(marketData.price) : 'Connecting...'}
               </span>
               {marketData && formatChange(marketData.change)}
@@ -236,8 +189,8 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
                 onClick={() => setTimeframe(tf)}
                 className={`px-3 py-1 text-xs transition-colors ${
                   timeframe === tf
-                    ? 'bg-crypto-accent/10 text-crypto-accent border border-crypto-accent/20'
-                    : 'text-crypto-light hover:bg-gray-800'
+                    ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                    : 'text-gray-400 hover:bg-gray-800'
                 }`}
               >
                 {tf}
@@ -253,14 +206,14 @@ export function TradingChart({ symbol = 'BTCUSDT', marketData, className }: Trad
             className="absolute inset-0 rounded-lg overflow-hidden"
           />
           {!chartRef.current && (
-            <div className="absolute inset-0 flex items-center justify-center bg-crypto-darker rounded-lg border border-gray-800">
-              <div className="text-crypto-light">Loading chart...</div>
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-800 rounded-lg border border-gray-700">
+              <div className="text-gray-400">Loading chart...</div>
             </div>
           )}
         </div>
 
         {/* Chart Stats */}
-        <div className="mt-4 flex items-center justify-between text-sm text-crypto-light">
+        <div className="mt-4 flex items-center justify-between text-sm text-gray-400">
           <div className="flex items-center space-x-4">
             <span>Volume: {marketData ? marketData.volume.toFixed(2) : 'Loading...'}</span>
             <span>High: {marketData ? formatPrice(marketData.high) : 'Loading...'}</span>
