@@ -95,6 +95,7 @@ export class WebSocketService {
           }
           
           if (message.type === 'account_balance') {
+            console.log(`[WEBSOCKET] Processing balance request for user ${message.userId}, exchange ${message.exchangeId}`);
             this.requestAccountBalance(ws, message.userId, message.exchangeId);
           }
         } catch (error) {
@@ -745,25 +746,32 @@ export class WebSocketService {
   }
 
   private async requestAccountBalance(ws: WebSocket, userId: number, exchangeId: number) {
-    console.log(`[WEBSOCKET] Account balance requested for user ${userId}, exchange ${exchangeId}`);
+    console.log(`[BALANCE] Starting balance request for user ${userId}, exchange ${exchangeId}`);
     
     try {
       // Fetch the exchange configuration from database
+      console.log(`[BALANCE] Fetching exchanges for user ${userId}`);
       const exchanges = await storage.getExchangesByUserId(userId);
+      console.log(`[BALANCE] Found ${exchanges.length} exchanges for user ${userId}`);
+      
       const targetExchange = exchanges.find(ex => ex.id === exchangeId);
       
       if (!targetExchange) {
-        throw new Error('Exchange not found');
+        console.error(`[BALANCE] Exchange ${exchangeId} not found for user ${userId}`);
+        throw new Error(`Exchange ${exchangeId} not found`);
       }
 
+      console.log(`[BALANCE] Found target exchange: ${targetExchange.name}, isTestnet: ${targetExchange.isTestnet}`);
+
       // Decrypt the API credentials
+      console.log(`[BALANCE] Decrypting API credentials for exchange ${exchangeId}`);
       const { apiKey, apiSecret } = decryptApiCredentials(
         targetExchange.apiKey,
         targetExchange.apiSecret,
         targetExchange.encryptionIv
       );
 
-      console.log(`[WEBSOCKET] Fetching balance for exchange: ${targetExchange.name}`);
+      console.log(`[BALANCE] API Key length: ${apiKey.length}, Secret length: ${apiSecret.length}`);
 
       // Make authenticated request to Binance API
       const timestamp = Date.now();
@@ -778,24 +786,30 @@ export class WebSocketService {
       const baseUrl = targetExchange.restApiEndpoint || 
         (targetExchange.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com');
       
-      const response = await fetch(`${baseUrl}/api/v3/account?${finalQuery}`, {
+      const apiUrl = `${baseUrl}/api/v3/account?${finalQuery}`;
+      console.log(`[BALANCE] Making API request to: ${baseUrl}/api/v3/account`);
+      
+      const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
-          'X-MBX-APIKEY': apiKey
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/json'
         }
       });
 
+      console.log(`[BALANCE] API response status: ${response.status}`);
+
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[WEBSOCKET] Binance API error ${response.status}:`, errorText);
+        console.error(`[BALANCE] Binance API error ${response.status}:`, errorText);
         throw new Error(`API request failed: ${response.status} - ${errorText}`);
       }
 
       const accountData = await response.json();
-      console.log(`[WEBSOCKET] Successfully fetched account data for user ${userId}`);
+      console.log(`[BALANCE] Successfully fetched account data. Account type: ${accountData.accountType}, Balances count: ${accountData.balances?.length}`);
 
       // Send the real balance data to the client
-      ws.send(JSON.stringify({
+      const responseData = {
         type: 'api_response',
         data: { 
           balances: accountData.balances,
@@ -806,17 +820,23 @@ export class WebSocketService {
         },
         exchangeId: exchangeId,
         userId: userId
-      }));
+      };
+      
+      console.log(`[BALANCE] Sending response to client with ${accountData.balances?.length} balances`);
+      ws.send(JSON.stringify(responseData));
       
     } catch (error) {
-      console.error(`[WEBSOCKET] Error fetching balance for user ${userId}:`, error);
+      console.error(`[BALANCE] Error fetching balance for user ${userId}:`, error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch account balance';
-      ws.send(JSON.stringify({
+      const errorResponse = {
         type: 'api_error',
         error: errorMessage,
         exchangeId: exchangeId,
         userId: userId
-      }));
+      };
+      
+      console.log(`[BALANCE] Sending error response: ${errorMessage}`);
+      ws.send(JSON.stringify(errorResponse));
     }
   }
 
