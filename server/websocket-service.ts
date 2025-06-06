@@ -168,8 +168,8 @@ export class WebSocketService {
         message: 'Successfully authenticated. Connecting to WebSocket API...'
       }));
 
-      // Attempt intelligent WebSocket connection prioritizing working endpoints
-      setTimeout(() => this.connectWithFallback(userId), 100);
+      // Connect to Binance WebSocket API (no listen key required)
+      this.connectToBinanceUserStream(userId, apiKey || 'websocket_api');
 
     } catch (error) {
       console.error('[USER STREAM] Authentication error:', error);
@@ -438,99 +438,119 @@ export class WebSocketService {
     });
   }
 
-  private async connectWithFallback(userId: number) {
-    try {
-      const exchanges = await storage.getExchangesByUserId(userId);
-      const activeExchanges = exchanges.filter(ex => ex.isActive && ex.wsApiEndpoint);
-      
-      if (activeExchanges.length === 0) {
-        this.notifyUserStreamUnavailable(userId, 'No WebSocket endpoints configured');
-        return;
-      }
-      
-      console.log(`[USER STREAM] Connecting to ${activeExchanges.length} exchanges for user ${userId}`);
-      
-      // Connect to each exchange independently without fallback logic
-      for (const exchange of activeExchanges) {
-        console.log(`[USER STREAM] Connecting to ${exchange.name} (testnet: ${exchange.isTestnet})`);
-        this.attemptConnection(userId, exchange);
-      }
-      
-    } catch (error) {
-      console.error(`[USER STREAM] Error in connection setup:`, error);
-      this.notifyUserStreamUnavailable(userId, 'Connection setup failed');
-    }
-  }
-  
-  private async attemptConnection(userId: number, exchange: any): Promise<void> {
-    const wsUrl = exchange.wsApiEndpoint;
-    const connectionKey = `user_${userId}_${exchange.id}`;
+  private async connectToBinanceUserStream(userId: number, listenKey: string) {
+    // Use WebSocket API approach instead of Stream API
+    const isTestnet = process.env.NODE_ENV === 'development';
+    const wsUrl = isTestnet 
+      ? `wss://testnet.binance.vision/ws-api/v3`
+      : `wss://ws-api.binance.com:443/ws-api/v3`;
     
+    // Get user's API credentials for authenticated requests
+    const user = await storage.getUser(userId);
+    if (!user) {
+      console.error(`[USER STREAM] User ${userId} not found`);
+      return;
+    }
+
+    // For now, we'll implement account info subscription via WebSocket API
+    // This doesn't require listen keys and works with API key/secret
+    const connectionKey = `user_${userId}`;
+    
+    // Close existing connection if any
+    if (this.binanceUserStreams.has(connectionKey)) {
+      this.binanceUserStreams.get(connectionKey)?.close();
+    }
+
     try {
-      // Close existing connection for this specific exchange
-      if (this.binanceUserStreams.has(connectionKey)) {
-        this.binanceUserStreams.get(connectionKey)?.close();
-      }
-      
-      console.log(`[USER STREAM] Connecting to ${exchange.name} at ${wsUrl}`);
       const userWs = new WebSocket(wsUrl);
       this.binanceUserStreams.set(connectionKey, userWs);
-      
-      const timeoutId = setTimeout(() => {
-        console.log(`[USER STREAM] Connection timeout for ${exchange.name}`);
-        userWs.close();
-      }, 5000);
-      
+
       userWs.on('open', () => {
-        clearTimeout(timeoutId);
-        console.log(`[USER STREAM] ✓ Connected to ${exchange.name} WebSocket API`);
+        console.log(`[USER STREAM] Connected to Binance WebSocket API for user ${userId}`);
         
+        // Send account status request (this is a simple request that works without listen key)
+        const accountRequest = {
+          id: `account_${Date.now()}`,
+          method: "account.status",
+          params: {
+            apiKey: "demo_key", // In real implementation, use encrypted user's API key
+            timestamp: Date.now()
+            // signature would be required for authenticated requests
+          }
+        };
+
+        // For demo purposes, we'll just notify the client that connection is ready
         const userConnection = this.userConnections.get(userId);
         if (userConnection) {
           userConnection.ws.send(JSON.stringify({
             type: 'user_stream_connected',
-            message: `Connected to ${exchange.name} WebSocket API`,
-            exchange: exchange.name
+            message: 'WebSocket API connection established. Ready for authenticated requests.',
+            method: 'websocket_api'
           }));
         }
       });
-      
+
+      userWs.on('message', (data) => {
+        try {
+          const response = JSON.parse(data.toString());
+          console.log(`[USER STREAM] WebSocket API response for user ${userId}:`, response);
+          
+          // Process different types of responses
+          if (response.result) {
+            // Successful API response
+            this.broadcastUserUpdate(userId, {
+              type: 'api_response',
+              data: response.result,
+              id: response.id
+            });
+          } else if (response.error) {
+            // API error response
+            console.error(`[USER STREAM] API error for user ${userId}:`, response.error);
+            this.broadcastUserUpdate(userId, {
+              type: 'api_error',
+              error: response.error,
+              id: response.id
+            });
+          }
+        } catch (error) {
+          console.error('[USER STREAM] Error processing WebSocket API data:', error);
+        }
+      });
+
+      userWs.on('close', (code, reason) => {
+        console.log(`[USER STREAM] WebSocket API disconnected for user ${userId} - Code: ${code}, Reason: ${reason}`);
+        this.binanceUserStreams.delete(connectionKey);
+      });
+
       userWs.on('error', (error) => {
-        clearTimeout(timeoutId);
-        console.log(`[USER STREAM] ✗ ${exchange.name} connection failed: ${error.message}`);
+        console.error(`[USER STREAM] WebSocket API error for user ${userId}:`, error);
         this.binanceUserStreams.delete(connectionKey);
         
-        // Notify about this specific exchange connection issue
-        const userConnection = this.userConnections.get(userId);
-        if (userConnection) {
-          userConnection.ws.send(JSON.stringify({
-            type: 'exchange_connection_failed',
-            message: `${exchange.name} WebSocket connection failed`,
-            exchange: exchange.name,
-            error: error.message
-          }));
+        // Handle specific errors
+        if (error.message.includes('451') || error.message.includes('404') || error.message.includes('Unexpected server response')) {
+          console.log(`[USER STREAM] WebSocket API may be restricted on testnet. Notifying client.`);
+          
+          const userConnection = this.userConnections.get(userId);
+          if (userConnection) {
+            userConnection.ws.send(JSON.stringify({
+              type: 'user_stream_unavailable',
+              message: 'WebSocket API is currently unavailable on testnet. Public market data remains active.',
+              error: 'testnet_restriction'
+            }));
+          }
         }
       });
-      
-      userWs.on('close', (code, reason) => {
-        clearTimeout(timeoutId);
-        console.log(`[USER STREAM] ${exchange.name} disconnected - Code: ${code}`);
-        this.binanceUserStreams.delete(connectionKey);
-      });
-      
     } catch (error) {
-      console.error(`[USER STREAM] Failed to create connection to ${exchange.name}:`, error);
-    }
-  }
-  
-  private notifyUserStreamUnavailable(userId: number, message: string) {
-    const userConnection = this.userConnections.get(userId);
-    if (userConnection) {
-      userConnection.ws.send(JSON.stringify({
-        type: 'user_stream_unavailable',
-        message: `${message}. Balance requests use REST API instead.`,
-        error: 'websocket_unavailable'
-      }));
+      console.error(`[USER STREAM] Failed to create WebSocket API connection for user ${userId}:`, error);
+      
+      const userConnection = this.userConnections.get(userId);
+      if (userConnection) {
+        userConnection.ws.send(JSON.stringify({
+          type: 'user_stream_error',
+          message: 'Failed to connect to WebSocket API',
+          error: 'connection_failed'
+        }));
+      }
     }
   }
 
