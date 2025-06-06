@@ -103,7 +103,7 @@ export default function MyExchanges() {
         userWs.connect();
       }
       
-      // Wait for connection to be established with better error handling
+      // Wait for connection to be established
       const waitForConnection = () => {
         return new Promise<void>((resolve, reject) => {
           if (userWs.status === 'connected') {
@@ -112,18 +112,12 @@ export default function MyExchanges() {
           }
           
           let attempts = 0;
-          const maxAttempts = 50; // 5 seconds max wait
           const checkConnection = () => {
             attempts++;
-            console.log(`[CONNECTION] Attempt ${attempts}, status: ${userWs.status}`);
-            
             if (userWs.status === 'connected') {
-              console.log(`[CONNECTION] Connected after ${attempts} attempts`);
               resolve();
-            } else if (userWs.status === 'error') {
-              reject(new Error('WebSocket connection failed'));
-            } else if (attempts > maxAttempts) {
-              reject(new Error(`Connection timeout after ${maxAttempts} attempts`));
+            } else if (attempts > 20) { // 2 seconds max wait
+              reject(new Error('Connection timeout'));
             } else {
               setTimeout(checkConnection, 100);
             }
@@ -132,12 +126,7 @@ export default function MyExchanges() {
         });
       };
 
-      try {
-        await waitForConnection();
-      } catch (connectionError) {
-        console.error('Connection error:', connectionError);
-        throw connectionError;
-      }
+      await waitForConnection();
       
       // Send real balance request to backend via WebSocket
       const balanceRequest = {
