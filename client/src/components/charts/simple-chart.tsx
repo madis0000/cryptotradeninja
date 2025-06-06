@@ -14,13 +14,13 @@ interface MarketData {
   timestamp: number;
 }
 
-interface ChartV5Props {
+interface SimpleChartProps {
   symbol?: string;
   marketData?: MarketData;
   className?: string;
 }
 
-export function ChartV5({ symbol = 'BTCUSDT', marketData, className }: ChartV5Props) {
+export function SimpleChart({ symbol = 'BTCUSDT', marketData, className }: SimpleChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
@@ -65,7 +65,7 @@ export function ChartV5({ symbol = 'BTCUSDT', marketData, className }: ChartV5Pr
         },
       });
 
-      // Create line series using correct v5 API
+      // Add line series using correct v5 API
       const lineSeries = chart.addSeries('Line', {
         color: '#26a69a',
         lineWidth: 2,
@@ -74,20 +74,19 @@ export function ChartV5({ symbol = 'BTCUSDT', marketData, className }: ChartV5Pr
       chartRef.current = chart;
       seriesRef.current = lineSeries;
 
-      // Generate initial line data
+      // Generate simple initial data
       const now = Math.floor(Date.now() / 1000);
       const basePrice = marketData?.price || 103800;
       const initialData = [];
       
       for (let i = 100; i >= 0; i--) {
-        const timeOffset = i * 60; // 1-minute intervals
+        const timeOffset = i * 60;
         const timestamp = now - timeOffset;
-        
         const priceVariation = (Math.random() - 0.5) * 200;
         const price = basePrice + priceVariation;
         
         initialData.push({
-          time: timestamp,
+          time: timestamp as any,
           value: Math.max(0, price),
         });
       }
@@ -113,7 +112,7 @@ export function ChartV5({ symbol = 'BTCUSDT', marketData, className }: ChartV5Pr
         }
       };
     } catch (error) {
-      console.error('Chart V5 initialization error:', error);
+      console.error('Simple chart initialization error:', error);
     }
   }, []);
 
@@ -123,9 +122,9 @@ export function ChartV5({ symbol = 'BTCUSDT', marketData, className }: ChartV5Pr
 
     const currentTime = Math.floor(marketData.timestamp / 1000);
     
-    // Create line data from ticker update
+    // Update line data from ticker
     const lineData = {
-      time: currentTime,
+      time: currentTime as any,
       value: marketData.price,
     };
     

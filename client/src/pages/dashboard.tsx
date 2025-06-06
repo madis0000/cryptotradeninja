@@ -4,7 +4,7 @@ import { ActiveBots } from "@/components/dashboard/active-bots";
 import { MarketOverview } from "@/components/dashboard/market-overview";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { CreateBotModal } from "@/components/bots/create-bot-modal";
-import { ChartV5 } from "@/components/charts/chart-v5";
+import { SimpleChart } from "@/components/charts/simple-chart";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { usePublicWebSocket } from "@/hooks/useWebSocketService";
@@ -64,7 +64,7 @@ export default function Dashboard() {
         {/* Main Content */}
         <div className="xl:col-span-2 space-y-6">
           {/* TradingView Real-time Chart */}
-          <ChartV5 
+          <SimpleChart 
             symbol="BTCUSDT" 
             marketData={currentMarketData}
             className="w-full"
