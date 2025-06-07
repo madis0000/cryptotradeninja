@@ -194,7 +194,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log('Exchange update request:', { id, userId, body: req.body });
       
-      const { name, apiKey, apiSecret, wsApiEndpoint, wsStreamEndpoint, restApiEndpoint, isTestnet, exchangeType } = req.body;
+      // Handle both direct fields and nested data object
+      const requestData = req.body.data || req.body;
+      const { name, apiKey, apiSecret, wsApiEndpoint, wsStreamEndpoint, restApiEndpoint, isTestnet, exchangeType } = requestData;
       
       // Verify exchange belongs to user
       const exchange = await storage.getExchangesByUserId(userId);
