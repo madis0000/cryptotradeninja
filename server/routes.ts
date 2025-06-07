@@ -191,7 +191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const userId = req.user!.id;
-      const { name, apiKey, apiSecret } = req.body;
+      const { name, apiKey, apiSecret, wsApiEndpoint, wsStreamEndpoint, restApiEndpoint, isTestnet, exchangeType } = req.body;
       
       // Verify exchange belongs to user
       const exchange = await storage.getExchangesByUserId(userId);
@@ -200,7 +200,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Exchange not found" });
       }
 
-      let updateData: any = { name };
+      let updateData: any = {};
+      
+      // Update basic fields if provided
+      if (name !== undefined) updateData.name = name;
+      if (wsApiEndpoint !== undefined) updateData.wsApiEndpoint = wsApiEndpoint;
+      if (wsStreamEndpoint !== undefined) updateData.wsStreamEndpoint = wsStreamEndpoint;
+      if (restApiEndpoint !== undefined) updateData.restApiEndpoint = restApiEndpoint;
+      if (isTestnet !== undefined) updateData.isTestnet = isTestnet;
+      if (exchangeType !== undefined) updateData.exchangeType = exchangeType;
       
       // If new API credentials provided, encrypt them
       if (apiKey && apiSecret) {
@@ -211,11 +219,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedExchange = await storage.updateExchange(id, updateData);
       res.json({
         ...updatedExchange,
-        apiKey: updatedExchange.apiKey.slice(0, 4) + '•'.repeat(20) + updatedExchange.apiKey.slice(-4),
+        apiKey: updatedExchange.apiKey.slice(0, 4) + '•'.repeat(Math.max(8, updatedExchange.apiKey.length - 8)) + updatedExchange.apiKey.slice(-4),
         apiSecret: '•'.repeat(20),
         encryptionIv: undefined,
       });
     } catch (error) {
+      console.error('Error updating exchange:', error);
       res.status(500).json({ error: "Failed to update exchange" });
     }
   });
