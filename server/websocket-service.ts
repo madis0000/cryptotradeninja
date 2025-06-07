@@ -195,7 +195,7 @@ export class WebSocketService {
     this.isStreamsActive = true;
     
     // Start new streams with updated configuration
-    const baseUrl = 'wss://stream.testnet.binance.vision/stream?streams=';
+    const baseUrl = 'wss://stream.binance.com:9443/stream?streams=';
     
     const streamPaths = symbols.map(symbol => {
       const sym = symbol.toLowerCase();
