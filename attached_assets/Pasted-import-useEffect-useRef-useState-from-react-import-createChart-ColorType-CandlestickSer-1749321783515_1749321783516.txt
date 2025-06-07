@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,46 +7,26 @@ import { Badge } from "@/components/ui/badge";
 import { TrendingUp, Expand, BarChart3 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
-interface MarketData {
-  symbol: string;
-  price: number;
-  change: number;
-  volume: number;
-  high: number;
-  low: number;
-  timestamp: number;
-  openTime?: number;
-  closeTime?: number;
-  open?: number;
-  close?: number;
-  interval?: string;
-  isFinal?: boolean;
-}
-
-interface CandlestickChartProps {
+interface AdvancedTradingChartProps {
   symbol?: string;
-  marketData?: MarketData;
   height?: number;
-  className?: string;
 }
 
-export function CandlestickChart({ symbol = 'BTCUSDT', marketData, height = 400, className }: CandlestickChartProps) {
+export function AdvancedTradingChart({ symbol = 'BTCUSDT', height = 400 }: AdvancedTradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
   const [selectedSymbol, setSelectedSymbol] = useState(symbol);
-  const [currentPrice, setCurrentPrice] = useState<number>(0);
-  const [priceChange, setPriceChange] = useState<number>(0);
 
-  // Fetch available markets/exchanges
-  const { data: exchanges } = useQuery({
-    queryKey: ['/api/exchanges'],
-    refetchInterval: 30000,
+  // Fetch available markets
+  const { data: markets } = useQuery({
+    queryKey: ['/api/markets'],
+    refetchInterval: 5000,
   });
 
-  // Fetch candlestick data
+  // Fetch candlestick data with enhanced error handling
   const { data: candlestickData, isLoading, error } = useQuery({
-    queryKey: [`/api/klines?symbol=${selectedSymbol}&interval=1m&limit=100`],
+    queryKey: [`/api/markets/${selectedSymbol}/klines`],
     refetchInterval: 30000,
     retry: 3,
   });
@@ -80,7 +60,7 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, height = 400,
     });
 
     // Use correct TradingView Lightweight Charts v5 API
-    const candlestickSeries = chart.addCandlestickSeries({
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#00d4aa',
       downColor: '#ff4976',
       borderDownColor: '#ff4976',
@@ -110,7 +90,7 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, height = 400,
     };
   }, [height]);
 
-  // Update chart with real Binance data
+  // Update chart with your real Binance data
   useEffect(() => {
     if (!candlestickData || !seriesRef.current || !Array.isArray(candlestickData)) return;
 
@@ -122,11 +102,11 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, height = 400,
       if (candlestickData.length > 0 && Array.isArray(candlestickData[0])) {
         // Binance format or CCXT format
         processedData = candlestickData.map((kline: any) => {
-          const timestamp = Array.isArray(kline) ? kline[0] : kline.openTime;
-          const open = Array.isArray(kline) ? parseFloat(kline[1]) : parseFloat(kline.open);
-          const high = Array.isArray(kline) ? parseFloat(kline[2]) : parseFloat(kline.high);
-          const low = Array.isArray(kline) ? parseFloat(kline[3]) : parseFloat(kline.low);
-          const close = Array.isArray(kline) ? parseFloat(kline[4]) : parseFloat(kline.close);
+          const timestamp = Array.isArray(kline) ? kline[0] : kline;
+          const open = Array.isArray(kline) ? parseFloat(kline[1]) : parseFloat(kline);
+          const high = Array.isArray(kline) ? parseFloat(kline[2]) : parseFloat(kline);
+          const low = Array.isArray(kline) ? parseFloat(kline[3]) : parseFloat(kline);
+          const close = Array.isArray(kline) ? parseFloat(kline[4]) : parseFloat(kline);
           
           return {
             time: Math.floor(timestamp / 1000),
@@ -134,66 +114,26 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, height = 400,
             high,
             low,
             close,
+            value: close, // For line series fallback
           };
         });
-      } else if (candlestickData.length > 0 && typeof candlestickData[0] === 'object') {
-        // Object format from our API
-        processedData = candlestickData.map((kline: any) => ({
-          time: Math.floor((kline.openTime || kline.timestamp || Date.now()) / 1000),
-          open: parseFloat(kline.open || kline.o || 0),
-          high: parseFloat(kline.high || kline.h || 0),
-          low: parseFloat(kline.low || kline.l || 0),
-          close: parseFloat(kline.close || kline.c || 0),
-        }));
       } else {
         // Simple format fallback
         processedData = candlestickData.map((item: any, index: number) => ({
-          time: Math.floor(Date.now() / 1000) - (candlestickData.length - index) * 60,
-          open: typeof item === 'number' ? item : parseFloat(item) || 0,
-          high: typeof item === 'number' ? item : parseFloat(item) || 0,
-          low: typeof item === 'number' ? item : parseFloat(item) || 0,
-          close: typeof item === 'number' ? item : parseFloat(item) || 0,
+          time: Math.floor(Date.now() / 1000) - (candlestickData.length - index) * 3600,
+          value: typeof item === 'number' ? item : parseFloat(item) || 0,
         }));
       }
 
-      console.log('[CHART] Setting historical data:', processedData.length, 'candles');
       seriesRef.current.setData(processedData);
-      
-      if (processedData.length > 0) {
-        setCurrentPrice(processedData[processedData.length - 1].close);
-      }
     } catch (error) {
-      console.error('[CHART] Error updating chart with data:', error);
+      console.error('Error updating chart with data:', error);
     }
   }, [candlestickData]);
 
-  // Handle real-time WebSocket updates
-  useEffect(() => {
-    if (!marketData || !seriesRef.current) return;
-
-    // Handle kline updates
-    if (marketData.openTime && marketData.open !== undefined) {
-      const klineData = {
-        time: Math.floor(marketData.openTime / 1000),
-        open: parseFloat(String(marketData.open)),
-        high: parseFloat(String(marketData.high)),
-        low: parseFloat(String(marketData.low)),
-        close: parseFloat(String(marketData.close || marketData.price)),
-      };
-
-      console.log('[CHART] Processing real-time kline data:', klineData);
-      seriesRef.current.update(klineData);
-      setCurrentPrice(klineData.close);
-    }
-    // Handle market price updates
-    else if (marketData.price) {
-      setCurrentPrice(marketData.price);
-      setPriceChange(marketData.change || 0);
-    }
-  }, [marketData]);
-
-  const displayPrice = currentPrice || marketData?.price || 0;
-  const displayChange = priceChange || marketData?.change || 0;
+  const currentMarket = Array.isArray(markets) ? markets.find((m: any) => m.symbol === selectedSymbol) : null;
+  const price = currentMarket?.price ? parseFloat(currentMarket.price) : 0;
+  const change = currentMarket?.priceChangePercent24h ? parseFloat(currentMarket.priceChangePercent24h) : 0;
 
   if (error) {
     return (
@@ -208,7 +148,7 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, height = 400,
   }
 
   return (
-    <Card className={`bg-gray-900 border-gray-800 ${className}`}>
+    <Card className="bg-gray-900 border-gray-800">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div className="flex items-center space-x-2">
           <BarChart3 className="h-5 w-5 text-blue-400" />
@@ -220,15 +160,11 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, height = 400,
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-gray-800 border-gray-700">
-              <SelectItem value="BTCUSDT" className="text-white hover:bg-gray-700">
-                BTCUSDT
-              </SelectItem>
-              <SelectItem value="ETHUSDT" className="text-white hover:bg-gray-700">
-                ETHUSDT
-              </SelectItem>
-              <SelectItem value="BNBUSDT" className="text-white hover:bg-gray-700">
-                BNBUSDT
-              </SelectItem>
+              {Array.isArray(markets) && markets.map((market: any) => (
+                <SelectItem key={market.symbol} value={market.symbol} className="text-white hover:bg-gray-700">
+                  {market.symbol}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-800">
@@ -241,18 +177,18 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, height = 400,
           <div className="flex items-center space-x-4">
             <div>
               <div className="text-2xl font-bold text-white">
-                ${displayPrice.toLocaleString()}
+                ${price.toLocaleString()}
               </div>
               <div className="text-sm text-gray-400">
                 {selectedSymbol} • {isLoading ? 'Loading...' : 'Live'}
               </div>
             </div>
             <Badge 
-              variant={displayChange >= 0 ? "default" : "destructive"}
-              className={displayChange >= 0 ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}
+              variant={change >= 0 ? "default" : "destructive"}
+              className={change >= 0 ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}
             >
               <TrendingUp className="h-3 w-3 mr-1" />
-              {displayChange >= 0 ? '+' : ''}{displayChange.toFixed(2)}%
+              {change >= 0 ? '+' : ''}{change.toFixed(2)}%
             </Badge>
           </div>
         </div>
