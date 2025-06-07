@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChartRefreshButton } from './chart-refresh-button';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -205,65 +204,17 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
 
     // Only process kline data that matches the selected interval
     if (marketData.openTime && marketData.closeTime && marketData.open && marketData.close && marketData.interval === selectedInterval) {
-      // Enhanced timestamp processing and validation
-      const openTime = marketData.openTime;
-      const timeValue = Math.floor(openTime / 1000);
-      
-      // Validate timestamp is reasonable (not in distant past/future)
-      const now = Date.now() / 1000;
-      const dayAgo = now - (24 * 60 * 60);
-      const hourAhead = now + (60 * 60);
-      
-      if (timeValue < dayAgo || timeValue > hourAhead) {
-        console.log(`[CHART] Filtering invalid timestamp: ${timeValue} (${new Date(openTime).toISOString()})`);
-        return;
-      }
-
-      // Validate OHLC data integrity with strict bounds
-      const { open, high, low, close } = marketData;
-      
-      // Check for realistic price ranges (Bitcoin typically 20k-200k)
-      if (open < 20000 || open > 200000 || high < 20000 || high > 200000 || 
-          low < 20000 || low > 200000 || close < 20000 || close > 200000) {
-        console.log(`[CHART] Filtering unrealistic prices: O:${open} H:${high} L:${low} C:${close}`);
-        return;
-      }
-      
-      // Validate OHLC relationships
-      if (low > high || low > open || low > close || high < open || high < close) {
-        console.log(`[CHART] Filtering invalid OHLC: O:${open} H:${high} L:${low} C:${close}`);
-        return;
-      }
-
-      // Check for extreme price variations within single candle
-      const priceRange = high - low;
-      const avgPrice = (high + low) / 2;
-      const variationPercent = (priceRange / avgPrice) * 100;
-      
-      let maxVariation = 3; // Default for 1m
-      if (selectedInterval === '5m') maxVariation = 4;
-      else if (selectedInterval === '15m') maxVariation = 6;
-      else if (selectedInterval === '1h') maxVariation = 8;
-      else if (selectedInterval === '4h') maxVariation = 12;
-      else if (selectedInterval === '1d') maxVariation = 20;
-      
-      if (variationPercent > maxVariation) {
-        console.log(`[CHART] Filtering extreme variation: ${variationPercent.toFixed(2)}% > ${maxVariation}%`);
-        return;
-      }
-
+      // This is real kline data from WebSocket for the current interval
+      const timeValue = Math.floor(marketData.openTime / 1000);
       const klineData = {
         time: timeValue,
-        open: Number(open),
-        high: Number(high),
-        low: Number(low),
-        close: Number(close),
+        open: Number(marketData.open),
+        high: Number(marketData.high),
+        low: Number(marketData.low),
+        close: Number(marketData.close),
       };
       
-      console.log(`[CHART] Processing valid ${marketData.interval} kline:`, {
-        ...klineData,
-        variation: `${variationPercent.toFixed(2)}%`
-      });
+      console.log(`[CHART] Processing ${marketData.interval} kline data:`, klineData);
       
       try {
         // Use update for real-time updates, ensuring proper data format for Lightweight Charts v5
@@ -339,20 +290,6 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     await configureKlineStream(interval);
   };
 
-  const refreshChart = async () => {
-    console.log('[CHART] Refreshing chart with validated data');
-    if (seriesRef.current) {
-      // Clear existing data
-      seriesRef.current.setData([]);
-      
-      // Reload with current interval
-      await loadHistoricalData(selectedInterval);
-      
-      // Reconfigure WebSocket stream
-      await configureKlineStream(selectedInterval);
-    }
-  };
-
   return (
     <Card className={`bg-gray-900 border-gray-700 ${className}`}>
       <CardContent className="p-6">
@@ -378,26 +315,23 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
             )}
           </div>
 
-          {/* Chart Controls */}
-          <div className="flex items-center space-x-2">
-            <ChartRefreshButton onRefresh={refreshChart} />
-            <div className="flex space-x-1">
-              {timeframes.map((timeframe) => (
-                <Button
-                  key={timeframe.value}
-                  variant={selectedInterval === timeframe.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handleTimeframeChange(timeframe.value)}
-                  className={`px-3 py-1 text-xs border-gray-600 hover:bg-gray-700 ${
-                    selectedInterval === timeframe.value 
-                      ? 'bg-blue-600 text-white border-blue-600' 
-                      : 'text-gray-300'
-                  }`}
-                >
-                  {timeframe.label}
-                </Button>
-              ))}
-            </div>
+          {/* Timeframe Buttons */}
+          <div className="flex space-x-1">
+            {timeframes.map((timeframe) => (
+              <Button
+                key={timeframe.value}
+                variant={selectedInterval === timeframe.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleTimeframeChange(timeframe.value)}
+                className={`px-3 py-1 text-xs border-gray-600 hover:bg-gray-700 ${
+                  selectedInterval === timeframe.value 
+                    ? 'bg-blue-600 text-white border-blue-600' 
+                    : 'text-gray-300'
+                }`}
+              >
+                {timeframe.label}
+              </Button>
+            ))}
           </div>
         </div>
 

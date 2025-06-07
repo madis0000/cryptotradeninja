@@ -198,10 +198,31 @@ export class WebSocketService {
     // Re-enable streams for new interval
     this.isStreamsActive = true;
     
-    // Revert to testnet due to geo-blocking, with enhanced timestamp processing
-    let baseUrl = 'wss://stream.testnet.binance.vision/ws/';
+    // Use proper Binance single raw stream endpoints (not combined streams)
+    const { storage } = await import('./storage');
+    let baseUrl = 'wss://stream.testnet.binance.vision/ws/'; // Use single raw stream format
     
-    console.log(`[WEBSOCKET] Using testnet with enhanced timestamp validation: ${baseUrl}`);
+    try {
+      // Get the first exchange configuration for the WebSocket endpoint
+      const exchanges = await storage.getExchangesByUserId(1); // Assuming user ID 1
+      if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
+        const endpoint = exchanges[0].wsStreamEndpoint;
+        console.log(`[WEBSOCKET] Using configured endpoint: ${endpoint}`);
+        
+        // Force single raw stream format (never use combined streams)
+        if (endpoint.includes('testnet')) {
+          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
+        } else if (endpoint.includes('binance.com')) {
+          baseUrl = 'wss://stream.binance.com:9443/ws/';
+        } else {
+          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
+        }
+      } else {
+        console.log(`[WEBSOCKET] No exchange configuration found, using default testnet endpoint`);
+      }
+    } catch (error) {
+      console.error(`[WEBSOCKET] Error fetching exchange config, using default:`, error);
+    }
     
     const streamPaths = symbols.map(symbol => {
       const sym = symbol.toLowerCase();
@@ -392,51 +413,16 @@ export class WebSocketService {
               
               // CRITICAL: Only process data for the currently selected interval
               if (receivedInterval === expectedInterval) {
-                const open = parseFloat(kline.o);
-                const high = parseFloat(kline.h);
-                const low = parseFloat(kline.l);
-                const close = parseFloat(kline.c);
-                
-                // Data validation: Filter out extreme price variations (testnet anomalies)
-                const priceRange = high - low;
-                const avgPrice = (high + low) / 2;
-                const variationPercent = (priceRange / avgPrice) * 100;
-                
-                // Dynamic thresholds based on interval
-                let maxVariation = 3; // Default for 1m
-                if (receivedInterval === '5m') maxVariation = 4;
-                else if (receivedInterval === '15m') maxVariation = 6;
-                else if (receivedInterval === '1h') maxVariation = 8;
-                else if (receivedInterval === '4h') maxVariation = 12;
-                else if (receivedInterval === '1d') maxVariation = 20;
-                
-                if (variationPercent > maxVariation) {
-                  console.log(`[BINANCE STREAM] Filtering extreme variation: ${symbol} ${low} - ${high} (${variationPercent.toFixed(2)}% > ${maxVariation}%)`);
-                  return;
-                }
-                
-                // Additional check for obviously fake testnet data
-                if (low < 50000 || high > 150000) {
-                  console.log(`[BINANCE STREAM] Filtering unrealistic price range: ${symbol} ${low} - ${high}`);
-                  return;
-                }
-                
-                // Ensure OHLC data integrity
-                if (low > open || low > close || high < open || high < close) {
-                  console.log(`[BINANCE STREAM] Filtering invalid OHLC data: ${symbol} O:${open} H:${high} L:${low} C:${close}`);
-                  return;
-                }
-                
-                console.log(`[BINANCE STREAM] Processing ${receivedInterval} kline for ${symbol}: ${close}`);
+                console.log(`[BINANCE STREAM] Processing ${receivedInterval} kline for ${symbol}: ${kline.c}`);
                 
                 const klineUpdate = {
                   symbol: symbol,
                   openTime: kline.t,
                   closeTime: kline.T,
-                  open,
-                  high,
-                  low,
-                  close,
+                  open: parseFloat(kline.o),
+                  high: parseFloat(kline.h),
+                  low: parseFloat(kline.l),
+                  close: parseFloat(kline.c),
                   volume: parseFloat(kline.v),
                   interval: kline.i,
                   isFinal: kline.x,

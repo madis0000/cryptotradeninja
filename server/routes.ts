@@ -425,7 +425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { symbol = 'BTCUSDT', interval = '1m', limit = 100 } = req.query;
       
-      // Fetch historical data from Binance testnet with enhanced processing
+      // Fetch historical data from Binance testnet
       const binanceUrl = `https://testnet.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
       
       const response = await fetch(binanceUrl);
@@ -435,55 +435,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const rawData = await response.json();
       
-      // Transform and validate data to filter out extreme testnet variations
+      // Transform to match expected format
       const klineData = rawData.map((item: any[]) => ({
         openTime: parseInt(item[0]),
         closeTime: parseInt(item[6]),
-        open: parseFloat(item[1]),
-        high: parseFloat(item[2]),
-        low: parseFloat(item[3]),
-        close: parseFloat(item[4]),
-        volume: parseFloat(item[5]),
+        open: item[1],
+        high: item[2],
+        low: item[3],
+        close: item[4],
+        volume: item[5],
         trades: parseInt(item[8]),
-        quoteVolume: parseFloat(item[7]),
+        quoteVolume: item[7],
         isFinal: true
       }));
-
-      // Data validation: Filter out candles with extreme price variations (common in testnet)
-      const validatedData = klineData.filter((candle: any) => {
-        const priceRange = candle.high - candle.low;
-        const avgPrice = (candle.high + candle.low) / 2;
-        const variationPercent = (priceRange / avgPrice) * 100;
-        
-        // Dynamic thresholds based on interval
-        const intervalStr = interval as string;
-        let maxVariation = 3; // Default for 1m
-        if (intervalStr === '5m') maxVariation = 4;
-        else if (intervalStr === '15m') maxVariation = 6;
-        else if (intervalStr === '1h') maxVariation = 8;
-        else if (intervalStr === '4h') maxVariation = 12;
-        else if (intervalStr === '1d') maxVariation = 20;
-        
-        // Filter out candles with excessive variation for the interval
-        if (variationPercent > maxVariation) {
-          console.log(`[KLINES API] Filtering extreme variation: ${candle.low} - ${candle.high} (${variationPercent.toFixed(2)}% > ${maxVariation}%)`);
-          return false;
-        }
-        
-        // Additional check for obviously fake testnet data (prices below $50k or above $150k)
-        if (candle.low < 50000 || candle.high > 150000) {
-          console.log(`[KLINES API] Filtering unrealistic price range: ${candle.low} - ${candle.high}`);
-          return false;
-        }
-        
-        // Ensure all OHLC values are within reasonable bounds
-        return candle.open > 0 && candle.high > 0 && candle.low > 0 && candle.close > 0 &&
-               candle.low <= candle.open && candle.low <= candle.close &&
-               candle.high >= candle.open && candle.high >= candle.close;
-      });
-
-      console.log(`[KLINES API] Filtered ${rawData.length - validatedData.length} extreme candles, returning ${validatedData.length} valid candles`);
-      res.json(validatedData);
+      
+      res.json(klineData);
     } catch (error) {
       console.error("Failed to fetch klines:", error);
       res.status(500).json({ error: "Failed to fetch historical data" });
