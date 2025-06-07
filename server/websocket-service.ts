@@ -247,19 +247,11 @@ export class WebSocketService {
       }
     });
     
-    // Always use single stream endpoints to prevent multiple interval subscriptions
-    if (streamPaths.length === 1) {
-      const streamUrl = baseUrl + streamPaths[0];
-      console.log(`[BINANCE] Connecting to single ${dataType} stream: ${streamUrl}`);
-      this.connectToBinancePublic(streamUrl);
-    } else {
-      // For multiple symbols, create individual connections (no combined streams)
-      streamPaths.forEach(streamPath => {
-        const streamUrl = baseUrl + streamPath;
-        console.log(`[BINANCE] Connecting to individual ${dataType} stream: ${streamUrl}`);
-        this.connectToBinancePublic(streamUrl);
-      });
-    }
+    // Use subscription-based WebSocket API for precise interval control
+    const subscriptionUrl = baseUrl.replace('/ws/', '/ws');
+    console.log(`[BINANCE] Using subscription-based connection for strict interval control`);
+    console.log(`[BINANCE] Requesting streams: ${streamPaths.join(', ')}`);
+    this.connectWithSubscription(subscriptionUrl, streamPaths);
     
     // Send historical data for the new interval to connected clients
     if (dataType === 'kline' && this.marketSubscriptions.size > 0) {
@@ -274,6 +266,134 @@ export class WebSocketService {
   }
 
   // Mock data generation removed - only real exchange data
+
+  private connectWithSubscription(wsUrl: string, streamPaths: string[]) {
+    console.log('[BINANCE STREAM] Creating new subscription-based WebSocket connection to:', wsUrl);
+    
+    // Close existing connection if any
+    if (this.binancePublicWs) {
+      console.log('[BINANCE STREAM] Closing existing connection');
+      this.binancePublicWs.close();
+    }
+    
+    // Store the WebSocket reference for proper cleanup
+    this.binancePublicWs = new WebSocket(wsUrl);
+
+    this.binancePublicWs.on('open', () => {
+      console.log('[BINANCE STREAM] Connected to Binance subscription stream successfully');
+      
+      // Send subscription message for exact stream control
+      const subscriptionMessage = {
+        method: 'SUBSCRIBE',
+        params: streamPaths,
+        id: 1
+      };
+      
+      console.log(`[BINANCE STREAM] Subscribing to specific streams:`, streamPaths);
+      this.binancePublicWs?.send(JSON.stringify(subscriptionMessage));
+    });
+
+    this.binancePublicWs.on('message', (rawData) => {
+      try {
+        // Ignore messages if streams are inactive
+        if (!this.isStreamsActive) {
+          return; // Silently ignore - connection closing
+        }
+
+        const message = JSON.parse(rawData.toString());
+        console.log('[BINANCE STREAM] Received message:', JSON.stringify(message).substring(0, 200) + '...');
+        
+        // Handle subscription response
+        if (message.result === null && message.id === 1) {
+          console.log('[BINANCE STREAM] Subscription confirmed successfully');
+          return;
+        }
+        
+        // Handle both single raw stream and combined stream formats
+        let processedData = message;
+        let streamName = '';
+        
+        // Check if this is combined stream format
+        if (message.stream && message.data) {
+          streamName = message.stream;
+          processedData = message.data;
+        } else if (processedData.e === 'kline') {
+          // Single raw stream format - determine stream type from data
+          streamName = `${processedData.s.toLowerCase()}@kline_${processedData.k.i}`;
+        }
+        
+        // Only process kline data for the requested interval
+        if (streamName.includes('@kline')) {
+          const symbol = processedData.s;
+          const kline = processedData.k;
+          
+          if (symbol && kline) {
+            const receivedInterval = kline.i;
+            const expectedInterval = this.currentInterval;
+            
+            // STRICT: Only process data for the exactly requested interval
+            if (receivedInterval === expectedInterval) {
+              console.log(`[BINANCE STREAM] Processing ${receivedInterval} kline for ${symbol}: ${kline.c}`);
+              
+              const klineUpdate = {
+                symbol: symbol,
+                openTime: kline.t,
+                closeTime: kline.T,
+                open: parseFloat(kline.o),
+                high: parseFloat(kline.h),
+                low: parseFloat(kline.l),
+                close: parseFloat(kline.c),
+                volume: parseFloat(kline.v),
+                interval: kline.i,
+                isFinal: kline.x,
+                timestamp: Date.now()
+              };
+              
+              // Store and broadcast only the selected interval data
+              this.storeHistoricalKlineData(klineUpdate);
+              this.broadcastKlineUpdate(klineUpdate);
+              
+              const marketUpdate = {
+                symbol: symbol,
+                price: parseFloat(kline.c),
+                change: 0,
+                volume: parseFloat(kline.v),
+                high: parseFloat(kline.h),
+                low: parseFloat(kline.l),
+                timestamp: Date.now()
+              };
+              
+              this.marketData.set(symbol, marketUpdate);
+              this.broadcastMarketUpdate(marketUpdate);
+            } else {
+              console.log(`[BINANCE STREAM] Ignoring ${receivedInterval} data (expecting ${expectedInterval})`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[BINANCE STREAM] Error processing data:', error);
+      }
+    });
+
+    this.binancePublicWs.on('close', (code, reason) => {
+      console.log(`[BINANCE STREAM] Disconnected - Code: ${code}, Reason: ${reason}`);
+      this.binancePublicWs = null;
+      
+      // Implement reconnection logic
+      if (this.isStreamsActive) {
+        console.log('[BINANCE STREAM] Attempting reconnection in 5 seconds...');
+        setTimeout(() => {
+          if (this.isStreamsActive) {
+            this.connectWithSubscription(wsUrl, streamPaths);
+          }
+        }, 5000);
+      }
+    });
+
+    this.binancePublicWs.on('error', (error) => {
+      console.error('[BINANCE STREAM] WebSocket error:', error);
+    });
+  }
 
   private connectToBinanceWebSocketAPI(wsApiUrl: string) {
     if (this.binancePublicWs) {
@@ -412,7 +532,7 @@ export class WebSocketService {
               const receivedInterval = kline.i;
               const expectedInterval = this.currentInterval;
               
-              // CRITICAL: Only process data for the currently selected interval
+              // STRICT: Only process data for the exactly requested interval
               if (receivedInterval === expectedInterval) {
                 console.log(`[BINANCE STREAM] Processing ${receivedInterval} kline for ${symbol}: ${kline.c}`);
                 
