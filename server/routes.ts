@@ -191,6 +191,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const userId = req.user!.id;
+      
+      console.log('Exchange update request:', { id, userId, body: req.body });
+      
       const { name, apiKey, apiSecret, wsApiEndpoint, wsStreamEndpoint, restApiEndpoint, isTestnet, exchangeType } = req.body;
       
       // Verify exchange belongs to user
@@ -202,18 +205,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let updateData: any = {};
       
-      // Update basic fields if provided
-      if (name !== undefined) updateData.name = name;
+      // Update basic fields if provided (check for null vs undefined)
+      if (name !== undefined && name !== null) updateData.name = name;
       if (wsApiEndpoint !== undefined) updateData.wsApiEndpoint = wsApiEndpoint;
       if (wsStreamEndpoint !== undefined) updateData.wsStreamEndpoint = wsStreamEndpoint;
       if (restApiEndpoint !== undefined) updateData.restApiEndpoint = restApiEndpoint;
-      if (isTestnet !== undefined) updateData.isTestnet = isTestnet;
-      if (exchangeType !== undefined) updateData.exchangeType = exchangeType;
+      if (isTestnet !== undefined && isTestnet !== null) updateData.isTestnet = isTestnet;
+      if (exchangeType !== undefined && exchangeType !== null) updateData.exchangeType = exchangeType;
       
       // If new API credentials provided, encrypt them
       if (apiKey && apiSecret) {
         const encryptedCredentials = encryptApiCredentials(apiKey, apiSecret);
         updateData = { ...updateData, ...encryptedCredentials };
+      }
+      
+      console.log('Update data prepared:', updateData);
+      
+      // Only proceed with update if there's data to update
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: "No update data provided" });
       }
       
       const updatedExchange = await storage.updateExchange(id, updateData);
