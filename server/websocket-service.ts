@@ -209,13 +209,14 @@ export class WebSocketService {
         const endpoint = exchanges[0].wsStreamEndpoint;
         console.log(`[WEBSOCKET] Using configured endpoint: ${endpoint}`);
         
-        // Force single raw stream format (never use combined streams)
+        // Force single raw stream format with fallback strategy
         if (endpoint.includes('testnet')) {
           baseUrl = 'wss://stream.testnet.binance.vision/ws/';
         } else if (endpoint.includes('binance.com')) {
+          // Try production first, fallback to testnet on 451 error
           baseUrl = 'wss://stream.binance.com:9443/ws/';
         } else {
-          baseUrl = 'wss://stream.binance.com:9443/ws/';
+          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
         }
       } else {
         console.log(`[WEBSOCKET] No exchange configuration found, using production endpoint for accurate data`);
