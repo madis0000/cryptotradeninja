@@ -70,7 +70,14 @@ export default function MyExchanges() {
       console.log('Balance WebSocket response:', data);
       
       if (data.type === 'balance_update' && data.data?.balances) {
-        const targetExchangeId = currentExchangeId;
+        const targetExchangeId = currentExchangeId || data.exchangeId;
+        
+        console.log('Processing balance update:', {
+          currentExchangeId,
+          dataExchangeId: data.exchangeId,
+          targetExchangeId,
+          balancesLength: data.data.balances.length
+        });
         
         if (targetExchangeId) {
           const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
@@ -80,6 +87,8 @@ export default function MyExchanges() {
             ...prev,
             [targetExchangeId]: { balance: totalUsdtValue, loading: false }
           }));
+        } else {
+          console.log('❌ No target exchange ID found for balance update');
         }
       }
     },
