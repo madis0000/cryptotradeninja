@@ -217,8 +217,8 @@ export default function MyExchanges() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
-      setIsDialogOpen(false);
-      resetForm();
+      setIsEditDialogOpen(false);
+      resetEditForm();
       toast({
         title: "Exchange Updated",
         description: "Exchange configuration has been updated successfully.",
@@ -559,6 +559,111 @@ export default function MyExchanges() {
                 ) : null}
                 {editingExchange ? 'Update' : 'Add'} Exchange
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Exchange Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                Edit Exchange: {editingExchange?.name}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="edit-api-key">API Key</Label>
+                <Input
+                  id="edit-api-key"
+                  type="text"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter new API key"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-api-secret">API Secret</Label>
+                <Input
+                  id="edit-api-secret"
+                  type="password"
+                  value={apiSecret}
+                  onChange={(e) => setApiSecret(e.target.value)}
+                  placeholder="Enter new API secret"
+                  className="mt-1"
+                />
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Optional Endpoints</h4>
+                
+                <div>
+                  <Label htmlFor="edit-ws-api" className="text-xs">WebSocket API Endpoint</Label>
+                  <Input
+                    id="edit-ws-api"
+                    type="text"
+                    value={wsApiEndpoint}
+                    onChange={(e) => setWsApiEndpoint(e.target.value)}
+                    placeholder="wss://ws-api.binance.com:9443/ws-api/v3"
+                    className="mt-1 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-ws-stream" className="text-xs">WebSocket Stream Endpoint</Label>
+                  <Input
+                    id="edit-ws-stream"
+                    type="text"
+                    value={wsStreamEndpoint}
+                    onChange={(e) => setWsStreamEndpoint(e.target.value)}
+                    placeholder="wss://stream.binance.com:9443/ws"
+                    className="mt-1 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-rest-api" className="text-xs">REST API Endpoint</Label>
+                  <Input
+                    id="edit-rest-api"
+                    type="text"
+                    value={restApiEndpoint}
+                    onChange={(e) => setRestApiEndpoint(e.target.value)}
+                    placeholder="https://api.binance.com"
+                    className="mt-1 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-2 pt-4">
+                <Button
+                  onClick={handleUpdateExchange}
+                  disabled={updateExchangeMutation.isPending}
+                  className="flex-1"
+                >
+                  {updateExchangeMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <Settings className="h-4 w-4 mr-2" />
+                      Update Exchange
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
