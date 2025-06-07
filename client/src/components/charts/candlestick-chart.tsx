@@ -305,11 +305,11 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
                 <div className={`flex items-center space-x-1 ${priceChange > 0 ? 'text-green-500' : priceChange < 0 ? 'text-red-500' : 'text-gray-400'}`}>
                   {priceChange > 0 ? <TrendingUp className="w-4 h-4" /> : priceChange < 0 ? <TrendingDown className="w-4 h-4" /> : null}
                   <span className="text-sm">
-                    {priceChange > 0 ? '+' : ''}{priceChange.toFixed(2)}
+                    {priceChange > 0 ? '+' : ''}{(priceChange || 0).toFixed(2)}
                   </span>
                 </div>
                 <div className="text-sm text-gray-400">
-                  Vol: {marketData.volume.toFixed(2)}
+                  Vol: {(marketData.volume || 0).toFixed(2)}
                 </div>
               </div>
             )}

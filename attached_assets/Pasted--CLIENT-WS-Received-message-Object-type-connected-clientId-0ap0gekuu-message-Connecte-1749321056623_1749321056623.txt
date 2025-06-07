@@ -1,0 +1,35 @@
+[CLIENT WS] Received message: 
+Object {type: "connected", clientId: "0ap0gekuu", message: "Connected to backend WebSocket server"}
+[DASHBOARD] Received WebSocket data: 
+Object {type: "connected", clientId: "0ap0gekuu", message: "Connected to backend WebSocket server"}
+[CLIENT WS] Received message: 
+Object {type: "market_update", data: {…}}
+[DASHBOARD] Received WebSocket data: 
+Object {type: "market_update", data: {…}}
+Cannot read properties of null (reading 'toFixed')
+Cannot read properties of null (reading 'toFixed')
+The above error occurred in the <CandlestickChart> component:
+
+    at CandlestickChart (https://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev/src/components/charts/candlestick-chart.tsx:24:36)
+    at div
+    at div
+    at div
+    at Dashboard (https://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev/src/pages/dashboard.tsx:30:59)
+    at Route (https://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=933f2bc4:323:16)
+    at Switch (https://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=933f2bc4:379:17)
+    at main
+    at div
+    at AuthenticatedApp (https://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev/src/App.tsx?v=59N3Ms8-PxMK6mab4gUMC:36:22)
+    at Router (https://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev/src/App.tsx?v=59N3Ms8-PxMK6mab4gUMC:100:49)
+    at Provider (https://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-SG7MREQ6.js?v=933f2bc4:38:15)
+    at TooltipProvider (https://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=933f2bc4:59:5)
+    at AuthProvider (https://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev/src/components/auth/auth-provider.tsx:20:32)
+    at QueryClientProvider (https://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=933f2bc4:2805:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+Cannot read properties of null (reading 'toFixed')
+[CLIENT WS] Component unmounting - cleaning up WebSocket connection
+[CLIENT WS] Connection closed - Code: 1005, Reason: 
+[DASHBOARD] Disconnected from WebSocket
