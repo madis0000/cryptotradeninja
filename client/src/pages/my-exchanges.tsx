@@ -188,10 +188,7 @@ export default function MyExchanges() {
   // Mutations for CRUD operations
   const createExchangeMutation = useMutation({
     mutationFn: async (exchangeData: any) => {
-      return apiRequest('/api/exchanges', {
-        method: 'POST',
-        body: JSON.stringify(exchangeData),
-      });
+      return apiRequest('/api/exchanges', 'POST', exchangeData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
@@ -213,10 +210,7 @@ export default function MyExchanges() {
 
   const updateExchangeMutation = useMutation({
     mutationFn: async ({ id, ...exchangeData }: any) => {
-      return apiRequest(`/api/exchanges/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(exchangeData),
-      });
+      return apiRequest(`/api/exchanges/${id}`, 'PUT', exchangeData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
@@ -238,9 +232,7 @@ export default function MyExchanges() {
 
   const deleteExchangeMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest(`/api/exchanges/${id}`, {
-        method: 'DELETE',
-      });
+      return apiRequest(`/api/exchanges/${id}`, 'DELETE');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
