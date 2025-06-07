@@ -188,10 +188,14 @@ export class WebSocketService {
     this.currentStreamType = dataType;
     this.currentInterval = interval || '1m';
     
-    // Stop existing streams but keep streams active for reconnection during interval switching
-    this.stopBinanceStreams(false);
+    // Force stop all existing streams and clear data when switching intervals
+    this.stopBinanceStreams(true);
     
-    // Ensure streams remain active during interval switching
+    // Clear cached data for clean interval switch
+    this.marketData.clear();
+    this.historicalData.clear();
+    
+    // Re-enable streams for new interval
     this.isStreamsActive = true;
     
     // Get WebSocket endpoint from user's exchange configuration
@@ -205,15 +209,16 @@ export class WebSocketService {
         const endpoint = exchanges[0].wsStreamEndpoint;
         console.log(`[WEBSOCKET] Using configured endpoint: ${endpoint}`);
         
-        // Build the stream URL based on the configured endpoint
+        // Build the stream URL for single-interval streaming
         if (endpoint.includes('/stream?streams=')) {
-          baseUrl = endpoint.endsWith('streams=') ? endpoint : endpoint + 'streams=';
+          // For existing multi-stream endpoints, convert to single-stream format
+          baseUrl = endpoint.replace('/stream?streams=', '/ws/');
         } else if (endpoint.endsWith('/ws') || endpoint.includes('/ws/')) {
-          // Replace /ws or /ws/ with /stream?streams= for Binance stream endpoints
-          baseUrl = endpoint.replace(/\/ws\/?$/, '/stream?streams=');
+          // Use single WebSocket endpoint format
+          baseUrl = endpoint.replace(/\/$/, '') + '/';
         } else {
-          // Add stream path if not present
-          baseUrl = endpoint.replace(/\/$/, '') + '/stream?streams=';
+          // Default to single WebSocket format
+          baseUrl = endpoint.replace(/\/$/, '') + '/ws/';
         }
       } else {
         console.log(`[WEBSOCKET] No exchange configuration found, using default testnet endpoint`);
@@ -244,9 +249,19 @@ export class WebSocketService {
       }
     });
     
-    const streamUrl = baseUrl + streamPaths.join('/');
-    console.log(`[BINANCE] Connecting to ${dataType} stream: ${streamUrl}`);
-    this.connectToBinancePublic(streamUrl);
+    // Always use single stream endpoints to prevent multiple interval subscriptions
+    if (streamPaths.length === 1) {
+      const streamUrl = baseUrl + streamPaths[0];
+      console.log(`[BINANCE] Connecting to single ${dataType} stream: ${streamUrl}`);
+      this.connectToBinancePublic(streamUrl);
+    } else {
+      // For multiple symbols, create individual connections (no combined streams)
+      streamPaths.forEach(streamPath => {
+        const streamUrl = baseUrl + streamPath;
+        console.log(`[BINANCE] Connecting to individual ${dataType} stream: ${streamUrl}`);
+        this.connectToBinancePublic(streamUrl);
+      });
+    }
     
     // Send historical data for the new interval to connected clients
     if (dataType === 'kline' && this.marketSubscriptions.size > 0) {
