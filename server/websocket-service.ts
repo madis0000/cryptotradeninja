@@ -496,6 +496,9 @@ export class WebSocketService {
             method: 'websocket_api'
           }));
         }
+
+        // Immediately request account balance after connection
+        this.requestAccountBalance(userWs, userId, binanceExchange.id);
       });
 
       userWs.on('message', (data) => {
@@ -867,29 +870,41 @@ export class WebSocketService {
       const accountData = await response.json();
       console.log(`[WEBSOCKET] Successfully fetched account data for user ${userId}`);
 
-      // Send the real balance data to the client
-      ws.send(JSON.stringify({
-        type: 'api_response',
-        data: { 
-          balances: accountData.balances,
-          accountType: accountData.accountType,
-          canTrade: accountData.canTrade,
-          canWithdraw: accountData.canWithdraw,
-          canDeposit: accountData.canDeposit
-        },
-        exchangeId: exchangeId,
-        userId: userId
-      }));
+      // Send balance update to the client
+      const userConnection = this.userConnections.get(userId);
+      if (userConnection) {
+        userConnection.ws.send(JSON.stringify({
+          type: 'balance_update',
+          data: {
+            balances: accountData.balances,
+            accountType: accountData.accountType,
+            canTrade: accountData.canTrade,
+            canWithdraw: accountData.canWithdraw,
+            canDeposit: accountData.canDeposit,
+            method: 'websocket_api'
+          },
+          exchangeId: exchangeId,
+          userId: userId
+        }));
+      }
       
     } catch (error) {
       console.error(`[WEBSOCKET] Error fetching balance for user ${userId}:`, error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch account balance';
-      ws.send(JSON.stringify({
-        type: 'api_error',
-        error: errorMessage,
-        exchangeId: exchangeId,
-        userId: userId
-      }));
+      
+      const userConnection = this.userConnections.get(userId);
+      if (userConnection) {
+        userConnection.ws.send(JSON.stringify({
+          type: 'balance_update',
+          data: {
+            balances: [],
+            error: errorMessage,
+            method: 'websocket_api'
+          },
+          exchangeId: exchangeId,
+          userId: userId
+        }));
+      }
     }
   }
 
