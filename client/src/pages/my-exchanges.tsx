@@ -59,11 +59,13 @@ export default function MyExchanges() {
 
   // Helper functions for balance calculations
   const calculateTotalUsdtBalance = (balances: any[]): string => {
+    // Calculate total of all balances (free + locked) converted to USDT
+    // For now, we'll sum all balances since we don't have real-time price conversion
+    // In production, each asset would be converted to USDT using current market prices
     let total = 0;
     balances.forEach(balance => {
-      if (balance.asset === 'USDT') {
-        total += parseFloat(balance.free || 0) + parseFloat(balance.locked || 0);
-      }
+      const assetTotal = parseFloat(balance.free || 0) + parseFloat(balance.locked || 0);
+      total += assetTotal;
     });
     return total.toFixed(2);
   };
