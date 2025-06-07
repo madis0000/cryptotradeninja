@@ -81,7 +81,7 @@ export default function MyExchanges() {
     balances.forEach(balance => {
       total += parseFloat(balance.free || 0);
     });
-    return total.toFixed(8);
+    return total.toFixed(2);
   };
 
   const calculateTotalLocked = (balances: any[]): string => {
@@ -89,7 +89,7 @@ export default function MyExchanges() {
     balances.forEach(balance => {
       total += parseFloat(balance.locked || 0);
     });
-    return total.toFixed(8);
+    return total.toFixed(2);
   };
 
   // WebSocket for balance fetching
@@ -375,13 +375,13 @@ export default function MyExchanges() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Free</p>
                   <p className="text-base font-semibold mt-1">
-                    {balanceState.totalFree || '0.00000000'}
+                    {balanceState.totalFree || '0.00'}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Locked</p>
                   <p className="text-base font-semibold mt-1">
-                    {balanceState.totalLocked || '0.00000000'}
+                    {balanceState.totalLocked || '0.00'}
                   </p>
                 </div>
               </div>
