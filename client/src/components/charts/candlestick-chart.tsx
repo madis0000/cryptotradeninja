@@ -205,17 +205,65 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
 
     // Only process kline data that matches the selected interval
     if (marketData.openTime && marketData.closeTime && marketData.open && marketData.close && marketData.interval === selectedInterval) {
-      // This is real kline data from WebSocket for the current interval
-      const timeValue = Math.floor(marketData.openTime / 1000);
+      // Enhanced timestamp processing and validation
+      const openTime = marketData.openTime;
+      const timeValue = Math.floor(openTime / 1000);
+      
+      // Validate timestamp is reasonable (not in distant past/future)
+      const now = Date.now() / 1000;
+      const dayAgo = now - (24 * 60 * 60);
+      const hourAhead = now + (60 * 60);
+      
+      if (timeValue < dayAgo || timeValue > hourAhead) {
+        console.log(`[CHART] Filtering invalid timestamp: ${timeValue} (${new Date(openTime).toISOString()})`);
+        return;
+      }
+
+      // Validate OHLC data integrity with strict bounds
+      const { open, high, low, close } = marketData;
+      
+      // Check for realistic price ranges (Bitcoin typically 20k-200k)
+      if (open < 20000 || open > 200000 || high < 20000 || high > 200000 || 
+          low < 20000 || low > 200000 || close < 20000 || close > 200000) {
+        console.log(`[CHART] Filtering unrealistic prices: O:${open} H:${high} L:${low} C:${close}`);
+        return;
+      }
+      
+      // Validate OHLC relationships
+      if (low > high || low > open || low > close || high < open || high < close) {
+        console.log(`[CHART] Filtering invalid OHLC: O:${open} H:${high} L:${low} C:${close}`);
+        return;
+      }
+
+      // Check for extreme price variations within single candle
+      const priceRange = high - low;
+      const avgPrice = (high + low) / 2;
+      const variationPercent = (priceRange / avgPrice) * 100;
+      
+      let maxVariation = 3; // Default for 1m
+      if (selectedInterval === '5m') maxVariation = 4;
+      else if (selectedInterval === '15m') maxVariation = 6;
+      else if (selectedInterval === '1h') maxVariation = 8;
+      else if (selectedInterval === '4h') maxVariation = 12;
+      else if (selectedInterval === '1d') maxVariation = 20;
+      
+      if (variationPercent > maxVariation) {
+        console.log(`[CHART] Filtering extreme variation: ${variationPercent.toFixed(2)}% > ${maxVariation}%`);
+        return;
+      }
+
       const klineData = {
         time: timeValue,
-        open: Number(marketData.open),
-        high: Number(marketData.high),
-        low: Number(marketData.low),
-        close: Number(marketData.close),
+        open: Number(open),
+        high: Number(high),
+        low: Number(low),
+        close: Number(close),
       };
       
-      console.log(`[CHART] Processing ${marketData.interval} kline data:`, klineData);
+      console.log(`[CHART] Processing valid ${marketData.interval} kline:`, {
+        ...klineData,
+        variation: `${variationPercent.toFixed(2)}%`
+      });
       
       try {
         // Use update for real-time updates, ensuring proper data format for Lightweight Charts v5

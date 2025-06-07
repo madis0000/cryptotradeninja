@@ -425,8 +425,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { symbol = 'BTCUSDT', interval = '1m', limit = 100 } = req.query;
       
-      // Fetch historical data from production Binance API
-      const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+      // Fetch historical data from Binance testnet with enhanced processing
+      const binanceUrl = `https://testnet.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
       
       const response = await fetch(binanceUrl);
       if (!response.ok) {

@@ -198,10 +198,10 @@ export class WebSocketService {
     // Re-enable streams for new interval
     this.isStreamsActive = true;
     
-    // Use production Binance streams to test real market data quality
-    let baseUrl = 'wss://stream.binance.com:9443/ws/'; // Production Binance streams
+    // Revert to testnet due to geo-blocking, with enhanced timestamp processing
+    let baseUrl = 'wss://stream.testnet.binance.vision/ws/';
     
-    console.log(`[WEBSOCKET] Using PRODUCTION Binance endpoint for data quality testing: ${baseUrl}`);
+    console.log(`[WEBSOCKET] Using testnet with enhanced timestamp validation: ${baseUrl}`);
     
     const streamPaths = symbols.map(symbol => {
       const sym = symbol.toLowerCase();
