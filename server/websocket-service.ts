@@ -82,7 +82,7 @@ export class WebSocketService {
             // Start Binance streams with the requested symbols - Default to kline data for charts
             if (!this.isStreamsActive) {
               console.log(`[WEBSOCKET] Starting kline streams for symbols:`, symbols);
-              this.connectConfigurableStream('kline', symbols, '1m');
+              await this.connectConfigurableStream('kline', symbols, '1m');
               this.isStreamsActive = true;
             }
             
@@ -181,7 +181,7 @@ export class WebSocketService {
 
   // Removed - streams now started on-demand when frontend subscribes
 
-  public connectConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
+  public async connectConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
     console.log(`[WEBSOCKET] Configuring stream: ${dataType}, symbols: ${symbols}, interval: ${interval}`);
     
     // Update current stream configuration
@@ -194,8 +194,33 @@ export class WebSocketService {
     // Ensure streams remain active during interval switching
     this.isStreamsActive = true;
     
-    // Start new streams with updated configuration
-    const baseUrl = 'wss://stream.testnet.binance.vision/stream?streams=';
+    // Get WebSocket endpoint from user's exchange configuration
+    const { storage } = await import('./storage');
+    let baseUrl = 'wss://stream.testnet.binance.vision/stream?streams='; // fallback
+    
+    try {
+      // Get the first exchange configuration for the WebSocket endpoint
+      const exchanges = await storage.getExchangesByUserId(1); // Assuming user ID 1
+      if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
+        const endpoint = exchanges[0].wsStreamEndpoint;
+        console.log(`[WEBSOCKET] Using configured endpoint: ${endpoint}`);
+        
+        // Build the stream URL based on the configured endpoint
+        if (endpoint.includes('/stream?streams=')) {
+          baseUrl = endpoint.endsWith('streams=') ? endpoint : endpoint + 'streams=';
+        } else if (endpoint.endsWith('/ws') || endpoint.includes('/ws/')) {
+          // Replace /ws or /ws/ with /stream?streams= for Binance stream endpoints
+          baseUrl = endpoint.replace(/\/ws\/?$/, '/stream?streams=');
+        } else {
+          // Add stream path if not present
+          baseUrl = endpoint.replace(/\/$/, '') + '/stream?streams=';
+        }
+      } else {
+        console.log(`[WEBSOCKET] No exchange configuration found, using default testnet endpoint`);
+      }
+    } catch (error) {
+      console.error(`[WEBSOCKET] Error fetching exchange config, using default:`, error);
+    }
     
     const streamPaths = symbols.map(symbol => {
       const sym = symbol.toLowerCase();
