@@ -186,9 +186,9 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     if (!marketData || !seriesRef.current) return;
 
     // Handle historical klines data when switching intervals
-    if (marketData.type === 'historical_klines') {
-      console.log(`[CHART] Loading historical data for ${marketData.data.interval}:`, marketData.data.klines.length, 'candles');
-      const klineData = marketData.data.klines.map((kline: any) => ({
+    if ((marketData as any).type === 'historical_klines') {
+      console.log(`[CHART] Loading historical data for ${(marketData as any).data.interval}:`, (marketData as any).data.klines.length, 'candles');
+      const klineData = (marketData as any).data.klines.map((kline: any) => ({
         time: Math.floor(kline.openTime / 1000),
         open: Number(kline.open),
         high: Number(kline.high),
@@ -233,7 +233,10 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     }
   }, [marketData, lastPrice]);
 
-  const formatPrice = (price: number) => {
+  const formatPrice = (price: number | null | undefined) => {
+    if (price === null || price === undefined || isNaN(price)) {
+      return '$0.00';
+    }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
@@ -347,7 +350,7 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
           <div className="text-right">
             <div>Last updated: {new Date().toLocaleTimeString()}</div>
             <div className="italic text-xs text-gray-500 mt-1">
-              {exchanges && exchanges.length > 0 && exchanges[0].wsStreamEndpoint 
+              {exchanges && Array.isArray(exchanges) && exchanges.length > 0 && exchanges[0]?.wsStreamEndpoint 
                 ? `Data source: ${exchanges[0].wsStreamEndpoint}`
                 : 'Data source: Default endpoint'
               }
