@@ -1,16 +1,18 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { Loader2, Plus, Trash2, Settings, RefreshCw, AlertCircle } from "lucide-react";
 import { useUserWebSocket } from "@/hooks/useWebSocketService";
+import { EXCHANGE_OPTIONS } from "@/lib/mock-data";
 
 interface Exchange {
   id: number;
@@ -25,24 +27,42 @@ interface Exchange {
   isTestnet?: boolean;
 }
 
+interface ExchangeBalance {
+  balance: string;
+  loading: boolean;
+  error?: string;
+}
+
 export default function MyExchanges() {
-  const [activeSection, setActiveSection] = useState('general');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingExchange, setEditingExchange] = useState<Exchange | null>(null);
-  const [selectedExchange, setSelectedExchange] = useState('');
-  const [mode, setMode] = useState('testnet');
-  const [apiKey, setApiKey] = useState('');
-  const [apiSecret, setApiSecret] = useState('');
-  const [wsApiEndpoint, setWsApiEndpoint] = useState('');
-  const [wsStreamEndpoint, setWsStreamEndpoint] = useState('');
-  const [restApiEndpoint, setRestApiEndpoint] = useState('');
-  const [exchangeBalances, setExchangeBalances] = useState<Record<number, { balance: string; loading: boolean; error?: string }>>({});
-  const [currentExchangeId, setCurrentExchangeId] = useState<number | null>(null);
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
-  
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // State for exchange balances
+  const [exchangeBalances, setExchangeBalances] = useState<Record<number, ExchangeBalance>>({});
+  const [currentExchangeId, setCurrentExchangeId] = useState<number | null>(null);
+  
+  // State for add/edit exchange dialog
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedExchange, setSelectedExchange] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiSecret, setApiSecret] = useState("");
+  const [editingExchange, setEditingExchange] = useState<Exchange | null>(null);
+
+  // Fetch exchanges
+  const { data: exchanges, isLoading: exchangesLoading } = useQuery<Exchange[]>({
+    queryKey: ['/api/exchanges'],
+  });
+
+  // Helper function to calculate total USDT balance
+  const calculateTotalUsdtBalance = (balances: any[]): string => {
+    let total = 0;
+    balances.forEach(balance => {
+      if (balance.asset === 'USDT') {
+        total += parseFloat(balance.free || 0) + parseFloat(balance.locked || 0);
+      }
+    });
+    return total.toFixed(2);
+  };
 
   // WebSocket for balance fetching
   const userWs = useUserWebSocket({
@@ -50,235 +70,71 @@ export default function MyExchanges() {
       console.log('Balance WebSocket response:', data);
       
       if (data.type === 'balance_update' && data.data?.balances) {
-        console.log('Processing balance_update:', { 
-          currentExchangeId, 
-          hasBalances: !!data.data.balances,
-          balanceCount: data.data.balances?.length 
-        });
-        
-        // Find the first active exchange if currentExchangeId is null
-        const targetExchangeId = currentExchangeId || (exchanges?.length > 0 ? exchanges[0].id : null);
+        const targetExchangeId = currentExchangeId;
         
         if (targetExchangeId) {
-          // Clear any pending timeout since we received a successful response
-          if (timeoutRef) {
-            clearTimeout(timeoutRef);
-            setTimeoutRef(null);
-          }
-          
-          // Handle balance update from REST API or WebSocket API
           const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
-          const fetchMethod = data.data.method || 'websocket_api';
-          console.log(`✅ Balance fetched via ${fetchMethod.toUpperCase()}:`, totalUsdtValue, 'USDT');
+          console.log('✅ Balance fetched via WebSocket API:', totalUsdtValue, 'USDT');
           
           setExchangeBalances(prev => ({
             ...prev,
             [targetExchangeId]: { balance: totalUsdtValue, loading: false }
           }));
-          console.log('Balance updated successfully for exchange', targetExchangeId, ':', totalUsdtValue);
-        } else {
-          console.warn('Received balance_update but no valid exchange ID found');
         }
-      } else if (data.type === 'api_response' && data.data?.balances && data.exchangeId) {
-        // Handle real account balance response (legacy format)
-        const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
-        setExchangeBalances(prev => ({
-          ...prev,
-          [data.exchangeId]: { balance: totalUsdtValue, loading: false }
-        }));
-      } else if (data.type === 'balance_error' && currentExchangeId) {
-        // Handle balance errors
+      }
+    },
+    onError: (error) => {
+      console.error('WebSocket error:', error);
+      if (currentExchangeId) {
         setExchangeBalances(prev => ({
           ...prev,
           [currentExchangeId]: { 
             balance: '0.00', 
             loading: false, 
-            error: data.error || 'Failed to fetch balance'
+            error: 'Connection failed'
           }
         }));
-      } else if (data.type === 'api_error' && data.exchangeId) {
-        // Handle API errors (legacy format)
-        setExchangeBalances(prev => ({
-          ...prev,
-          [data.exchangeId]: { 
-            balance: '0.00', 
-            loading: false, 
-            error: data.error || 'Failed to fetch balance'
-          }
-        }));
-      } else if (data.type === 'user_stream_unavailable' || data.type === 'user_stream_error') {
-        console.log('User stream unavailable:', data.message);
       }
     }
   });
 
-  // Calculate total USDT value from balance array
-  const calculateTotalUsdtBalance = (balances: any[]) => {
-    if (!Array.isArray(balances)) return '0.00';
-    
-    let total = 0;
-    balances.forEach(balance => {
-      if (balance.asset === 'USDT') {
-        total += parseFloat(balance.free || 0) + parseFloat(balance.locked || 0);
-      }
-      // For other assets, we'd need price conversion which requires market data
-      // For now, just show USDT balance
-    });
-    
-    return total.toFixed(2);
-  };
-
-  // Function to fetch balance for a specific exchange
-  const fetchExchangeBalance = async (exchange: Exchange) => {
+  // Simple balance fetching function
+  const fetchExchangeBalance = (exchange: Exchange) => {
     if (!exchange.isActive || !exchange.apiKey) return;
     
-    // Set current exchange ID for tracking responses
-    setCurrentExchangeId(exchange.id);
+    console.log(`Fetching balance for exchange: ${exchange.name}`);
     
+    // Set loading state
     setExchangeBalances(prev => ({
       ...prev,
       [exchange.id]: { balance: '0.00', loading: true }
     }));
-
-    try {
-      // Connect to user WebSocket if not already connected
-      if (userWs.status !== 'connected') {
-        userWs.connect();
-      }
-      
-      // Wait for connection to be established with better retry logic
-      const waitForConnection = () => {
-        return new Promise<void>((resolve, reject) => {
-          if (userWs.status === 'connected') {
-            resolve();
-            return;
-          }
-          
-          let attempts = 0;
-          const maxAttempts = 50; // 5 seconds max wait
-          
-          const checkConnection = () => {
-            attempts++;
-            console.log(`Connection check attempt ${attempts}/${maxAttempts}, status: ${userWs.status}`);
-            
-            if (userWs.status === 'connected') {
-              console.log('✅ WebSocket connection established successfully');
-              resolve();
-            } else if (userWs.status === 'error') {
-              reject(new Error('WebSocket connection failed'));
-            } else if (attempts >= maxAttempts) {
-              console.warn('⚠️ Connection timeout, proceeding anyway');
-              resolve(); // Proceed even if connection is slow
-            } else {
-              setTimeout(checkConnection, 100);
-            }
-          };
-          checkConnection();
-        });
-      };
-
-      await waitForConnection();
-      
-      // Authenticate with the backend to trigger balance fetch
-      const authRequest = {
-        type: 'authenticate',
-        userId: 1, // This should come from auth context
-        apiKey: exchange.apiKey
-      };
-      
-      console.log('Sending authentication request for balance:', authRequest);
-      
-      // Send authentication message which will trigger balance fetch
-      try {
-        userWs.sendMessage(authRequest);
-        console.log('Authentication message sent successfully');
-      } catch (wsError) {
-        console.error('Error sending WebSocket message:', wsError);
-        throw wsError;
-      }
-      
-      // Set timeout for error handling - increased to 30 seconds for testnet
-      const timeout = setTimeout(() => {
-        setExchangeBalances(prev => {
-          if (prev[exchange.id]?.loading) {
-            return {
-              ...prev,
-              [exchange.id]: { 
-                balance: '0.00', 
-                loading: false, 
-                error: 'Request timeout - please try again'
-              }
-            };
-          }
-          return prev;
-        });
-        setTimeoutRef(null);
-      }, 30000);
-      
-      setTimeoutRef(timeout);
-      
-    } catch (error) {
-      console.error('Error in fetchExchangeBalance:', error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : undefined;
-      console.error('Error details:', {
-        message: errorMessage,
-        stack: errorStack,
-        exchangeId: exchange.id
-      });
-      // Only set error state if balance wasn't already successfully updated
-      setExchangeBalances(prev => {
-        const currentState = prev[exchange.id];
-        console.log('Current exchange state when error caught:', currentState);
-        if (currentState?.loading) {
-          console.log('Setting error state for exchange', exchange.id);
-          return {
-            ...prev,
-            [exchange.id]: { 
-              balance: '0.00', 
-              loading: false, 
-              error: 'Connection failed'
-            }
-          };
-        }
-        console.log('Not overriding successful result for exchange', exchange.id);
-        return prev; // Don't override successful results
-      });
-    }
+    
+    // Set current exchange for message handling
+    setCurrentExchangeId(exchange.id);
+    
+    // Connect using WebSocket API
+    userWs.connect(exchange.apiKey);
   };
 
-  // Mask API key to show only first 3 characters and last 3, with proper truncation
-  const maskApiKey = (apiKey: string) => {
-    if (!apiKey || apiKey.length < 6) return '***';
-    if (apiKey.length > 20) {
-      // Truncate very long keys to fit card layout
-      return apiKey.substring(0, 3) + '***' + apiKey.substring(apiKey.length - 3);
-    }
-    return apiKey.substring(0, 3) + '*'.repeat(Math.max(3, apiKey.length - 6)) + apiKey.substring(apiKey.length - 3);
-  };
-
-  // Fetch exchanges
-  const { data: exchanges = [], isLoading } = useQuery<Exchange[]>({
-    queryKey: ['/api/exchanges'],
-  });
-
-  // Auto-fetch balances when exchanges are loaded
+  // Auto-fetch balances when page loads (once only)
   useEffect(() => {
     if (exchanges && exchanges.length > 0) {
       exchanges.forEach(exchange => {
-        if (exchange.isActive && exchange.apiKey) {
-          console.log(`Auto-fetching balance for exchange: ${exchange.name}`);
+        if (exchange.isActive && exchange.apiKey && exchange.wsApiEndpoint) {
           fetchExchangeBalance(exchange);
         }
       });
     }
-  }, [exchanges, fetchExchangeBalance]);
+  }, [exchanges?.length]); // Only depend on length to prevent loops
 
-  // Add exchange mutation
-  const addExchangeMutation = useMutation({
+  // Mutations for CRUD operations
+  const createExchangeMutation = useMutation({
     mutationFn: async (exchangeData: any) => {
-      const response = await apiRequest('/api/exchanges', 'POST', exchangeData);
-      return response.json();
+      return apiRequest('/api/exchanges', {
+        method: 'POST',
+        body: JSON.stringify(exchangeData),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
@@ -286,7 +142,7 @@ export default function MyExchanges() {
       resetForm();
       toast({
         title: "Exchange Added",
-        description: "Exchange has been successfully added and configured.",
+        description: "Exchange configuration has been saved successfully.",
       });
     },
     onError: (error: any) => {
@@ -298,41 +154,20 @@ export default function MyExchanges() {
     },
   });
 
-  // Delete exchange mutation
-  const deleteExchangeMutation = useMutation({
-    mutationFn: async (exchangeId: number) => {
-      const response = await apiRequest(`/api/exchanges/${exchangeId}`, 'DELETE');
-      return response;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
-      toast({
-        title: "Exchange Removed",
-        description: "Exchange has been successfully removed.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to remove exchange",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Update exchange mutation
   const updateExchangeMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
-      const response = await apiRequest(`/api/exchanges/${id}`, 'PUT', data);
-      return response.json();
+    mutationFn: async ({ id, ...exchangeData }: any) => {
+      return apiRequest(`/api/exchanges/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(exchangeData),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
-      setIsEditDialogOpen(false);
-      resetEditForm();
+      setIsDialogOpen(false);
+      resetForm();
       toast({
         title: "Exchange Updated",
-        description: "Exchange has been successfully updated.",
+        description: "Exchange configuration has been updated successfully.",
       });
     },
     onError: (error: any) => {
@@ -344,82 +179,33 @@ export default function MyExchanges() {
     },
   });
 
+  const deleteExchangeMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest(`/api/exchanges/${id}`, {
+        method: 'DELETE',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
+      toast({
+        title: "Exchange Deleted",
+        description: "Exchange configuration has been removed.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete exchange",
+        variant: "destructive",
+      });
+    },
+  });
+
   const resetForm = () => {
-    setSelectedExchange('');
-    setMode('testnet');
-    setApiKey('');
-    setApiSecret('');
-    setWsApiEndpoint('');
-    setWsStreamEndpoint('');
-    setRestApiEndpoint('');
-  };
-
-  const resetEditForm = () => {
+    setSelectedExchange("");
+    setApiKey("");
+    setApiSecret("");
     setEditingExchange(null);
-    setApiKey('');
-    setApiSecret('');
-    setWsApiEndpoint('');
-    setWsStreamEndpoint('');
-    setRestApiEndpoint('');
-  };
-
-  const handleEditExchange = (exchange: Exchange) => {
-    setEditingExchange(exchange);
-    setApiKey(''); // Don't prefill for security
-    setApiSecret(''); // Don't prefill for security
-    setWsApiEndpoint(exchange.wsApiEndpoint || '');
-    setWsStreamEndpoint(exchange.wsStreamEndpoint || '');
-    setRestApiEndpoint(exchange.restApiEndpoint || '');
-    setIsEditDialogOpen(true);
-  };
-
-  const handleUpdateExchange = () => {
-    if (!editingExchange || !apiKey || !apiSecret) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    updateExchangeMutation.mutate({
-      id: editingExchange.id,
-      data: {
-        apiKey,
-        apiSecret,
-        wsApiEndpoint: wsApiEndpoint || null,
-        wsStreamEndpoint: wsStreamEndpoint || null,
-        restApiEndpoint: restApiEndpoint || null,
-      }
-    });
-  };
-
-  const testConnection = async () => {
-    if (!selectedExchange || !apiKey || !apiSecret) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all fields before testing connection",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      // Test connection using WebSocket API
-      userWs.connect(apiKey);
-      
-      toast({
-        title: "Connection Test Started",
-        description: "Testing API credentials with WebSocket API",
-      });
-    } catch (error) {
-      toast({
-        title: "Connection Failed",
-        description: "Unable to connect with provided credentials",
-        variant: "destructive",
-      });
-    }
   };
 
   const handleAddExchange = () => {
@@ -432,492 +218,256 @@ export default function MyExchanges() {
       return;
     }
 
-    const exchangeName = `${selectedExchange} (${mode})`;
-    addExchangeMutation.mutate({
-      name: exchangeName,
-      apiKey,
-      apiSecret,
-      wsApiEndpoint: wsApiEndpoint || null,
-      wsStreamEndpoint: wsStreamEndpoint || null,
-      restApiEndpoint: restApiEndpoint || null,
-      exchangeType: selectedExchange.toLowerCase(),
-      isTestnet: mode === 'testnet',
-    });
-  };
+    const exchangeConfig = EXCHANGE_OPTIONS.find(ex => ex.value === selectedExchange);
+    if (!exchangeConfig) return;
 
-  const handleDeleteExchange = (exchangeId: number) => {
-    if (window.confirm('Are you sure you want to remove this exchange? This action cannot be undone.')) {
-      deleteExchangeMutation.mutate(exchangeId);
+    const exchangeData = {
+      name: exchangeConfig.label,
+      exchangeType: exchangeConfig.value,
+      apiKey: apiKey.trim(),
+      apiSecret: apiSecret.trim(),
+      isActive: true,
+      isTestnet: exchangeConfig.isTestnet || false,
+      wsApiEndpoint: exchangeConfig.wsApiEndpoint,
+      wsStreamEndpoint: exchangeConfig.wsStreamEndpoint,
+      restApiEndpoint: exchangeConfig.restApiEndpoint,
+    };
+
+    if (editingExchange) {
+      updateExchangeMutation.mutate({ id: editingExchange.id, ...exchangeData });
+    } else {
+      createExchangeMutation.mutate(exchangeData);
     }
   };
 
-  const sidebarItems = [
-    { id: 'general', label: 'General', icon: 'fas fa-cog' },
-  ];
+  const handleEditExchange = (exchange: Exchange) => {
+    setEditingExchange(exchange);
+    setSelectedExchange(exchange.exchangeType || "");
+    setApiKey(exchange.apiKey);
+    setApiSecret(""); // Don't show existing secret
+    setIsDialogOpen(true);
+  };
 
-  const exchangeOptions = [
-    { value: 'binance', label: 'Binance' },
-    { value: 'binance-us', label: 'Binance US' },
-    { value: 'coinbase', label: 'Coinbase Pro' },
-    { value: 'kraken', label: 'Kraken' },
-    { value: 'bybit', label: 'Bybit' },
-  ];
-
-  const renderSidebar = () => (
-    <div className="w-72 bg-crypto-dark p-6">
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-lg font-semibold text-white mb-4">Exchange Management</h2>
-          <nav className="space-y-1">
-            {sidebarItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActiveSection(item.id)}
-                className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center space-x-3 text-sm ${
-                  activeSection === item.id
-                    ? 'bg-crypto-accent text-white'
-                    : 'text-crypto-light hover:bg-gray-800 hover:text-white'
-                }`}
-              >
-                <i className={`${item.icon} w-4`}></i>
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </nav>
-        </div>
-      </div>
-    </div>
-  );
+  const handleDeleteExchange = (id: number) => {
+    deleteExchangeMutation.mutate(id);
+  };
 
   const renderExchangeCard = (exchange: Exchange) => {
-    const balanceInfo = exchangeBalances[exchange.id];
+    const balanceState = exchangeBalances[exchange.id];
     
     return (
-      <Card key={exchange.id} className="bg-crypto-darker border-gray-800">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-white flex items-center space-x-2">
-              <i className="fas fa-exchange-alt text-crypto-accent"></i>
-              <span>{exchange.name}</span>
-            </CardTitle>
-            <Badge variant={exchange.isActive ? "default" : "secondary"} className={exchange.isActive ? "bg-crypto-success" : ""}>
-              {exchange.isActive ? 'Active' : 'Inactive'}
+      <Card key={exchange.id} className="transition-all duration-200 hover:shadow-md">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+              <span className="text-blue-600 dark:text-blue-400 font-semibold text-lg">
+                {exchange.name.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <CardTitle className="text-lg font-semibold">
+                {exchange.name}
+                {exchange.isTestnet && (
+                  <Badge variant="secondary" className="ml-2">Testnet</Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                Added {new Date(exchange.createdAt).toLocaleDateString()}
+              </CardDescription>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Badge variant={exchange.isActive ? "default" : "secondary"}>
+              {exchange.isActive ? "Active" : "Inactive"}
             </Badge>
           </div>
         </CardHeader>
+        
         <CardContent>
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label className="text-crypto-light text-sm">API Key</Label>
-              <p className="text-white font-mono text-sm bg-crypto-dark p-2 rounded mt-1">
-                {maskApiKey(exchange.apiKey)}
+              <p className="text-sm font-medium text-muted-foreground">API Key</p>
+              <p className="text-sm font-mono bg-muted p-2 rounded mt-1">
+                {exchange.apiKey.substring(0, 8)}...{exchange.apiKey.slice(-4)}
               </p>
             </div>
-
             <div>
-              <Label className="text-crypto-light text-sm">Available Balance</Label>
-              <div className="flex items-center space-x-2 mt-1">
-                {balanceInfo?.loading ? (
+              <p className="text-sm font-medium text-muted-foreground">Balance (USDT)</p>
+              <div className="flex items-center mt-1">
+                {balanceState?.loading ? (
                   <div className="flex items-center space-x-2">
-                    <i className="fas fa-spinner fa-spin text-crypto-accent"></i>
-                    <span className="text-sm text-crypto-light">Loading...</span>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">Loading...</span>
                   </div>
-                ) : balanceInfo?.error ? (
-                  <div className="flex items-center space-x-2">
-                    <i className="fas fa-exclamation-triangle text-yellow-500"></i>
-                    <span className="text-sm text-yellow-500">{balanceInfo.error}</span>
-                  </div>
-                ) : exchange.isActive ? (
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-white font-semibold">
-                      ${balanceInfo?.balance || '0.00'} USDT
-                    </span>
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      className="h-6 px-2 text-xs text-crypto-accent hover:bg-crypto-accent/10"
-                      onClick={() => fetchExchangeBalance(exchange)}
-                    >
-                      <i className="fas fa-sync-alt mr-1"></i>
-                      Refresh
-                    </Button>
+                ) : balanceState?.error ? (
+                  <div className="flex items-center space-x-2 text-red-600 dark:text-red-400">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="text-sm">{balanceState.error}</span>
                   </div>
                 ) : (
-                  <span className="text-sm text-gray-500">Connect to view balance</span>
+                  <span className="text-lg font-semibold">
+                    ${balanceState?.balance || '0.00'}
+                  </span>
                 )}
               </div>
             </div>
+          </div>
+          
+          <Separator className="my-4" />
+          
+          <div className="flex items-center justify-between">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchExchangeBalance(exchange)}
+              disabled={balanceState?.loading}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh Balance
+            </Button>
             
-            <div>
-              <Label className="text-crypto-light text-sm">Status</Label>
-              <div className="flex items-center space-x-2 mt-1">
-                <div className={`w-2 h-2 rounded-full ${exchange.isActive ? 'bg-crypto-success' : 'bg-gray-500'}`}></div>
-                <span className="text-sm text-crypto-light">
-                  {exchange.isActive ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-            </div>
-            
-            <div>
-              <Label className="text-crypto-light text-sm">Added</Label>
-              <p className="text-crypto-light text-sm mt-1">
-                {new Date(exchange.createdAt).toLocaleDateString()}
-              </p>
-            </div>
-            
-            <div className="flex space-x-2 pt-2">
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="border-gray-700 text-crypto-light hover:bg-gray-800"
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => handleEditExchange(exchange)}
               >
-                <i className="fas fa-edit mr-2"></i>
+                <Settings className="h-4 w-4 mr-2" />
                 Edit
               </Button>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="border-red-700 text-red-400 hover:bg-red-900"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => handleDeleteExchange(exchange.id)}
                 disabled={deleteExchangeMutation.isPending}
               >
-                <i className="fas fa-trash mr-2"></i>
-                {deleteExchangeMutation.isPending ? 'Removing...' : 'Remove'}
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
               </Button>
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
     );
   };
 
-  const renderAddExchangeDialog = () => (
-    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-      <DialogTrigger asChild>
-        <Button className="bg-crypto-accent hover:bg-crypto-accent/80 text-white">
-          <i className="fas fa-plus mr-2"></i>
-          Add Exchange
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="bg-crypto-darker border-gray-800 text-white max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-white">Add New Exchange</DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-4 py-4">
-          <div>
-            <Label htmlFor="exchange" className="text-crypto-light">Exchange</Label>
-            <Select value={selectedExchange} onValueChange={setSelectedExchange}>
-              <SelectTrigger className="mt-1 bg-crypto-dark border-gray-700 text-white">
-                <SelectValue placeholder="Select an exchange" />
-              </SelectTrigger>
-              <SelectContent className="bg-crypto-dark border-gray-700">
-                {exchangeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value} className="text-white">
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="mode" className="text-crypto-light">Mode</Label>
-            <Select value={mode} onValueChange={setMode}>
-              <SelectTrigger className="mt-1 bg-crypto-dark border-gray-700 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-crypto-dark border-gray-700">
-                <SelectItem value="testnet" className="text-white">Testnet</SelectItem>
-                <SelectItem value="live" className="text-white">Live</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="api-key" className="text-crypto-light">API Key</Label>
-            <Input
-              id="api-key"
-              type="text"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter your API key"
-              className="mt-1 bg-crypto-dark border-gray-700 text-white"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="api-secret" className="text-crypto-light">API Secret</Label>
-            <Input
-              id="api-secret"
-              type="password"
-              value={apiSecret}
-              onChange={(e) => setApiSecret(e.target.value)}
-              placeholder="Enter your API secret"
-              className="mt-1 bg-crypto-dark border-gray-700 text-white"
-            />
-          </div>
-
-          <Separator className="bg-gray-800" />
-
-          <div className="space-y-4">
-            <h4 className="text-md font-medium text-white">Endpoint Configuration (Optional)</h4>
-            
-            <div>
-              <Label htmlFor="ws-api-endpoint" className="text-crypto-light">WebSocket API Endpoint</Label>
-              <Input
-                id="ws-api-endpoint"
-                type="url"
-                value={wsApiEndpoint}
-                onChange={(e) => setWsApiEndpoint(e.target.value)}
-                placeholder="wss://ws-api.testnet.binance.vision/ws-api/v3"
-                className="mt-1 bg-crypto-dark border-gray-700 text-white"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="ws-stream-endpoint" className="text-crypto-light">WebSocket Stream Endpoint</Label>
-              <Input
-                id="ws-stream-endpoint"
-                type="url"
-                value={wsStreamEndpoint}
-                onChange={(e) => setWsStreamEndpoint(e.target.value)}
-                placeholder="wss://stream.binance.com:9443/ws/"
-                className="mt-1 bg-crypto-dark border-gray-700 text-white"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="rest-api-endpoint" className="text-crypto-light">REST API Endpoint</Label>
-              <Input
-                id="rest-api-endpoint"
-                type="url"
-                value={restApiEndpoint}
-                onChange={(e) => setRestApiEndpoint(e.target.value)}
-                placeholder="https://testnet.binance.vision"
-                className="mt-1 bg-crypto-dark border-gray-700 text-white"
-              />
-            </div>
-          </div>
-
-          <Separator className="bg-gray-800" />
-
-          <div className="flex space-x-2">
-            <Button
-              onClick={testConnection}
-              disabled={isTestingConnection}
-              variant="outline"
-              className="border-gray-700 text-crypto-light hover:bg-gray-800 flex-1"
-            >
-              {isTestingConnection ? (
-                <>
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
-                  Testing...
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-plug mr-2"></i>
-                  Test Connection
-                </>
-              )}
-            </Button>
-            
-            <Button
-              onClick={handleAddExchange}
-              disabled={addExchangeMutation.isPending}
-              className="bg-crypto-success hover:bg-crypto-success/80 text-white flex-1"
-            >
-              {addExchangeMutation.isPending ? (
-                <>
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
-                  Adding...
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-plus mr-2"></i>
-                  Add Exchange
-                </>
-              )}
-            </Button>
-          </div>
+  if (exchangesLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin" />
         </div>
-      </DialogContent>
-    </Dialog>
-  );
+      </div>
+    );
+  }
 
-  const renderEditExchangeDialog = () => (
-    <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-      <DialogContent className="bg-crypto-darker border-gray-800 text-white max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-white">
-            Edit Exchange: {editingExchange?.name}
-          </DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-4 py-4">
-          <div>
-            <Label htmlFor="edit-api-key" className="text-crypto-light">API Key</Label>
-            <Input
-              id="edit-api-key"
-              type="text"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter new API key"
-              className="mt-1 bg-crypto-dark border-gray-700 text-white"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="edit-api-secret" className="text-crypto-light">API Secret</Label>
-            <Input
-              id="edit-api-secret"
-              type="password"
-              value={apiSecret}
-              onChange={(e) => setApiSecret(e.target.value)}
-              placeholder="Enter new API secret"
-              className="mt-1 bg-crypto-dark border-gray-700 text-white"
-            />
-          </div>
-
-          <Separator className="bg-gray-800" />
-
-          <div className="space-y-3">
-            <h4 className="text-sm font-medium text-crypto-light">Optional Endpoints</h4>
-            
-            <div>
-              <Label htmlFor="edit-ws-api" className="text-crypto-light text-xs">WebSocket API Endpoint</Label>
-              <Input
-                id="edit-ws-api"
-                type="text"
-                value={wsApiEndpoint}
-                onChange={(e) => setWsApiEndpoint(e.target.value)}
-                placeholder="wss://ws-api.binance.com:9443/ws-api/v3"
-                className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="edit-ws-stream" className="text-crypto-light text-xs">WebSocket Stream Endpoint</Label>
-              <Input
-                id="edit-ws-stream"
-                type="text"
-                value={wsStreamEndpoint}
-                onChange={(e) => setWsStreamEndpoint(e.target.value)}
-                placeholder="wss://stream.binance.com:9443/ws"
-                className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="edit-rest-api" className="text-crypto-light text-xs">REST API Endpoint</Label>
-              <Input
-                id="edit-rest-api"
-                type="text"
-                value={restApiEndpoint}
-                onChange={(e) => setRestApiEndpoint(e.target.value)}
-                placeholder="https://api.binance.com"
-                className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="flex space-x-2 pt-4">
-            <Button
-              onClick={handleUpdateExchange}
-              disabled={updateExchangeMutation.isPending}
-              className="flex-1 bg-crypto-accent hover:bg-crypto-accent/80"
-            >
-              {updateExchangeMutation.isPending ? (
-                <>
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
-                  Updating...
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-save mr-2"></i>
-                  Update Exchange
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-              className="border-gray-700 text-crypto-light hover:bg-gray-800"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-
-  const renderGeneralSection = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h3 className="text-xl font-semibold text-white">Exchange Configuration</h3>
-          <p className="text-crypto-light mt-1">
-            Manage your cryptocurrency exchange API connections for trading and data access.
+          <h1 className="text-3xl font-bold tracking-tight">My Exchanges</h1>
+          <p className="text-muted-foreground mt-2">
+            Manage your cryptocurrency exchange connections
           </p>
         </div>
-        {renderAddExchangeDialog()}
+        
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Exchange
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>
+                {editingExchange ? 'Edit Exchange' : 'Add New Exchange'}
+              </DialogTitle>
+              <DialogDescription>
+                Configure your exchange API credentials to enable trading
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="exchange">Exchange</Label>
+                <Select value={selectedExchange} onValueChange={setSelectedExchange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an exchange" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXCHANGE_OPTIONS.map((exchange) => (
+                      <SelectItem key={exchange.value} value={exchange.value}>
+                        {exchange.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="grid gap-2">
+                <Label htmlFor="apiKey">API Key</Label>
+                <Input
+                  id="apiKey"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter your API key"
+                />
+              </div>
+              
+              <div className="grid gap-2">
+                <Label htmlFor="apiSecret">API Secret</Label>
+                <Input
+                  id="apiSecret"
+                  type="password"
+                  value={apiSecret}
+                  onChange={(e) => setApiSecret(e.target.value)}
+                  placeholder="Enter your API secret"
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleAddExchange}
+                disabled={createExchangeMutation.isPending || updateExchangeMutation.isPending}
+              >
+                {createExchangeMutation.isPending || updateExchangeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                {editingExchange ? 'Update' : 'Add'} Exchange
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <Separator className="bg-gray-800" />
-
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="bg-crypto-darker border-gray-800 animate-pulse">
-              <CardHeader>
-                <div className="h-6 bg-gray-700 rounded w-3/4"></div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="h-4 bg-gray-700 rounded w-full"></div>
-                  <div className="h-4 bg-gray-700 rounded w-2/3"></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : exchanges && exchanges.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {exchanges && exchanges.length > 0 ? (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {exchanges.map(renderExchangeCard)}
         </div>
       ) : (
-        <Card className="bg-crypto-darker border-gray-800">
-          <CardContent className="text-center py-12">
-            <div className="text-crypto-light mb-4">
-              <i className="fas fa-exchange-alt text-4xl text-gray-600"></i>
+        <Card className="text-center py-12">
+          <CardContent>
+            <div className="mx-auto max-w-sm">
+              <div className="mb-4">
+                <Settings className="mx-auto h-12 w-12 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">No Exchanges Connected</h3>
+              <p className="text-muted-foreground mb-4">
+                Connect your first exchange to start trading
+              </p>
+              <Button onClick={() => setIsDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Your First Exchange
+              </Button>
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">No Exchanges Connected</h3>
-            <p className="text-crypto-light mb-6">
-              Connect your first exchange to start trading and accessing market data.
-            </p>
-            {renderAddExchangeDialog()}
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen bg-crypto-darker">
-      <div className="flex">
-        {renderSidebar()}
-        
-        <div className="flex-1">
-          <div className="p-8">
-            {activeSection === 'general' && renderGeneralSection()}
-          </div>
-        </div>
-      </div>
-      
-      {/* Dialogs */}
-      {renderEditExchangeDialog()}
     </div>
   );
 }
