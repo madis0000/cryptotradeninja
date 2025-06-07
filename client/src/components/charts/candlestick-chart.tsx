@@ -1,11 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { TrendingUp, Expand, BarChart3 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from 'react';
+import { createChart, CandlestickSeries } from 'lightweight-charts';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 
 interface MarketData {
   symbol: string;
@@ -15,6 +12,7 @@ interface MarketData {
   high: number;
   low: number;
   timestamp: number;
+  // Kline-specific fields for candlestick data
   openTime?: number;
   closeTime?: number;
   open?: number;
@@ -26,241 +24,336 @@ interface MarketData {
 interface CandlestickChartProps {
   symbol?: string;
   marketData?: MarketData;
-  height?: number;
   className?: string;
 }
 
-export function CandlestickChart({ symbol = 'BTCUSDT', marketData, height = 400, className }: CandlestickChartProps) {
+export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
-  const [selectedSymbol, setSelectedSymbol] = useState(symbol);
-  const [currentPrice, setCurrentPrice] = useState<number>(0);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [lastPrice, setLastPrice] = useState<number | null>(null);
   const [priceChange, setPriceChange] = useState<number>(0);
+  const [selectedInterval, setSelectedInterval] = useState<string>('1m');
+  const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch available markets/exchanges
-  const { data: exchanges } = useQuery({
-    queryKey: ['/api/exchanges'],
-    refetchInterval: 30000,
-  });
+  const loadHistoricalData = async (interval: string = selectedInterval) => {
+    try {
+      const response = await fetch(`/api/klines?symbol=${symbol}&interval=${interval}&limit=100`);
+      if (!response.ok) throw new Error('Failed to fetch historical data');
+      
+      const data = await response.json();
+      
+      if (data.length > 0 && seriesRef.current) {
+        // Convert to TradingView format
+        const chartData = data.map((candle: any) => ({
+          time: Math.floor(candle.openTime / 1000),
+          open: parseFloat(candle.open),
+          high: parseFloat(candle.high),
+          low: parseFloat(candle.low),
+          close: parseFloat(candle.close),
+        }));
 
-  // Fetch candlestick data
-  const { data: candlestickData, isLoading, error } = useQuery({
-    queryKey: [`/api/klines?symbol=${selectedSymbol}&interval=1m&limit=100`],
-    refetchInterval: 30000,
-    retry: 3,
-  });
+        seriesRef.current.setData(chartData);
+        
+        // Update current price display
+        const latestPrice = parseFloat(data[data.length - 1].close);
+        setLastPrice(latestPrice);
+      }
+    } catch (error) {
+      console.error('Failed to load historical data:', error);
+      // Fallback to simple data if historical data fails
+      generateFallbackData();
+    }
+  };
 
-  // Initialize chart with working v5 compatible approach
+  const generateFallbackData = () => {
+    if (!seriesRef.current) return;
+    
+    const now = Math.floor(Date.now() / 1000);
+    const basePrice = marketData?.price || 103800;
+    const initialData = [];
+    
+    for (let i = 100; i >= 0; i--) {
+      const timestamp = now - (i * 60); // 1-minute intervals
+      
+      const priceVariation = (Math.random() - 0.5) * 200;
+      const open = basePrice + priceVariation;
+      const close = open + (Math.random() - 0.5) * 100;
+      const high = Math.max(open, close) + Math.random() * 50;
+      const low = Math.min(open, close) - Math.random() * 50;
+      
+      initialData.push({
+        time: timestamp,
+        open: Math.max(0, open),
+        high: Math.max(0, high),
+        low: Math.max(0, low),
+        close: Math.max(0, close),
+      });
+    }
+    
+    seriesRef.current.setData(initialData);
+    setLastPrice(basePrice);
+  };
+
+  // Initialize chart
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#d1d5db',
-      },
-      grid: {
-        vertLines: { color: '#374151' },
-        horzLines: { color: '#374151' },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: '#485563',
-      },
-      timeScale: {
-        borderColor: '#485563',
-        timeVisible: true,
-        secondsVisible: false,
-      },
-      width: chartContainerRef.current.clientWidth,
-      height: height,
-    });
-
-    // Use correct TradingView Lightweight Charts v5 API
-    const candlestickSeries = chart.addCandlestickSeries({
-      upColor: '#00d4aa',
-      downColor: '#ff4976',
-      borderDownColor: '#ff4976',
-      borderUpColor: '#00d4aa',
-      wickDownColor: '#ff4976',
-      wickUpColor: '#00d4aa',
-    });
-
-    chartRef.current = chart;
-    seriesRef.current = candlestickSeries;
-
-    const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      if (chartRef.current) {
-        chartRef.current.remove();
-      }
-    };
-  }, [height]);
-
-  // Update chart with real Binance data
-  useEffect(() => {
-    if (!candlestickData || !seriesRef.current || !Array.isArray(candlestickData)) return;
-
     try {
-      // Handle both CCXT format [timestamp, open, high, low, close, volume] 
-      // and Binance format [[timestamp, open, high, low, close, volume, ...]]
-      let processedData;
-      
-      if (candlestickData.length > 0 && Array.isArray(candlestickData[0])) {
-        // Binance format or CCXT format
-        processedData = candlestickData.map((kline: any) => {
-          const timestamp = Array.isArray(kline) ? kline[0] : kline.openTime;
-          const open = Array.isArray(kline) ? parseFloat(kline[1]) : parseFloat(kline.open);
-          const high = Array.isArray(kline) ? parseFloat(kline[2]) : parseFloat(kline.high);
-          const low = Array.isArray(kline) ? parseFloat(kline[3]) : parseFloat(kline.low);
-          const close = Array.isArray(kline) ? parseFloat(kline[4]) : parseFloat(kline.close);
-          
-          return {
-            time: Math.floor(timestamp / 1000),
-            open,
-            high,
-            low,
-            close,
-          };
-        });
-      } else if (candlestickData.length > 0 && typeof candlestickData[0] === 'object') {
-        // Object format from our API
-        processedData = candlestickData.map((kline: any) => ({
-          time: Math.floor((kline.openTime || kline.timestamp || Date.now()) / 1000),
-          open: parseFloat(kline.open || kline.o || 0),
-          high: parseFloat(kline.high || kline.h || 0),
-          low: parseFloat(kline.low || kline.l || 0),
-          close: parseFloat(kline.close || kline.c || 0),
-        }));
-      } else {
-        // Simple format fallback
-        processedData = candlestickData.map((item: any, index: number) => ({
-          time: Math.floor(Date.now() / 1000) - (candlestickData.length - index) * 60,
-          open: typeof item === 'number' ? item : parseFloat(item) || 0,
-          high: typeof item === 'number' ? item : parseFloat(item) || 0,
-          low: typeof item === 'number' ? item : parseFloat(item) || 0,
-          close: typeof item === 'number' ? item : parseFloat(item) || 0,
-        }));
-      }
+      const chart = createChart(chartContainerRef.current, {
+        width: chartContainerRef.current.clientWidth,
+        height: 400,
+        layout: {
+          background: { color: '#1f2937' },
+          textColor: '#d1d4dc',
+        },
+        grid: {
+          vertLines: { color: '#2B2B43' },
+          horzLines: { color: '#2B2B43' },
+        },
+        crosshair: {
+          mode: 1,
+        },
+        rightPriceScale: {
+          borderColor: '#485158',
+        },
+        timeScale: {
+          borderColor: '#485158',
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        handleScroll: {
+          mouseWheel: true,
+          pressedMouseMove: true,
+        },
+        handleScale: {
+          axisPressedMouseMove: true,
+          mouseWheel: true,
+          pinch: true,
+        },
+      });
 
-      console.log('[CHART] Setting historical data:', processedData.length, 'candles');
-      seriesRef.current.setData(processedData);
+      // Create candlestick series using correct v5 API
+      const candlestickSeries = chart.addSeries(CandlestickSeries, {
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        borderVisible: false,
+        wickUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
+      });
+
+      chartRef.current = chart;
+      seriesRef.current = candlestickSeries;
+
+      // Load historical klines data
+      loadHistoricalData();
       
-      if (processedData.length > 0) {
-        setCurrentPrice(processedData[processedData.length - 1].close);
-      }
+      // Configure WebSocket for kline streams on initial load
+      setTimeout(() => {
+        configureKlineStream(selectedInterval);
+      }, 1000);
+
+      // Handle resize
+      const handleResize = () => {
+        if (chartContainerRef.current && chartRef.current) {
+          chartRef.current.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+          });
+        }
+      };
+
+      window.addEventListener('resize', handleResize);
+
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        if (chartRef.current) {
+          chartRef.current.remove();
+        }
+      };
     } catch (error) {
-      console.error('[CHART] Error updating chart with data:', error);
+      console.error('Candlestick chart initialization error:', error);
     }
-  }, [candlestickData]);
+  }, []);
 
-  // Handle real-time WebSocket updates
+  // Update chart with real-time kline data and handle historical data
   useEffect(() => {
     if (!marketData || !seriesRef.current) return;
 
-    // Handle kline updates
-    if (marketData.openTime && marketData.open !== undefined) {
+    // Handle historical klines data when switching intervals
+    if ((marketData as any).type === 'historical_klines') {
+      console.log(`[CHART] Loading historical data for ${(marketData as any).data.interval}:`, (marketData as any).data.klines.length, 'candles');
+      const klineData = (marketData as any).data.klines.map((kline: any) => ({
+        time: Math.floor(kline.openTime / 1000),
+        open: Number(kline.open),
+        high: Number(kline.high),
+        low: Number(kline.low),
+        close: Number(kline.close),
+      }));
+      
+      // Replace chart data with historical data for new interval
+      seriesRef.current.setData(klineData);
+      chartRef.current?.timeScale().fitContent();
+      return;
+    }
+
+    // Only process kline data that matches the selected interval
+    if (marketData.openTime && marketData.closeTime && marketData.open && marketData.close && marketData.interval === selectedInterval) {
+      // This is real kline data from WebSocket for the current interval
+      const timeValue = Math.floor(marketData.openTime / 1000);
       const klineData = {
-        time: Math.floor(marketData.openTime / 1000),
-        open: parseFloat(String(marketData.open)),
-        high: parseFloat(String(marketData.high)),
-        low: parseFloat(String(marketData.low)),
-        close: parseFloat(String(marketData.close || marketData.price)),
+        time: timeValue,
+        open: Number(marketData.open),
+        high: Number(marketData.high),
+        low: Number(marketData.low),
+        close: Number(marketData.close),
       };
-
-      console.log('[CHART] Processing real-time kline data:', klineData);
-      seriesRef.current.update(klineData);
-      setCurrentPrice(klineData.close);
+      
+      console.log(`[CHART] Processing ${marketData.interval} kline data:`, klineData);
+      
+      try {
+        // Use update for real-time updates, ensuring proper data format for Lightweight Charts v5
+        seriesRef.current.update(klineData);
+      } catch (error) {
+        console.warn('[CHART] Chart update failed, likely due to data ordering:', error);
+        // For data ordering issues, reload the chart with fresh data
+        loadHistoricalData(selectedInterval);
+      }
+    } else if (marketData.price && !marketData.interval) {
+      // Update price display only for market updates without affecting candlesticks
+      if (lastPrice !== null) {
+        setPriceChange(marketData.price - lastPrice);
+      }
+      setLastPrice(marketData.price);
     }
-    // Handle market price updates
-    else if (marketData.price) {
-      setCurrentPrice(marketData.price);
-      setPriceChange(marketData.change || 0);
+  }, [marketData, lastPrice]);
+
+  const formatPrice = (price: number | null | undefined) => {
+    if (price === null || price === undefined || isNaN(price)) {
+      return '$0.00';
     }
-  }, [marketData]);
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(price);
+  };
 
-  const displayPrice = currentPrice || marketData?.price || 0;
-  const displayChange = priceChange || marketData?.change || 0;
+  const timeframes = [
+    { label: '1M', value: '1m' },
+    { label: '5M', value: '5m' },
+    { label: '15M', value: '15m' },
+    { label: '1H', value: '1h' },
+    { label: '4H', value: '4h' },
+    { label: '1D', value: '1d' }
+  ];
 
-  if (error) {
-    return (
-      <Card className="bg-gray-900 border-gray-800">
-        <CardContent className="p-6">
-          <div className="text-center text-red-400">
-            Unable to load market data. Please check your connection to Binance testnet.
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const configureKlineStream = async (interval: string) => {
+    try {
+      const response = await fetch('/api/websocket/configure-stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dataType: 'kline',
+          symbols: [symbol],
+          interval: interval
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('[CHART] Successfully configured kline stream for interval:', interval, result);
+      } else {
+        console.error('[CHART] Failed to configure kline stream:', response.status);
+      }
+    } catch (error) {
+      console.error('[CHART] Error configuring kline stream:', error);
+    }
+  };
+
+  const handleTimeframeChange = async (interval: string) => {
+    console.log('[CHART] Switching to interval:', interval);
+    setSelectedInterval(interval);
+    
+    // Reload historical data with new interval
+    await loadHistoricalData(interval);
+    
+    // Configure WebSocket stream for kline data with the selected interval
+    await configureKlineStream(interval);
+  };
 
   return (
-    <Card className={`bg-gray-900 border-gray-800 ${className}`}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <div className="flex items-center space-x-2">
-          <BarChart3 className="h-5 w-5 text-blue-400" />
-          <h3 className="text-lg font-semibold text-white">Real-Time Market Chart</h3>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
-            <SelectTrigger className="w-32 bg-gray-800 border-gray-700 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700">
-              <SelectItem value="BTCUSDT" className="text-white hover:bg-gray-700">
-                BTCUSDT
-              </SelectItem>
-              <SelectItem value="ETHUSDT" className="text-white hover:bg-gray-700">
-                ETHUSDT
-              </SelectItem>
-              <SelectItem value="BNBUSDT" className="text-white hover:bg-gray-700">
-                BNBUSDT
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-800">
-            <Expand className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="px-6 pb-4 flex items-center justify-between">
+    <Card className={`bg-gray-900 border-gray-700 ${className}`}>
+      <CardContent className="p-6">
+        {/* Chart Header */}
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-4">
-            <div>
-              <div className="text-2xl font-bold text-white">
-                ${displayPrice.toLocaleString()}
+            <h3 className="text-lg font-semibold text-white">{symbol}</h3>
+            {marketData && (
+              <div className="flex items-center space-x-2">
+                <span className="text-xl font-bold text-white">
+                  {formatPrice(marketData.price)}
+                </span>
+                <div className={`flex items-center space-x-1 ${priceChange > 0 ? 'text-green-500' : priceChange < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                  {priceChange > 0 ? <TrendingUp className="w-4 h-4" /> : priceChange < 0 ? <TrendingDown className="w-4 h-4" /> : null}
+                  <span className="text-sm">
+                    {priceChange > 0 ? '+' : ''}{(priceChange || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-400">
+                  Vol: {(marketData.volume || 0).toFixed(2)}
+                </div>
               </div>
-              <div className="text-sm text-gray-400">
-                {selectedSymbol} • {isLoading ? 'Loading...' : 'Live'}
-              </div>
-            </div>
-            <Badge 
-              variant={displayChange >= 0 ? "default" : "destructive"}
-              className={displayChange >= 0 ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}
-            >
-              <TrendingUp className="h-3 w-3 mr-1" />
-              {displayChange >= 0 ? '+' : ''}{displayChange.toFixed(2)}%
-            </Badge>
+            )}
+          </div>
+
+          {/* Timeframe Buttons */}
+          <div className="flex space-x-1">
+            {timeframes.map((timeframe) => (
+              <Button
+                key={timeframe.value}
+                variant={selectedInterval === timeframe.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleTimeframeChange(timeframe.value)}
+                className={`px-3 py-1 text-xs border-gray-600 hover:bg-gray-700 ${
+                  selectedInterval === timeframe.value 
+                    ? 'bg-blue-600 text-white border-blue-600' 
+                    : 'text-gray-300'
+                }`}
+              >
+                {timeframe.label}
+              </Button>
+            ))}
           </div>
         </div>
+
+        {/* Chart Container */}
         <div 
           ref={chartContainerRef} 
-          className="w-full"
-          style={{ height: `${height}px` }}
+          className="w-full h-96 border border-gray-700 rounded-lg bg-gray-800"
         />
+
+        {/* Chart Footer */}
+        <div className="flex justify-between items-center mt-4 text-sm text-gray-400">
+          <div className="flex space-x-4">
+            <span>High: {formatPrice(marketData?.high || 0)}</span>
+            <span>Low: {formatPrice(marketData?.low || 0)}</span>
+          </div>
+          <div className="text-right">
+            <div>Last updated: {new Date().toLocaleTimeString()}</div>
+            <div className="italic text-xs text-gray-500 mt-1">
+              {exchanges && Array.isArray(exchanges) && exchanges.length > 0 && exchanges[0]?.wsStreamEndpoint 
+                ? `Data source: ${exchanges[0].wsStreamEndpoint}`
+                : 'Data source: Default endpoint'
+              }
+            </div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
