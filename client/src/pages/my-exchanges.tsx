@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2, Plus, Trash2, Settings, RefreshCw, AlertCircle } from "lucide-react";
@@ -48,6 +49,8 @@ export default function MyExchanges() {
   // State for add/edit exchange dialog
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [exchangeToDelete, setExchangeToDelete] = useState<Exchange | null>(null);
   const [selectedExchange, setSelectedExchange] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
@@ -346,8 +349,17 @@ export default function MyExchanges() {
     });
   };
 
-  const handleDeleteExchange = (id: number) => {
-    deleteExchangeMutation.mutate(id);
+  const handleDeleteExchange = (exchange: Exchange) => {
+    setExchangeToDelete(exchange);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteExchange = () => {
+    if (exchangeToDelete) {
+      deleteExchangeMutation.mutate(exchangeToDelete.id);
+      setIsDeleteDialogOpen(false);
+      setExchangeToDelete(null);
+    }
   };
 
   const renderExchangeCard = (exchange: Exchange) => {
@@ -463,8 +475,9 @@ export default function MyExchanges() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleDeleteExchange(exchange.id)}
+                onClick={() => handleDeleteExchange(exchange)}
                 disabled={deleteExchangeMutation.isPending}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete
@@ -676,6 +689,39 @@ export default function MyExchanges() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Exchange</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove "{exchangeToDelete?.name}"? This action cannot be undone and will permanently delete all associated configuration and data.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setExchangeToDelete(null);
+              }}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDeleteExchange}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              >
+                {deleteExchangeMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete Exchange'
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {exchanges && exchanges.length > 0 ? (
