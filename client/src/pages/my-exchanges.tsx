@@ -310,8 +310,8 @@ export default function MyExchanges() {
 
   const handleEditExchange = (exchange: Exchange) => {
     setEditingExchange(exchange);
-    setApiKey(""); // Don't prefill for security
-    setApiSecret(""); // Don't prefill for security
+    setApiKey(exchange.apiKey); // Pre-fill existing API key
+    setApiSecret(""); // Keep secret empty for security, user must re-enter
     setWsApiEndpoint(exchange.wsApiEndpoint || "");
     setWsStreamEndpoint(exchange.wsStreamEndpoint || "");
     setRestApiEndpoint(exchange.restApiEndpoint || "");
@@ -319,24 +319,30 @@ export default function MyExchanges() {
   };
 
   const handleUpdateExchange = () => {
-    if (!editingExchange || !apiKey || !apiSecret) {
+    if (!editingExchange || !apiKey) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields",
+        description: "Please provide at least the API key",
         variant: "destructive",
       });
       return;
     }
 
+    const updateData: any = {
+      apiKey,
+      wsApiEndpoint: wsApiEndpoint || null,
+      wsStreamEndpoint: wsStreamEndpoint || null,
+      restApiEndpoint: restApiEndpoint || null,
+    };
+
+    // Only include API secret if provided (to update it)
+    if (apiSecret) {
+      updateData.apiSecret = apiSecret;
+    }
+
     updateExchangeMutation.mutate({
       id: editingExchange.id,
-      data: {
-        apiKey,
-        apiSecret,
-        wsApiEndpoint: wsApiEndpoint || null,
-        wsStreamEndpoint: wsStreamEndpoint || null,
-        restApiEndpoint: restApiEndpoint || null,
-      }
+      data: updateData
     });
   };
 
@@ -592,9 +598,12 @@ export default function MyExchanges() {
                   type="password"
                   value={apiSecret}
                   onChange={(e) => setApiSecret(e.target.value)}
-                  placeholder="Enter new API secret"
+                  placeholder="Leave empty to keep existing secret"
                   className="mt-1"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Only enter if you want to update the API secret
+                </p>
               </div>
 
               <Separator />
