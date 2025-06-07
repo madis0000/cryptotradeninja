@@ -43,15 +43,6 @@ export default function MyExchanges() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef) {
-        clearTimeout(timeoutRef);
-      }
-    };
-  }, [timeoutRef]);
-
   // WebSocket for balance fetching
   const userWs = useUserWebSocket({
     onMessage: (data) => {
