@@ -477,25 +477,10 @@ export class WebSocketService {
     }
 
     try {
-      // Check if this is a testnet environment and WebSocket API is restricted
-      if (binanceExchange.isTestnet) {
-        console.log(`[USER STREAM] 🌐 BALANCE FETCH METHOD: Testnet detected - WebSocket API unavailable, using REST API fallback`);
-        
-        // Send immediate notification about testnet limitations
-        const userConnection = this.userConnections.get(userId);
-        if (userConnection) {
-          userConnection.ws.send(JSON.stringify({
-            type: 'user_stream_unavailable',
-            message: 'WebSocket API is currently unavailable on testnet. Using REST API for balance requests.',
-            error: 'testnet_restriction',
-            fallback: 'rest_api'
-          }));
-        }
-        
-        // For testnet, we'll use REST API calls instead of WebSocket API
-        this.handleTestnetBalanceRequest(userId, binanceExchange);
-        return;
-      }
+      console.log(`[USER STREAM] 🌐 Connecting to WebSocket API for user ${userId}`);
+      
+      // Use WebSocket API directly (works for both testnet and mainnet)
+      // Create WebSocket connection to Binance WebSocket API
 
       const userWs = new WebSocket(wsUrl);
       this.binanceUserStreams.set(connectionKey, userWs);
