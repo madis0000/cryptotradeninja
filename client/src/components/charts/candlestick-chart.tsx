@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, IChartApi, ISeriesApi } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, Time, CandlestickData } from 'lightweight-charts';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
