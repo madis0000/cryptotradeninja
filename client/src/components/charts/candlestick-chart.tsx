@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ChartRefreshButton } from './chart-refresh-button';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -288,6 +289,20 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
     
     // Configure WebSocket stream for kline data with the selected interval
     await configureKlineStream(interval);
+  };
+
+  const refreshChart = async () => {
+    console.log('[CHART] Refreshing chart with validated data');
+    if (seriesRef.current) {
+      // Clear existing data
+      seriesRef.current.setData([]);
+      
+      // Reload with current interval
+      await loadHistoricalData(selectedInterval);
+      
+      // Reconfigure WebSocket stream
+      await configureKlineStream(selectedInterval);
+    }
   };
 
   return (

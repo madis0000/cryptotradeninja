@@ -435,21 +435,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const rawData = await response.json();
       
-      // Transform to match expected format
+      // Transform and validate data to filter out extreme testnet variations
       const klineData = rawData.map((item: any[]) => ({
         openTime: parseInt(item[0]),
         closeTime: parseInt(item[6]),
-        open: item[1],
-        high: item[2],
-        low: item[3],
-        close: item[4],
-        volume: item[5],
+        open: parseFloat(item[1]),
+        high: parseFloat(item[2]),
+        low: parseFloat(item[3]),
+        close: parseFloat(item[4]),
+        volume: parseFloat(item[5]),
         trades: parseInt(item[8]),
-        quoteVolume: item[7],
+        quoteVolume: parseFloat(item[7]),
         isFinal: true
       }));
-      
-      res.json(klineData);
+
+      // Data validation: Filter out candles with extreme price variations (common in testnet)
+      const validatedData = klineData.filter((candle: any) => {
+        const priceRange = candle.high - candle.low;
+        const avgPrice = (candle.high + candle.low) / 2;
+        const variationPercent = (priceRange / avgPrice) * 100;
+        
+        // Filter out candles with more than 5% price variation (likely testnet anomalies)
+        if (variationPercent > 5) {
+          console.log(`[KLINES API] Filtering extreme variation: ${candle.low} - ${candle.high} (${variationPercent.toFixed(2)}%)`);
+          return false;
+        }
+        
+        // Ensure all OHLC values are within reasonable bounds
+        return candle.open > 0 && candle.high > 0 && candle.low > 0 && candle.close > 0 &&
+               candle.low <= candle.open && candle.low <= candle.close &&
+               candle.high >= candle.open && candle.high >= candle.close;
+      });
+
+      console.log(`[KLINES API] Filtered ${rawData.length - validatedData.length} extreme candles, returning ${validatedData.length} valid candles`);
+      res.json(validatedData);
     } catch (error) {
       console.error("Failed to fetch klines:", error);
       res.status(500).json({ error: "Failed to fetch historical data" });

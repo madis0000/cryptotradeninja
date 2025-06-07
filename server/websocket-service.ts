@@ -413,16 +413,37 @@ export class WebSocketService {
               
               // CRITICAL: Only process data for the currently selected interval
               if (receivedInterval === expectedInterval) {
-                console.log(`[BINANCE STREAM] Processing ${receivedInterval} kline for ${symbol}: ${kline.c}`);
+                const open = parseFloat(kline.o);
+                const high = parseFloat(kline.h);
+                const low = parseFloat(kline.l);
+                const close = parseFloat(kline.c);
+                
+                // Data validation: Filter out extreme price variations (testnet anomalies)
+                const priceRange = high - low;
+                const avgPrice = (high + low) / 2;
+                const variationPercent = (priceRange / avgPrice) * 100;
+                
+                if (variationPercent > 5) {
+                  console.log(`[BINANCE STREAM] Filtering extreme variation: ${symbol} ${low} - ${high} (${variationPercent.toFixed(2)}%)`);
+                  return;
+                }
+                
+                // Ensure OHLC data integrity
+                if (low > open || low > close || high < open || high < close) {
+                  console.log(`[BINANCE STREAM] Filtering invalid OHLC data: ${symbol} O:${open} H:${high} L:${low} C:${close}`);
+                  return;
+                }
+                
+                console.log(`[BINANCE STREAM] Processing ${receivedInterval} kline for ${symbol}: ${close}`);
                 
                 const klineUpdate = {
                   symbol: symbol,
                   openTime: kline.t,
                   closeTime: kline.T,
-                  open: parseFloat(kline.o),
-                  high: parseFloat(kline.h),
-                  low: parseFloat(kline.l),
-                  close: parseFloat(kline.c),
+                  open,
+                  high,
+                  low,
+                  close,
                   volume: parseFloat(kline.v),
                   interval: kline.i,
                   isFinal: kline.x,
