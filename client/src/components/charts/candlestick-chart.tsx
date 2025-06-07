@@ -330,23 +330,26 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
             )}
           </div>
 
-          {/* Timeframe Buttons */}
-          <div className="flex space-x-1">
-            {timeframes.map((timeframe) => (
-              <Button
-                key={timeframe.value}
-                variant={selectedInterval === timeframe.value ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleTimeframeChange(timeframe.value)}
-                className={`px-3 py-1 text-xs border-gray-600 hover:bg-gray-700 ${
-                  selectedInterval === timeframe.value 
-                    ? 'bg-blue-600 text-white border-blue-600' 
-                    : 'text-gray-300'
-                }`}
-              >
-                {timeframe.label}
-              </Button>
-            ))}
+          {/* Chart Controls */}
+          <div className="flex items-center space-x-2">
+            <ChartRefreshButton onRefresh={refreshChart} />
+            <div className="flex space-x-1">
+              {timeframes.map((timeframe) => (
+                <Button
+                  key={timeframe.value}
+                  variant={selectedInterval === timeframe.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleTimeframeChange(timeframe.value)}
+                  className={`px-3 py-1 text-xs border-gray-600 hover:bg-gray-700 ${
+                    selectedInterval === timeframe.value 
+                      ? 'bg-blue-600 text-white border-blue-600' 
+                      : 'text-gray-300'
+                  }`}
+                >
+                  {timeframe.label}
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
 
