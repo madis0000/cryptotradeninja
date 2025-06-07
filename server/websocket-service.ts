@@ -352,90 +352,91 @@ export class WebSocketService {
       console.log('[BINANCE STREAM] Connected to Binance public stream successfully');
     });
 
-    this.binancePublicWs.on('message', (data) => {
+    this.binancePublicWs.on('message', (rawData) => {
       try {
         // Ignore messages if streams are inactive
         if (!this.isStreamsActive) {
           return; // Silently ignore - connection closing
         }
 
-        const message = JSON.parse(data.toString());
+        const message = JSON.parse(rawData.toString());
         console.log('[BINANCE STREAM] Received message:', JSON.stringify(message).substring(0, 200) + '...');
         
         // Handle both single raw stream and combined stream formats
-        let data = message;
+        let processedData = message;
         let streamName = '';
         
         // Check if this is combined stream format
         if (message.stream && message.data) {
           streamName = message.stream;
-          data = message.data;
+          processedData = message.data;
         } else {
           // Single raw stream format - determine stream type from data
-          if (data.e === 'kline') {
-            streamName = `${data.s.toLowerCase()}@kline_${data.k.i}`;
-          } else if (data.e === '24hrTicker') {
-            streamName = `${data.s.toLowerCase()}@ticker`;
+          if (processedData.e === 'kline') {
+            streamName = `${processedData.s.toLowerCase()}@kline_${processedData.k.i}`;
+          } else if (processedData.e === '24hrTicker') {
+            streamName = `${processedData.s.toLowerCase()}@ticker`;
           }
         }
         
-        if (data) {
+        if (processedData) {
           
           // Handle ticker data
           if (streamName.includes('@ticker')) {
-            const symbol = data.s;
+            const symbol = processedData.s;
             
             if (symbol) {
               const marketUpdate = {
                 symbol,
-                price: parseFloat(data.c),
-                change: parseFloat(data.P),
-                volume: parseFloat(data.v),
-                high: parseFloat(data.h),
-                low: parseFloat(data.l),
+                price: parseFloat(processedData.c),
+                change: parseFloat(processedData.P),
+                volume: parseFloat(processedData.v),
+                high: parseFloat(processedData.h),
+                low: parseFloat(processedData.l),
                 timestamp: Date.now()
               };
 
-              console.log(`[BINANCE STREAM] Market update for ${symbol}: ${data.c}`);
+              console.log(`[BINANCE STREAM] Market update for ${symbol}: ${processedData.c}`);
               this.marketData.set(symbol, marketUpdate);
               this.broadcastMarketUpdate(marketUpdate);
             }
           }
           
-          // Handle kline data
+          // Handle kline data with strict interval filtering
           if (streamName.includes('@kline')) {
-            const symbol = data.s;
-            const kline = data.k;
+            const symbol = processedData.s;
+            const kline = processedData.k;
             
             if (symbol && kline) {
-              console.log(`[BINANCE STREAM] Kline update for ${symbol} (${kline.i}): ${kline.c}`);
+              const receivedInterval = kline.i;
+              const expectedInterval = this.currentInterval;
               
-              const klineUpdate = {
-                symbol: symbol,
-                openTime: kline.t,
-                closeTime: kline.T,
-                open: parseFloat(kline.o),
-                high: parseFloat(kline.h),
-                low: parseFloat(kline.l),
-                close: parseFloat(kline.c),
-                volume: parseFloat(kline.v),
-                interval: kline.i,
-                isFinal: kline.x, // true when kline is closed
-                timestamp: Date.now()
-              };
-              
-              // Always store historical data for all intervals
-              this.storeHistoricalKlineData(klineUpdate);
-              
-              // Broadcast will filter by active interval
-              this.broadcastKlineUpdate(klineUpdate);
-              
-              // Only update market data for active interval
-              if (kline.i === this.currentInterval) {
+              // CRITICAL: Only process data for the currently selected interval
+              if (receivedInterval === expectedInterval) {
+                console.log(`[BINANCE STREAM] Processing ${receivedInterval} kline for ${symbol}: ${kline.c}`);
+                
+                const klineUpdate = {
+                  symbol: symbol,
+                  openTime: kline.t,
+                  closeTime: kline.T,
+                  open: parseFloat(kline.o),
+                  high: parseFloat(kline.h),
+                  low: parseFloat(kline.l),
+                  close: parseFloat(kline.c),
+                  volume: parseFloat(kline.v),
+                  interval: kline.i,
+                  isFinal: kline.x,
+                  timestamp: Date.now()
+                };
+                
+                // Store and broadcast only the selected interval data
+                this.storeHistoricalKlineData(klineUpdate);
+                this.broadcastKlineUpdate(klineUpdate);
+                
                 const marketUpdate = {
                   symbol: symbol,
                   price: parseFloat(kline.c),
-                  change: 0, // Will be calculated if needed
+                  change: 0,
                   volume: parseFloat(kline.v),
                   high: parseFloat(kline.h),
                   low: parseFloat(kline.l),
@@ -444,6 +445,9 @@ export class WebSocketService {
                 
                 this.marketData.set(symbol, marketUpdate);
                 this.broadcastMarketUpdate(marketUpdate);
+              } else {
+                // Ignore data from other intervals to prevent chart mixing
+                console.log(`[BINANCE STREAM] Ignoring ${receivedInterval} data (expecting ${expectedInterval})`);
               }
             }
           }
