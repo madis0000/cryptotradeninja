@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
+import { createChart, CandlestickSeries } from 'lightweight-charts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TrendingUp, TrendingDown } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 
 interface MarketData {
   symbol: string;
@@ -32,15 +31,13 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const [lastPrice, setLastPrice] = useState<number | null>(null);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [selectedInterval, setSelectedInterval] = useState<string>('1m');
-
-  // Fetch exchanges to get current WebSocket endpoint
-  const { data: exchanges } = useQuery({
-    queryKey: ['/api/exchanges'],
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
+  const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadHistoricalData = async (interval: string = selectedInterval) => {
     try {
@@ -110,7 +107,7 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
         width: chartContainerRef.current.clientWidth,
         height: 400,
         layout: {
-          background: { type: ColorType.Solid, color: 'transparent' },
+          background: { color: '#1f2937' },
           textColor: '#d1d4dc',
         },
         grid: {
