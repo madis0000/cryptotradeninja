@@ -31,6 +31,10 @@ interface ExchangeBalance {
   balance: string;
   loading: boolean;
   error?: string;
+  balances?: any[];
+  usdtOnly?: string;
+  totalFree?: string;
+  totalLocked?: string;
 }
 
 export default function MyExchanges() {
@@ -53,7 +57,7 @@ export default function MyExchanges() {
     queryKey: ['/api/exchanges'],
   });
 
-  // Helper function to calculate total USDT balance
+  // Helper functions for balance calculations
   const calculateTotalUsdtBalance = (balances: any[]): string => {
     let total = 0;
     balances.forEach(balance => {
@@ -62,6 +66,30 @@ export default function MyExchanges() {
       }
     });
     return total.toFixed(2);
+  };
+
+  const calculateUsdtOnly = (balances: any[]): string => {
+    const usdtBalance = balances.find(balance => balance.asset === 'USDT');
+    if (usdtBalance) {
+      return (parseFloat(usdtBalance.free || 0) + parseFloat(usdtBalance.locked || 0)).toFixed(2);
+    }
+    return '0.00';
+  };
+
+  const calculateTotalFree = (balances: any[]): string => {
+    let total = 0;
+    balances.forEach(balance => {
+      total += parseFloat(balance.free || 0);
+    });
+    return total.toFixed(8);
+  };
+
+  const calculateTotalLocked = (balances: any[]): string => {
+    let total = 0;
+    balances.forEach(balance => {
+      total += parseFloat(balance.locked || 0);
+    });
+    return total.toFixed(8);
   };
 
   // WebSocket for balance fetching
@@ -81,11 +109,22 @@ export default function MyExchanges() {
         
         if (targetExchangeId) {
           const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
+          const usdtOnly = calculateUsdtOnly(data.data.balances);
+          const totalFree = calculateTotalFree(data.data.balances);
+          const totalLocked = calculateTotalLocked(data.data.balances);
+          
           console.log('✅ Balance fetched via WebSocket API:', totalUsdtValue, 'USDT');
           
           setExchangeBalances(prev => ({
             ...prev,
-            [targetExchangeId]: { balance: totalUsdtValue, loading: false }
+            [targetExchangeId]: { 
+              balance: totalUsdtValue, 
+              loading: false,
+              balances: data.data.balances,
+              usdtOnly,
+              totalFree,
+              totalLocked
+            }
           }));
         } else {
           console.log('❌ No target exchange ID found for balance update');
@@ -301,7 +340,7 @@ export default function MyExchanges() {
               </p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Balance (USDT)</p>
+              <p className="text-sm font-medium text-muted-foreground">Total Balance (USDT)</p>
               <div className="flex items-center mt-1">
                 {balanceState?.loading ? (
                   <div className="flex items-center space-x-2">
@@ -321,6 +360,33 @@ export default function MyExchanges() {
               </div>
             </div>
           </div>
+
+          {/* Enhanced Balance Details Section */}
+          {balanceState && !balanceState.loading && !balanceState.error && balanceState.balances && (
+            <>
+              <Separator className="my-4" />
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">USDT Balance</p>
+                  <p className="text-base font-semibold mt-1">
+                    ${balanceState.usdtOnly || '0.00'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total Free</p>
+                  <p className="text-base font-semibold mt-1">
+                    {balanceState.totalFree || '0.00000000'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total Locked</p>
+                  <p className="text-base font-semibold mt-1">
+                    {balanceState.totalLocked || '0.00000000'}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
           
           <Separator className="my-4" />
           
