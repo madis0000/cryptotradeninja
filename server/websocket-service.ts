@@ -846,7 +846,7 @@ export class WebSocketService {
       const queryString = `timestamp=${timestamp}`;
       
       // Create signature for authenticated request
-      const crypto = require('crypto');
+      const crypto = await import('crypto');
       const signature = crypto.createHmac('sha256', apiSecret).update(queryString).digest('hex');
       const finalQuery = `${queryString}&signature=${signature}`;
 
