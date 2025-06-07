@@ -276,9 +276,34 @@ export default function MyExchanges() {
 
   const handleEditExchange = (exchange: Exchange) => {
     setEditingExchange(exchange);
-    setApiKey('');
-    setApiSecret('');
+    setApiKey(''); // Don't prefill for security
+    setApiSecret(''); // Don't prefill for security  
+    setWsApiEndpoint(exchange.wsApiEndpoint || '');
+    setWsStreamEndpoint(exchange.wsStreamEndpoint || '');
+    setRestApiEndpoint(exchange.restApiEndpoint || '');
     setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateExchange = () => {
+    if (!editingExchange || !apiKey || !apiSecret) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    updateExchangeMutation.mutate({
+      id: editingExchange.id,
+      data: {
+        apiKey,
+        apiSecret,
+        wsApiEndpoint: wsApiEndpoint || null,
+        wsStreamEndpoint: wsStreamEndpoint || null,
+        restApiEndpoint: restApiEndpoint || null,
+      }
+    });
   };
 
   const handleDeleteExchange = (exchangeId: number) => {
@@ -592,6 +617,47 @@ export default function MyExchanges() {
 
           <Separator className="bg-gray-800" />
 
+          <div>
+            <Label htmlFor="edit-ws-api" className="text-crypto-light text-xs">WebSocket API Endpoint</Label>
+            <Input
+              id="edit-ws-api"
+              type="text"
+              value={wsApiEndpoint}
+              onChange={(e) => setWsApiEndpoint(e.target.value)}
+              placeholder="wss://ws-api.testnet.binance.vision/ws-api/v3"
+              className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="edit-ws-stream" className="text-crypto-light text-xs">WebSocket Stream Endpoint (Chart Data)</Label>
+            <Input
+              id="edit-ws-stream"
+              type="text"
+              value={wsStreamEndpoint}
+              onChange={(e) => setWsStreamEndpoint(e.target.value)}
+              placeholder="wss://stream.testnet.binance.vision/ws"
+              className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
+            />
+            <p className="text-xs text-crypto-light/60 mt-1">
+              Changes to this endpoint will affect the dashboard chart data source
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="edit-rest-api" className="text-crypto-light text-xs">REST API Endpoint</Label>
+            <Input
+              id="edit-rest-api"
+              type="text"
+              value={restApiEndpoint}
+              onChange={(e) => setRestApiEndpoint(e.target.value)}
+              placeholder="https://testnet.binance.vision"
+              className="mt-1 bg-crypto-dark border-gray-700 text-white text-sm"
+            />
+          </div>
+
+          <Separator className="bg-gray-800" />
+
           <div className="flex justify-end space-x-3">
             <Button 
               variant="outline" 
@@ -601,13 +667,11 @@ export default function MyExchanges() {
               Cancel
             </Button>
             <Button 
-              onClick={() => {
-                // TODO: Implement edit functionality
-                setIsEditDialogOpen(false);
-              }}
+              onClick={handleUpdateExchange}
+              disabled={updateExchangeMutation.isPending}
               className="bg-crypto-accent hover:bg-crypto-accent/80 text-white"
             >
-              Update
+              {updateExchangeMutation.isPending ? 'Updating...' : 'Update'}
             </Button>
           </div>
         </div>
