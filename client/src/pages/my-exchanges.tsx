@@ -37,10 +37,8 @@ export default function MyExchanges() {
   const [wsApiEndpoint, setWsApiEndpoint] = useState('');
   const [wsStreamEndpoint, setWsStreamEndpoint] = useState('');
   const [restApiEndpoint, setRestApiEndpoint] = useState('');
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [exchangeBalances, setExchangeBalances] = useState<Record<number, { balance: string; loading: boolean; error?: string }>>({});
   const [currentExchangeId, setCurrentExchangeId] = useState<number | null>(null);
-  const [timeoutRef, setTimeoutRef] = useState<NodeJS.Timeout | null>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
