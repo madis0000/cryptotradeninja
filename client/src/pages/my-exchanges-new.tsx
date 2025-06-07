@@ -153,8 +153,7 @@ export default function MyExchanges() {
   // Add exchange mutation
   const addExchangeMutation = useMutation({
     mutationFn: async (exchangeData: any) => {
-      const response = await apiRequest('/api/exchanges', 'POST', exchangeData);
-      return response.json();
+      return await apiRequest('/api/exchanges', 'POST', exchangeData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
@@ -174,11 +173,33 @@ export default function MyExchanges() {
     },
   });
 
+  // Update exchange mutation
+  const updateExchangeMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      return await apiRequest(`/api/exchanges/${id}`, 'PUT', data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
+      setIsEditDialogOpen(false);
+      resetEditForm();
+      toast({
+        title: "Exchange Updated",
+        description: "Exchange has been successfully updated.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update exchange",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Delete exchange mutation
   const deleteExchangeMutation = useMutation({
     mutationFn: async (exchangeId: number) => {
-      const response = await apiRequest(`/api/exchanges/${exchangeId}`, 'DELETE');
-      return response;
+      return await apiRequest(`/api/exchanges/${exchangeId}`, 'DELETE');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/exchanges'] });
@@ -204,6 +225,15 @@ export default function MyExchanges() {
     setWsStreamEndpoint('');
     setRestApiEndpoint('');
     setMode('testnet');
+  };
+
+  const resetEditForm = () => {
+    setEditingExchange(null);
+    setApiKey('');
+    setApiSecret('');
+    setWsApiEndpoint('');
+    setWsStreamEndpoint('');
+    setRestApiEndpoint('');
   };
 
   const handleSubmit = () => {
