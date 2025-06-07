@@ -39,6 +39,7 @@ export default function MyExchanges() {
   const [restApiEndpoint, setRestApiEndpoint] = useState('');
   const [exchangeBalances, setExchangeBalances] = useState<Record<number, { balance: string; loading: boolean; error?: string }>>({});
   const [currentExchangeId, setCurrentExchangeId] = useState<number | null>(null);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -404,16 +405,13 @@ export default function MyExchanges() {
       return;
     }
 
-    setIsTestingConnection(true);
-    
     try {
-      // Test connection logic would go here
-      // For now, simulate a test
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Test connection using WebSocket API
+      userWs.connect(apiKey);
       
       toast({
-        title: "Connection Successful",
-        description: "API credentials are valid and connection is working",
+        title: "Connection Test Started",
+        description: "Testing API credentials with WebSocket API",
       });
     } catch (error) {
       toast({
@@ -421,8 +419,6 @@ export default function MyExchanges() {
         description: "Unable to connect with provided credentials",
         variant: "destructive",
       });
-    } finally {
-      setIsTestingConnection(false);
     }
   };
 
