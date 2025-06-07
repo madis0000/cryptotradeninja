@@ -52,6 +52,7 @@ export default function MyExchanges() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [exchangeToDelete, setExchangeToDelete] = useState<Exchange | null>(null);
   const [selectedExchange, setSelectedExchange] = useState("");
+  const [mode, setMode] = useState<'testnet' | 'live'>('testnet');
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [editingExchange, setEditingExchange] = useState<Exchange | null>(null);
@@ -285,15 +286,15 @@ export default function MyExchanges() {
     if (!exchangeConfig) return;
 
     const exchangeData = {
-      name: exchangeConfig.label,
+      name: `${exchangeConfig.name} (${mode})`,
       exchangeType: exchangeConfig.value,
       apiKey: apiKey.trim(),
       apiSecret: apiSecret.trim(),
       isActive: true,
-      isTestnet: exchangeConfig.isTestnet || false,
-      wsApiEndpoint: exchangeConfig.wsApiEndpoint,
-      wsStreamEndpoint: exchangeConfig.wsStreamEndpoint,
-      restApiEndpoint: exchangeConfig.restApiEndpoint,
+      isTestnet: mode === 'testnet',
+      wsApiEndpoint: wsApiEndpoint || null,
+      wsStreamEndpoint: wsStreamEndpoint || null,
+      restApiEndpoint: restApiEndpoint || null,
     };
 
     if (editingExchange) {
@@ -528,9 +529,22 @@ export default function MyExchanges() {
                   <SelectContent>
                     {EXCHANGE_OPTIONS.map((exchange) => (
                       <SelectItem key={exchange.value} value={exchange.value}>
-                        {exchange.label}
+                        {exchange.name}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="grid gap-2">
+                <Label htmlFor="mode">Environment</Label>
+                <Select value={mode} onValueChange={(value: 'testnet' | 'live') => setMode(value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select environment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="testnet">Testnet</SelectItem>
+                    <SelectItem value="live">Live</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
