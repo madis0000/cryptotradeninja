@@ -198,9 +198,9 @@ export class WebSocketService {
     // Re-enable streams for new interval
     this.isStreamsActive = true;
     
-    // Get WebSocket endpoint from user's exchange configuration
+    // Use proper Binance single raw stream endpoints (not combined streams)
     const { storage } = await import('./storage');
-    let baseUrl = 'wss://stream.testnet.binance.vision/stream?streams='; // fallback
+    let baseUrl = 'wss://stream.testnet.binance.vision/ws/'; // Use single raw stream format
     
     try {
       // Get the first exchange configuration for the WebSocket endpoint
@@ -209,16 +209,13 @@ export class WebSocketService {
         const endpoint = exchanges[0].wsStreamEndpoint;
         console.log(`[WEBSOCKET] Using configured endpoint: ${endpoint}`);
         
-        // Build the stream URL for single-interval streaming
-        if (endpoint.includes('/stream?streams=')) {
-          // For existing multi-stream endpoints, convert to single-stream format
-          baseUrl = endpoint.replace('/stream?streams=', '/ws/');
-        } else if (endpoint.endsWith('/ws') || endpoint.includes('/ws/')) {
-          // Use single WebSocket endpoint format
-          baseUrl = endpoint.replace(/\/$/, '') + '/';
+        // Force single raw stream format (never use combined streams)
+        if (endpoint.includes('testnet')) {
+          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
+        } else if (endpoint.includes('binance.com')) {
+          baseUrl = 'wss://stream.binance.com:9443/ws/';
         } else {
-          // Default to single WebSocket format
-          baseUrl = endpoint.replace(/\/$/, '') + '/ws/';
+          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
         }
       } else {
         console.log(`[WEBSOCKET] No exchange configuration found, using default testnet endpoint`);
@@ -365,10 +362,24 @@ export class WebSocketService {
         const message = JSON.parse(data.toString());
         console.log('[BINANCE STREAM] Received message:', JSON.stringify(message).substring(0, 200) + '...');
         
-        // Handle combined stream format: {"stream":"<streamName>","data":<rawPayload>}
+        // Handle both single raw stream and combined stream formats
+        let data = message;
+        let streamName = '';
+        
+        // Check if this is combined stream format
         if (message.stream && message.data) {
-          const streamName = message.stream;
-          const data = message.data;
+          streamName = message.stream;
+          data = message.data;
+        } else {
+          // Single raw stream format - determine stream type from data
+          if (data.e === 'kline') {
+            streamName = `${data.s.toLowerCase()}@kline_${data.k.i}`;
+          } else if (data.e === '24hrTicker') {
+            streamName = `${data.s.toLowerCase()}@ticker`;
+          }
+        }
+        
+        if (data) {
           
           // Handle ticker data
           if (streamName.includes('@ticker')) {
