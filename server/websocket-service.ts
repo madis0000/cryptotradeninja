@@ -247,9 +247,9 @@ export class WebSocketService {
       }
     });
     
-    // Use subscription-based WebSocket API for precise interval control
-    const subscriptionUrl = baseUrl.replace('/ws/', '/ws');
-    console.log(`[BINANCE] Using subscription-based connection for strict interval control`);
+    // Use combined stream endpoint for subscription-based WebSocket API
+    const subscriptionUrl = baseUrl.replace('/ws/', '/stream');
+    console.log(`[BINANCE] Using combined stream endpoint for subscription control`);
     console.log(`[BINANCE] Requesting streams: ${streamPaths.join(', ')}`);
     this.connectWithSubscription(subscriptionUrl, streamPaths);
     
@@ -276,6 +276,13 @@ export class WebSocketService {
       this.binancePublicWs.close();
     }
     
+    // Ensure we're using the correct combined stream endpoint
+    if (!wsUrl.includes('/stream')) {
+      wsUrl = wsUrl.replace('/ws', '/stream');
+    }
+    
+    console.log('[BINANCE STREAM] Final WebSocket URL:', wsUrl);
+    
     // Store the WebSocket reference for proper cleanup
     this.binancePublicWs = new WebSocket(wsUrl);
 
@@ -290,6 +297,7 @@ export class WebSocketService {
       };
       
       console.log(`[BINANCE STREAM] Subscribing to specific streams:`, streamPaths);
+      console.log(`[BINANCE STREAM] Subscription message:`, JSON.stringify(subscriptionMessage));
       this.binancePublicWs?.send(JSON.stringify(subscriptionMessage));
     });
 
@@ -309,17 +317,21 @@ export class WebSocketService {
           return;
         }
         
-        // Handle both single raw stream and combined stream formats
+        // Handle combined stream format (wrapped messages from /stream endpoint)
         let processedData = message;
         let streamName = '';
         
-        // Check if this is combined stream format
+        // Check if this is combined stream format: {"stream":"btcusdt@kline_1m","data":{...}}
         if (message.stream && message.data) {
           streamName = message.stream;
           processedData = message.data;
         } else if (processedData.e === 'kline') {
           // Single raw stream format - determine stream type from data
           streamName = `${processedData.s.toLowerCase()}@kline_${processedData.k.i}`;
+          console.log(`[BINANCE STREAM] Raw stream data for: ${streamName}`);
+        } else {
+          // Skip non-kline messages
+          return;
         }
         
         // Only process kline data for the requested interval
