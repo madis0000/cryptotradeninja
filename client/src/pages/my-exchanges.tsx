@@ -47,10 +47,14 @@ export default function MyExchanges() {
   
   // State for add/edit exchange dialog
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedExchange, setSelectedExchange] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [editingExchange, setEditingExchange] = useState<Exchange | null>(null);
+  const [wsApiEndpoint, setWsApiEndpoint] = useState("");
+  const [wsStreamEndpoint, setWsStreamEndpoint] = useState("");
+  const [restApiEndpoint, setRestApiEndpoint] = useState("");
 
   // Fetch exchanges
   const { data: exchanges, isLoading: exchangesLoading } = useQuery<Exchange[]>({
@@ -255,8 +259,22 @@ export default function MyExchanges() {
     setSelectedExchange("");
     setApiKey("");
     setApiSecret("");
+    setWsApiEndpoint("");
+    setWsStreamEndpoint("");
+    setRestApiEndpoint("");
     setEditingExchange(null);
   };
+
+  const resetEditForm = () => {
+    setEditingExchange(null);
+    setApiKey("");
+    setApiSecret("");
+    setWsApiEndpoint("");
+    setWsStreamEndpoint("");
+    setRestApiEndpoint("");
+  };
+
+
 
   const handleAddExchange = () => {
     if (!selectedExchange || !apiKey || !apiSecret) {
@@ -292,10 +310,34 @@ export default function MyExchanges() {
 
   const handleEditExchange = (exchange: Exchange) => {
     setEditingExchange(exchange);
-    setSelectedExchange(exchange.exchangeType || "");
-    setApiKey(exchange.apiKey);
-    setApiSecret(""); // Don't show existing secret
-    setIsDialogOpen(true);
+    setApiKey(""); // Don't prefill for security
+    setApiSecret(""); // Don't prefill for security
+    setWsApiEndpoint(exchange.wsApiEndpoint || "");
+    setWsStreamEndpoint(exchange.wsStreamEndpoint || "");
+    setRestApiEndpoint(exchange.restApiEndpoint || "");
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateExchange = () => {
+    if (!editingExchange || !apiKey || !apiSecret) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    updateExchangeMutation.mutate({
+      id: editingExchange.id,
+      data: {
+        apiKey,
+        apiSecret,
+        wsApiEndpoint: wsApiEndpoint || null,
+        wsStreamEndpoint: wsStreamEndpoint || null,
+        restApiEndpoint: restApiEndpoint || null,
+      }
+    });
   };
 
   const handleDeleteExchange = (id: number) => {
