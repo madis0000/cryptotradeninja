@@ -455,9 +455,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const avgPrice = (candle.high + candle.low) / 2;
         const variationPercent = (priceRange / avgPrice) * 100;
         
-        // Filter out candles with more than 5% price variation (likely testnet anomalies)
-        if (variationPercent > 5) {
-          console.log(`[KLINES API] Filtering extreme variation: ${candle.low} - ${candle.high} (${variationPercent.toFixed(2)}%)`);
+        // Dynamic thresholds based on interval
+        const intervalStr = interval as string;
+        let maxVariation = 3; // Default for 1m
+        if (intervalStr === '5m') maxVariation = 4;
+        else if (intervalStr === '15m') maxVariation = 6;
+        else if (intervalStr === '1h') maxVariation = 8;
+        else if (intervalStr === '4h') maxVariation = 12;
+        else if (intervalStr === '1d') maxVariation = 20;
+        
+        // Filter out candles with excessive variation for the interval
+        if (variationPercent > maxVariation) {
+          console.log(`[KLINES API] Filtering extreme variation: ${candle.low} - ${candle.high} (${variationPercent.toFixed(2)}% > ${maxVariation}%)`);
+          return false;
+        }
+        
+        // Additional check for obviously fake testnet data (prices below $50k or above $150k)
+        if (candle.low < 50000 || candle.high > 150000) {
+          console.log(`[KLINES API] Filtering unrealistic price range: ${candle.low} - ${candle.high}`);
           return false;
         }
         

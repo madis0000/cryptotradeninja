@@ -423,8 +423,22 @@ export class WebSocketService {
                 const avgPrice = (high + low) / 2;
                 const variationPercent = (priceRange / avgPrice) * 100;
                 
-                if (variationPercent > 5) {
-                  console.log(`[BINANCE STREAM] Filtering extreme variation: ${symbol} ${low} - ${high} (${variationPercent.toFixed(2)}%)`);
+                // Dynamic thresholds based on interval
+                let maxVariation = 3; // Default for 1m
+                if (receivedInterval === '5m') maxVariation = 4;
+                else if (receivedInterval === '15m') maxVariation = 6;
+                else if (receivedInterval === '1h') maxVariation = 8;
+                else if (receivedInterval === '4h') maxVariation = 12;
+                else if (receivedInterval === '1d') maxVariation = 20;
+                
+                if (variationPercent > maxVariation) {
+                  console.log(`[BINANCE STREAM] Filtering extreme variation: ${symbol} ${low} - ${high} (${variationPercent.toFixed(2)}% > ${maxVariation}%)`);
+                  return;
+                }
+                
+                // Additional check for obviously fake testnet data
+                if (low < 50000 || high > 150000) {
+                  console.log(`[BINANCE STREAM] Filtering unrealistic price range: ${symbol} ${low} - ${high}`);
                   return;
                 }
                 
