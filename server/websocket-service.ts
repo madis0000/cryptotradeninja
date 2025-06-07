@@ -198,31 +198,10 @@ export class WebSocketService {
     // Re-enable streams for new interval
     this.isStreamsActive = true;
     
-    // Use proper Binance single raw stream endpoints (not combined streams)
-    const { storage } = await import('./storage');
-    let baseUrl = 'wss://stream.testnet.binance.vision/ws/'; // Use single raw stream format
+    // Use production Binance streams to test real market data quality
+    let baseUrl = 'wss://stream.binance.com:9443/ws/'; // Production Binance streams
     
-    try {
-      // Get the first exchange configuration for the WebSocket endpoint
-      const exchanges = await storage.getExchangesByUserId(1); // Assuming user ID 1
-      if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
-        const endpoint = exchanges[0].wsStreamEndpoint;
-        console.log(`[WEBSOCKET] Using configured endpoint: ${endpoint}`);
-        
-        // Force single raw stream format (never use combined streams)
-        if (endpoint.includes('testnet')) {
-          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
-        } else if (endpoint.includes('binance.com')) {
-          baseUrl = 'wss://stream.binance.com:9443/ws/';
-        } else {
-          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
-        }
-      } else {
-        console.log(`[WEBSOCKET] No exchange configuration found, using default testnet endpoint`);
-      }
-    } catch (error) {
-      console.error(`[WEBSOCKET] Error fetching exchange config, using default:`, error);
-    }
+    console.log(`[WEBSOCKET] Using PRODUCTION Binance endpoint for data quality testing: ${baseUrl}`);
     
     const streamPaths = symbols.map(symbol => {
       const sym = symbol.toLowerCase();
