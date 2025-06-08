@@ -30,7 +30,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     }
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const wsUrl = `${protocol}//${window.location.host}:8080`;
     
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -38,6 +38,13 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     ws.onopen = () => {
       console.log(`[CHART] Connected to WebSocket for ${symbol} klines`);
       setIsConnected(true);
+      
+      // Send connected message to establish client 2 for klines
+      ws.send(JSON.stringify({
+        type: 'connected',
+        clientId: 'chart_klines',
+        message: 'Chart component requesting kline data'
+      }));
       
       // Request kline data for the chart
       ws.send(JSON.stringify({
@@ -51,11 +58,23 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        console.log('[CHART] Received message:', message);
         
-        if (message.type === 'kline_update' && message.data) {
+        if (message.type === 'connected') {
+          console.log('[CHART] Connected to kline WebSocket server');
+        } else if (message.type === 'kline_update' && message.data) {
+          console.log('[CHART] Received kline update:', message.data);
           handleKlineUpdate(message.data);
         } else if (message.type === 'historical_klines' && message.data) {
-          handleHistoricalData(message.data);
+          console.log('[CHART] Received historical klines:', message.data);
+          if (message.data.klines) {
+            handleHistoricalData(message.data.klines);
+          } else {
+            handleHistoricalData(message.data);
+          }
+        } else if (message.type === 'market_update') {
+          // Ignore ticker updates on the kline connection
+          console.log('[CHART] Ignoring ticker update on kline connection');
         }
       } catch (error) {
         console.error('[CHART] WebSocket message parse error:', error);

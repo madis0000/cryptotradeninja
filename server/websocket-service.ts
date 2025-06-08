@@ -124,6 +124,26 @@ export class WebSocketService {
           if (message.type === 'account_balance') {
             this.requestAccountBalance(ws, message.userId, message.exchangeId);
           }
+          
+          if (message.type === 'configure_stream') {
+            console.log(`[WEBSOCKET] Configuring ${message.dataType} stream for symbols:`, message.symbols);
+            
+            // Update the subscription with the requested symbols
+            subscription.symbols.clear();
+            (message.symbols || []).forEach((symbol: string) => {
+              subscription.symbols.add(symbol.toUpperCase());
+            });
+            
+            // Configure the stream with the requested data type and interval
+            await this.connectConfigurableStream(
+              message.dataType || 'ticker',
+              message.symbols || ['BTCUSDT'],
+              message.interval || '1m',
+              message.depth
+            );
+            
+            console.log(`[WEBSOCKET] Stream configured for ${message.dataType} with symbols:`, message.symbols);
+          }
         } catch (error) {
           console.error('[WEBSOCKET] Error processing message:', error);
           ws.send(JSON.stringify({
