@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
 import { cn } from '@/lib/utils';
+import { useChartWebSocket } from '@/hooks/useChartWebSocket';
 
 interface TradingChartProps {
   className?: string;
@@ -9,40 +10,51 @@ interface TradingChartProps {
 
 export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
   const [currentInterval, setCurrentInterval] = useState('1m');
-  const [isConnected, setIsConnected] = useState(false);
   const [priceData, setPriceData] = useState<any[]>([]);
 
-  useEffect(() => {
-    // Initialize TradingView chart
-    initializeChart();
+  // Handle kline updates from WebSocket
+  const handleKlineUpdate = (klineData: any) => {
+    console.log('[CHART] Processing kline data:', klineData);
     
-    // Connect to WebSocket for real-time data
-    connectToKlineStream();
-
-    return () => {
-      // Cleanup WebSocket connection
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
+    if (!seriesRef.current) return;
+    
+    const candlestick = {
+      time: Math.floor(klineData.openTime / 1000),
+      open: parseFloat(klineData.open),
+      high: parseFloat(klineData.high),
+      low: parseFloat(klineData.low),
+      close: parseFloat(klineData.close),
+    };
+    
+    setPriceData(prev => {
+      const updated = [...prev];
+      const existingIndex = updated.findIndex(item => item.time === candlestick.time);
+      
+      if (existingIndex >= 0) {
+        updated[existingIndex] = candlestick;
+      } else {
+        updated.push(candlestick);
       }
       
-      // Cleanup chart safely
-      if (chartRef.current) {
-        try {
-          chartRef.current.remove();
-        } catch (error) {
-          console.log('[CHART] Cleanup: Chart already disposed');
-        }
-        chartRef.current = null;
-        seriesRef.current = null;
-      }
-    };
-  }, [symbol, currentInterval]);
+      const sortedData = updated.sort((a, b) => a.time - b.time);
+      seriesRef.current?.update(candlestick);
+      
+      return sortedData;
+    });
+  };
 
+  // Use dedicated chart WebSocket hook
+  const chartWs = useChartWebSocket(symbol, currentInterval, {
+    onKlineUpdate: handleKlineUpdate,
+    onConnect: () => console.log('[CHART] Connected to kline WebSocket server'),
+    onDisconnect: () => console.log('[CHART] Disconnected from kline WebSocket server'),
+    onError: (error) => console.error('[CHART] WebSocket error:', error)
+  });
+
+  // Initialize chart
   const initializeChart = () => {
     if (!chartContainerRef.current) return;
 
@@ -57,10 +69,10 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       seriesRef.current = null;
     }
 
-    // Create new chart with v5 API
+    // Create new chart with transparent background
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#1a1a1a' },
+        background: { type: ColorType.Solid, color: 'transparent' },
         textColor: '#d1d5db',
       },
       grid: {
@@ -81,7 +93,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       },
     });
 
-    // Add candlestick series with v5 API
+    // Add candlestick series
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
@@ -107,135 +119,42 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     return () => window.removeEventListener('resize', handleResize);
   };
 
-  const connectToKlineStream = () => {
-    if (wsRef.current) {
-      wsRef.current.close();
+  // Initialize chart on component mount
+  useEffect(() => {
+    initializeChart();
+    chartWs.connect();
+
+    return () => {
+      chartWs.disconnect();
+      
+      // Cleanup chart safely
+      if (chartRef.current) {
+        try {
+          chartRef.current.remove();
+        } catch (error) {
+          console.log('[CHART] Cleanup: Chart already disposed');
+        }
+        chartRef.current = null;
+        seriesRef.current = null;
+      }
+    };
+  }, []);
+
+  // Update symbol when prop changes
+  useEffect(() => {
+    if (chartWs.currentSymbol !== symbol) {
+      chartWs.changeSymbol(symbol);
+      setPriceData([]); // Clear existing data
     }
-    
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}:8080`;
-    
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+  }, [symbol, chartWs]);
 
-    ws.onopen = () => {
-      console.log(`[CHART] Connected to WebSocket for ${symbol} klines`);
-      setIsConnected(true);
-      
-      // Send connected message
-      const connectedMsg = {
-        type: 'connected',
-        clientId: 'chart_klines',
-        message: 'Chart component requesting kline data'
-      };
-      console.log('[CHART] Sending connected message:', connectedMsg);
-      ws.send(JSON.stringify(connectedMsg));
-      
-      // Request kline data
-      setTimeout(() => {
-        const klineMsg = {
-          type: 'configure_stream',
-          dataType: 'kline',
-          symbols: [symbol],
-          interval: currentInterval
-        };
-        console.log('[CHART] Sending kline configuration:', klineMsg);
-        ws.send(JSON.stringify(klineMsg));
-      }, 100);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        console.log('[CHART] Received message:', message);
-        
-        if (message.type === 'connected') {
-          console.log('[CHART] Connected to kline WebSocket server');
-        } else if (message.type === 'kline_update' && message.data) {
-          console.log('[CHART] Received kline update:', message.data);
-          handleKlineUpdate(message.data);
-        } else if (message.type === 'historical_klines' && message.data) {
-          console.log('[CHART] Received historical klines:', message.data);
-          if (message.data.klines) {
-            handleHistoricalData(message.data.klines);
-          } else {
-            handleHistoricalData(message.data);
-          }
-        } else if (message.type === 'market_update') {
-          console.log('[CHART] Ignoring ticker update on kline connection');
-        }
-      } catch (error) {
-        console.error('[CHART] WebSocket message parse error:', error);
-      }
-    };
-
-    ws.onclose = () => {
-      console.log(`[CHART] WebSocket disconnected for ${symbol}`);
-      setIsConnected(false);
-      
-      setTimeout(() => {
-        if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
-          connectToKlineStream();
-        }
-      }, 3000);
-    };
-
-    ws.onerror = (error) => {
-      console.error('[CHART] WebSocket error:', error);
-    };
-  };
-
-  const handleKlineUpdate = (klineData: any) => {
-    console.log('[CHART] Processing kline data:', klineData);
-    
-    if (!seriesRef.current) return;
-    
-    const candlestick = {
-      time: Math.floor(klineData.openTime / 1000),
-      open: parseFloat(klineData.open),
-      high: parseFloat(klineData.high),
-      low: parseFloat(klineData.low),
-      close: parseFloat(klineData.close),
-    };
-    
-    setPriceData(prev => {
-      const updated = [...prev];
-      const existingIndex = updated.findIndex(item => item.time === candlestick.time);
-      
-      if (existingIndex >= 0) {
-        // Update existing candle
-        updated[existingIndex] = candlestick;
-      } else {
-        // Add new candle
-        updated.push(candlestick);
-      }
-      
-      const sortedData = updated.sort((a, b) => a.time - b.time);
-      
-      // Update chart with latest data
-      seriesRef.current?.update(candlestick);
-      
-      return sortedData;
-    });
-  };
-
-  const handleHistoricalData = (klines: any[]) => {
-    console.log('[CHART] Processing historical data:', klines);
-    if (!seriesRef.current || !Array.isArray(klines)) return;
-    
-    const candles = klines.map(kline => ({
-      time: Math.floor(kline.openTime / 1000),
-      open: parseFloat(kline.open),
-      high: parseFloat(kline.high),
-      low: parseFloat(kline.low),
-      close: parseFloat(kline.close),
-    }));
-
-    const sortedCandles = candles.sort((a, b) => a.time - b.time);
-    setPriceData(sortedCandles);
-    
-    seriesRef.current.setData(sortedCandles);
-  };
+  // Update interval when state changes
+  useEffect(() => {
+    if (chartWs.currentInterval !== currentInterval) {
+      chartWs.changeInterval(currentInterval);
+      setPriceData([]); // Clear existing data
+    }
+  }, [currentInterval, chartWs]);
 
   const intervals = [
     { label: '1m', value: '1m' },
@@ -253,19 +172,6 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     
     console.log(`[CHART] Changing interval from ${currentInterval} to ${newInterval}`);
     setCurrentInterval(newInterval);
-    setPriceData([]); // Clear existing data
-    
-    // Send new interval configuration
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      const klineMsg = {
-        type: 'configure_stream',
-        dataType: 'kline',
-        symbols: [symbol],
-        interval: newInterval
-      };
-      console.log('[CHART] Sending interval change configuration:', klineMsg);
-      wsRef.current.send(JSON.stringify(klineMsg));
-    }
   };
 
   return (
@@ -276,10 +182,10 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
           <h3 className="text-lg font-semibold">{symbol} Chart</h3>
           <div className={cn(
             "w-2 h-2 rounded-full",
-            isConnected ? "bg-green-500" : "bg-red-500"
+            chartWs.status === 'connected' ? "bg-green-500" : "bg-red-500"
           )} />
           <span className="text-sm text-muted-foreground">
-            {isConnected ? 'Connected' : 'Disconnected'}
+            {chartWs.status === 'connected' ? 'Connected' : 'Disconnected'}
           </span>
         </div>
         
@@ -306,7 +212,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       <div className="relative">
         <div ref={chartContainerRef} className="w-full h-[400px]" />
         
-        {!isConnected && (
+        {chartWs.status !== 'connected' && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/80">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2" />
@@ -314,40 +220,6 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
             </div>
           </div>
         )}
-      </div>
-
-      {/* Data table */}
-      <div className="p-4 border-t">
-        <div className="grid grid-cols-5 gap-4 text-sm">
-          <div className="text-center">
-            <p className="text-muted-foreground">Open</p>
-            <p className="font-mono">
-              {priceData.length > 0 ? priceData[priceData.length - 1]?.open?.toFixed(2) : '--'}
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="text-muted-foreground">High</p>
-            <p className="font-mono text-green-500">
-              {priceData.length > 0 ? priceData[priceData.length - 1]?.high?.toFixed(2) : '--'}
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="text-muted-foreground">Low</p>
-            <p className="font-mono text-red-500">
-              {priceData.length > 0 ? priceData[priceData.length - 1]?.low?.toFixed(2) : '--'}
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="text-muted-foreground">Close</p>
-            <p className="font-mono">
-              {priceData.length > 0 ? priceData[priceData.length - 1]?.close?.toFixed(2) : '--'}
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="text-muted-foreground">Candles</p>
-            <p className="font-mono">{priceData.length}</p>
-          </div>
-        </div>
       </div>
     </div>
   );
