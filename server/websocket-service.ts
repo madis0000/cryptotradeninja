@@ -135,9 +135,8 @@ export class WebSocketService {
         this.marketSubscriptions.delete(subscription);
       });
 
-      // Send initial market data
-      console.log('[WEBSOCKET] Sending initial market data');
-      this.sendMarketDataToClient(ws);
+      // Don't start streams automatically - wait for frontend subscription
+      console.log('[WEBSOCKET] Client connected - waiting for subscription request');
     });
   }
 
@@ -1201,10 +1200,8 @@ export class WebSocketService {
   public stopBinanceStreams(deactivate: boolean = true) {
     console.log('[WEBSOCKET] Stopping all Binance streams');
     
-    // Only deactivate streams when fully stopping, not during interval switching
-    if (deactivate) {
-      this.isStreamsActive = false;
-    }
+    // Always deactivate streams to prevent unnecessary resource consumption
+    this.isStreamsActive = false;
     
     // Clear cached market data to prevent stale data
     console.log('[WEBSOCKET] Clearing cached market data');
