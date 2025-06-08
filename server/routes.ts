@@ -429,10 +429,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { quote } = req.query;
       
-      // Fetch exchange info from Binance
-      const binanceApiUrl = process.env.NODE_ENV === 'production' 
-        ? 'https://api.binance.com/api/v3/exchangeInfo'
-        : 'https://testnet.binance.vision/api/v3/exchangeInfo';
+      // Always use production Binance API for exchange info (public data)
+      const binanceApiUrl = 'https://api.binance.com/api/v3/exchangeInfo';
       
       const response = await fetch(binanceApiUrl);
       if (!response.ok) {
@@ -442,6 +440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const exchangeInfo = await response.json();
       let symbols = exchangeInfo.symbols.filter((symbol: any) => 
         symbol.status === 'TRADING' &&
+        symbol.permissions && 
         symbol.permissions.includes('SPOT')
       );
       
@@ -452,7 +451,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
       
-      // Format for frontend
+      // Format for frontend with additional market data
       const markets = symbols.map((symbol: any) => ({
         symbol: symbol.symbol,
         baseAsset: symbol.baseAsset,
@@ -465,17 +464,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         icebergAllowed: symbol.icebergAllowed,
         ocoAllowed: symbol.ocoAllowed,
         isSpotTradingAllowed: symbol.isSpotTradingAllowed,
-        isMarginTradingAllowed: symbol.isMarginTradingAllowed
+        isMarginTradingAllowed: symbol.isMarginTradingAllowed,
+        // Add display formatting
+        displayName: `${symbol.baseAsset}/${symbol.quoteAsset}`
       }));
+      
+      // Sort by symbol name for consistent display
+      markets.sort((a, b) => a.symbol.localeCompare(b.symbol));
       
       res.json({
         quote: quote || 'ALL',
         count: markets.length,
-        markets: markets.slice(0, 100) // Limit to first 100 pairs
+        markets: markets.slice(0, 200) // Increase limit for better UX
       });
     } catch (error) {
       console.error("Error fetching markets:", error);
-      res.status(500).json({ error: "Failed to fetch markets data" });
+      res.status(500).json({ 
+        error: "Failed to fetch markets data",
+        quote: quote || 'ALL',
+        count: 0,
+        markets: []
+      });
     }
   });
 
