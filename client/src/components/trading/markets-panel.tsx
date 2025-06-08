@@ -25,7 +25,7 @@ export function MarketsPanel({ className }: MarketsPanelProps) {
 
   const quotes = ["USDT", "USDC", "BTC"];
 
-  const { data: marketsData, isLoading, error } = useQuery({
+  const { data: marketsData, isLoading, error } = useQuery<MarketsResponse>({
     queryKey: ['/api/markets', { quote: selectedQuote }],
     queryFn: async () => {
       const response = await fetch(`/api/markets?quote=${selectedQuote}`);
