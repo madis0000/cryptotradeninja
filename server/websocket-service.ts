@@ -407,10 +407,50 @@ export class WebSocketService {
     });
   }
 
+  private async createNewBinanceConnection(symbols: string[]) {
+    console.log(`[WEBSOCKET] Creating new Binance connection for symbols:`, symbols);
+    
+    // Close existing connection if any
+    if (this.binancePublicWs) {
+      this.binancePublicWs.close();
+      this.binancePublicWs = null;
+    }
+
+    // Get the exchange configuration for the WebSocket endpoint
+    try {
+      const { storage } = await import('./storage');
+      let baseUrl = 'wss://stream.binance.com:9443/ws/';
+      
+      const exchanges = await storage.getExchangesByUserId(1); // Assuming user ID 1
+      if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
+        const endpoint = exchanges[0].wsStreamEndpoint;
+        console.log(`[WEBSOCKET] Using configured endpoint: ${endpoint}`);
+        
+        if (endpoint.includes('testnet')) {
+          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
+        } else if (endpoint.includes('binance.com')) {
+          baseUrl = 'wss://stream.binance.com:9443/ws/';
+        } else {
+          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
+        }
+      }
+
+      // Use combined stream endpoint for subscription-based WebSocket API
+      const subscriptionUrl = baseUrl.replace('/ws/', '/stream');
+      const streamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@ticker`);
+      
+      console.log(`[WEBSOCKET] Creating connection to: ${subscriptionUrl}`);
+      this.connectWithSubscription(subscriptionUrl, streamPaths);
+      
+    } catch (error) {
+      console.error(`[WEBSOCKET] Error creating new connection:`, error);
+    }
+  }
+
   private async updateBinanceSubscription(symbols: string[]) {
     if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
       console.log(`[WEBSOCKET] No active Binance connection, creating new one for symbols:`, symbols);
-      await this.connectConfigurableStream('ticker', symbols);
+      await this.createNewBinanceConnection(symbols);
       return;
     }
 
@@ -461,7 +501,7 @@ export class WebSocketService {
       // If we also have ticker clients but no active ticker connection, start ticker stream too
       if (hasTickerClients && (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN)) {
         console.log(`[WEBSOCKET] Also starting ticker stream for header clients`);
-        await this.updateBinanceSubscription(symbols);
+        await this.createNewBinanceConnection(symbols);
       }
       return;
     }
@@ -469,7 +509,11 @@ export class WebSocketService {
     // For ticker clients, use the main connection
     if (dataType === 'ticker') {
       console.log(`[WEBSOCKET] Configuring ticker stream for header client`);
-      await this.updateBinanceSubscription(symbols);
+      if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
+        await this.createNewBinanceConnection(symbols);
+      } else {
+        await this.updateBinanceSubscription(symbols);
+      }
       return;
     }
     
