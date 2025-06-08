@@ -24,9 +24,11 @@ export default function Trading() {
 
   const publicWs = usePublicWebSocket({
     onMessage: (data: any) => {
-      if (data && data.type === 'market_update' && data.data && data.data.symbol === selectedSymbol) {
+      if (data && data.type === 'market_update' && data.data) {
         const marketData = data.data;
-        console.log(`[TRADING] Received ${selectedSymbol} ticker update:`, marketData);
+        console.log(`[TRADING] Received ${marketData.symbol} ticker update:`, marketData);
+        
+        // Update ticker data for any received symbol (will be filtered by subscription)
         setTickerData({
           symbol: marketData.symbol,
           price: marketData.price,
@@ -36,6 +38,10 @@ export default function Trading() {
           lowPrice: marketData.lowPrice,
           volume: marketData.volume,
           quoteVolume: marketData.quoteVolume
+        });
+        console.log(`[TRADING] Updated ticker state for ${marketData.symbol}:`, {
+          price: marketData.price,
+          change: marketData.priceChangePercent
         });
       }
     },
