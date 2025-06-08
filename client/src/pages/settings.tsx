@@ -358,18 +358,18 @@ export default function Settings() {
           <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
             <h4 className="text-md font-medium text-white mb-3">Public Data Stream</h4>
             <p className="text-sm text-crypto-light mb-4">
-              Test public market data streams using the configured stream parameters above.
+              Test public market data streams. This will automatically configure and connect to the stream using the parameters above.
             </p>
             
             <div className="space-y-3">
               <div className="flex space-x-2">
                 <Button 
                   size="sm" 
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className="bg-crypto-success hover:bg-crypto-success/80 text-white"
                   onClick={async () => {
                     if (streamConfig.symbol) {
                       try {
-                        // Configure stream via backend API endpoint
+                        // First configure the stream via backend API endpoint
                         const response = await fetch('/api/websocket/configure-stream', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
@@ -385,37 +385,7 @@ export default function Settings() {
                           throw new Error('Configuration failed');
                         }
 
-                        toast({
-                          title: "Stream Configured",
-                          description: `Successfully configured ${streamConfig.dataType} stream for ${streamConfig.symbol}`,
-                        });
-                      } catch (error) {
-                        toast({
-                          title: "Configuration Failed",
-                          description: "Failed to configure stream",
-                          variant: "destructive",
-                        });
-                      }
-                    } else {
-                      toast({
-                        title: "No Symbol",
-                        description: "Please select a trading symbol first",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                  disabled={!streamConfig.symbol}
-                >
-                  <i className="fas fa-cog mr-2"></i>
-                  Configure Stream
-                </Button>
-                <Button 
-                  size="sm" 
-                  className="bg-crypto-success hover:bg-crypto-success/80 text-white"
-                  onClick={async () => {
-                    if (streamConfig.symbol) {
-                      try {
-                        // Connect directly to backend with configured symbol
+                        // Then connect to the backend WebSocket
                         publicWs.connect([streamConfig.symbol]);
 
                         toast({
@@ -425,7 +395,7 @@ export default function Settings() {
                       } catch (error) {
                         toast({
                           title: "Connection Failed",
-                          description: "Failed to connect to stream",
+                          description: "Failed to configure and connect to stream",
                           variant: "destructive",
                         });
                       }
