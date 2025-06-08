@@ -344,7 +344,7 @@ export class WebSocketService {
         let processedData = message;
         let streamName = '';
         
-        // Check if this is combined stream format: {"stream":"btcusdt@kline_1m","data":{...}}
+        // Check if this is combined stream format: {"stream":"btcusdt@ticker","data":{...}}
         if (message.stream && message.data) {
           streamName = message.stream;
           processedData = message.data;
@@ -352,13 +352,42 @@ export class WebSocketService {
           // Single raw stream format - determine stream type from data
           streamName = `${processedData.s.toLowerCase()}@kline_${processedData.k.i}`;
           console.log(`[BINANCE STREAM] Raw stream data for: ${streamName}`);
+        } else if (processedData.e === '24hrTicker') {
+          // Handle ticker data
+          streamName = `${processedData.s.toLowerCase()}@ticker`;
+          console.log(`[BINANCE STREAM] Raw ticker data for: ${streamName}`);
         } else {
-          // Skip non-kline messages
+          // Skip non-kline/ticker messages
           return;
         }
         
-        // Only process kline data for the requested interval
-        if (streamName.includes('@kline')) {
+        // Process ticker data
+        if (streamName.includes('@ticker')) {
+          const symbol = processedData.s;
+          if (symbol) {
+            console.log(`[BINANCE STREAM] Processing ticker for ${symbol}: price=${processedData.c}, change=${processedData.P}%`);
+            
+            const marketUpdate = {
+              symbol: symbol,
+              price: processedData.c,
+              priceChange: processedData.p,
+              priceChangePercent: processedData.P,
+              highPrice: processedData.h,
+              lowPrice: processedData.l,
+              volume: processedData.v,
+              quoteVolume: processedData.q,
+              timestamp: processedData.E
+            };
+            
+            // Store market data
+            this.marketData.set(symbol, marketUpdate);
+            
+            // Broadcast to frontend clients
+            this.broadcastMarketUpdate(marketUpdate);
+          }
+        }
+        // Process kline data for the requested interval
+        else if (streamName.includes('@kline')) {
           const symbol = processedData.s;
           const kline = processedData.k;
           

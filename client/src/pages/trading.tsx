@@ -23,17 +23,18 @@ export default function Trading() {
 
   const publicWs = usePublicWebSocket({
     onMessage: (data: any) => {
-      if (data && data.stream && data.stream.includes('btcusdt@ticker')) {
-        const tickerUpdate = data.data;
+      if (data && data.type === 'market_update' && data.data && data.data.symbol === 'BTCUSDT') {
+        const marketData = data.data;
+        console.log('[TRADING] Received BTCUSDT ticker update:', marketData);
         setTickerData({
-          symbol: tickerUpdate.s,
-          price: tickerUpdate.c,
-          priceChange: tickerUpdate.p,
-          priceChangePercent: tickerUpdate.P,
-          highPrice: tickerUpdate.h,
-          lowPrice: tickerUpdate.l,
-          volume: tickerUpdate.v,
-          quoteVolume: tickerUpdate.q
+          symbol: marketData.symbol,
+          price: marketData.price,
+          priceChange: marketData.priceChange,
+          priceChangePercent: marketData.priceChangePercent,
+          highPrice: marketData.highPrice,
+          lowPrice: marketData.lowPrice,
+          volume: marketData.volume,
+          quoteVolume: marketData.quoteVolume
         });
       }
     },
