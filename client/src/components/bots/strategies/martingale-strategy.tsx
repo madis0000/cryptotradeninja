@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,13 +7,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ChevronUp, ChevronDown, Info } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 interface MartingaleStrategyProps {
   className?: string;
   selectedSymbol: string;
+  selectedExchangeId?: number;
 }
 
-export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStrategyProps) {
+export function MartingaleStrategy({ className, selectedSymbol, selectedExchangeId }: MartingaleStrategyProps) {
   const [localDirection, setLocalDirection] = useState<"long" | "short">("long");
   const [config, setConfig] = useState({
     // Price Settings
@@ -29,10 +31,6 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
     activeSafetyOrdersEnabled: false,
     activeSafetyOrders: "1",
     
-    // Available
-    available: "0.000",
-    totalInvestment: "--",
-    
     // Advanced Settings
     advancedEnabled: false,
     triggerType: "market",
@@ -44,6 +42,19 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
     // Price Range
     lowerPrice: "",
     upperPrice: ""
+  });
+
+  // Fetch available balance from exchange
+  const { data: balanceData, isLoading: balanceLoading } = useQuery({
+    queryKey: ['balance', selectedExchangeId, selectedSymbol],
+    queryFn: async () => {
+      if (!selectedExchangeId || !selectedSymbol) return null;
+      const response = await fetch(`/api/exchanges/${selectedExchangeId}/balance/${selectedSymbol}`);
+      if (!response.ok) throw new Error('Failed to fetch balance');
+      return response.json();
+    },
+    enabled: !!(selectedExchangeId && selectedSymbol),
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -218,14 +229,24 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
         <div className="flex justify-between text-sm">
           <div className="flex items-center space-x-1">
             <span className="text-gray-400">Available</span>
-            <span className="text-orange-500 font-medium">{config.available} USDT</span>
+            <span className="text-orange-500 font-medium">
+              {balanceLoading ? '...' : balanceData ? parseFloat(balanceData.free).toFixed(3) : '0.000'} USDT
+            </span>
             <Info className="w-3 h-3 text-gray-400" />
           </div>
         </div>
 
         <div className="flex justify-between text-sm">
           <span className="text-gray-400">Total Investment</span>
-          <span className="text-gray-400">{config.totalInvestment} USDT</span>
+          <span className="text-gray-400">
+            {(() => {
+              const baseOrder = parseFloat(config.baseOrderSize) || 0;
+              const safetyOrder = parseFloat(config.safetyOrderSize) || 0;
+              const maxSafetyOrders = parseInt(config.maxSafetyOrders) || 0;
+              const total = baseOrder + (safetyOrder * maxSafetyOrders);
+              return total.toFixed(2);
+            })()} USDT
+          </span>
         </div>
       </div>
 
