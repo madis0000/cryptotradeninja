@@ -24,11 +24,21 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     connectToKlineStream();
 
     return () => {
+      // Cleanup WebSocket connection
       if (wsRef.current) {
         wsRef.current.close();
+        wsRef.current = null;
       }
+      
+      // Cleanup chart safely
       if (chartRef.current) {
-        chartRef.current.remove();
+        try {
+          chartRef.current.remove();
+        } catch (error) {
+          console.log('[CHART] Cleanup: Chart already disposed');
+        }
+        chartRef.current = null;
+        seriesRef.current = null;
       }
     };
   }, [symbol, currentInterval]);
@@ -36,9 +46,15 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
   const initializeChart = () => {
     if (!chartContainerRef.current) return;
 
-    // Remove existing chart
+    // Remove existing chart safely
     if (chartRef.current) {
-      chartRef.current.remove();
+      try {
+        chartRef.current.remove();
+      } catch (error) {
+        console.log('[CHART] Chart already disposed:', error);
+      }
+      chartRef.current = null;
+      seriesRef.current = null;
     }
 
     // Create new chart with v5 API
@@ -176,10 +192,10 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     
     const candlestick = {
       time: Math.floor(klineData.openTime / 1000),
-      open: klineData.open,
-      high: klineData.high,
-      low: klineData.low,
-      close: klineData.close,
+      open: parseFloat(klineData.open),
+      high: parseFloat(klineData.high),
+      low: parseFloat(klineData.low),
+      close: parseFloat(klineData.close),
     };
     
     setPriceData(prev => {
@@ -187,14 +203,19 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       const existingIndex = updated.findIndex(item => item.time === candlestick.time);
       
       if (existingIndex >= 0) {
+        // Update existing candle
         updated[existingIndex] = candlestick;
-        seriesRef.current?.update(candlestick);
       } else {
+        // Add new candle
         updated.push(candlestick);
-        seriesRef.current?.update(candlestick);
       }
       
-      return updated.sort((a, b) => a.time - b.time);
+      const sortedData = updated.sort((a, b) => a.time - b.time);
+      
+      // Update chart with latest data
+      seriesRef.current?.update(candlestick);
+      
+      return sortedData;
     });
   };
 
@@ -228,7 +249,23 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
   ];
 
   const handleIntervalChange = (newInterval: string) => {
+    if (newInterval === currentInterval) return;
+    
+    console.log(`[CHART] Changing interval from ${currentInterval} to ${newInterval}`);
     setCurrentInterval(newInterval);
+    setPriceData([]); // Clear existing data
+    
+    // Send new interval configuration
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      const klineMsg = {
+        type: 'configure_stream',
+        dataType: 'kline',
+        symbols: [symbol],
+        interval: newInterval
+      };
+      console.log('[CHART] Sending interval change configuration:', klineMsg);
+      wsRef.current.send(JSON.stringify(klineMsg));
+    }
   };
 
   return (
