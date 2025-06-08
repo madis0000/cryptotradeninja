@@ -136,6 +136,29 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     setConfig(prev => ({ ...prev, [field]: value }));
   };
 
+  // Helper functions for arrow controls
+  const adjustPercentageValue = (field: string, increment: number) => {
+    const currentValue = parseFloat(config[field as keyof typeof config] as string) || 0;
+    const newValue = Math.max(0, currentValue + increment);
+    setConfig(prev => ({ ...prev, [field]: newValue.toFixed(1) }));
+  };
+
+  const adjustAmountValue = (field: string, increment: number) => {
+    const currentValue = parseFloat(config[field as keyof typeof config] as string) || 0;
+    const newValue = Math.max(0, currentValue + increment);
+    setConfig(prev => ({ ...prev, [field]: newValue.toFixed(2) }));
+  };
+
+  const adjustIntegerValue = (field: string, increment: number, min: number = 1, max?: number) => {
+    const currentValue = parseInt(config[field as keyof typeof config] as string) || min;
+    let newValue = currentValue + increment;
+    newValue = Math.max(min, newValue);
+    if (max !== undefined) {
+      newValue = Math.min(max, newValue);
+    }
+    setConfig(prev => ({ ...prev, [field]: newValue.toString() }));
+  };
+
   const handleCreateBot = () => {
     if (!selectedExchangeId) {
       toast({
@@ -238,6 +261,20 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
           <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
             <Label className="text-sm text-gray-400">Price Deviation</Label>
             <div className="flex items-center space-x-2">
+              <div className="flex flex-col">
+                <button
+                  onClick={() => adjustPercentageValue('priceDeviation', 0.1)}
+                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                >
+                  <ChevronUp className="h-2 w-2 text-gray-400" />
+                </button>
+                <button
+                  onClick={() => adjustPercentageValue('priceDeviation', -0.1)}
+                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                >
+                  <ChevronDown className="h-2 w-2 text-gray-400" />
+                </button>
+              </div>
               <Input
                 value={config.priceDeviation}
                 onChange={(e) => handleInputChange('priceDeviation', e.target.value)}
@@ -250,6 +287,20 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
           <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
             <Label className="text-sm text-gray-400">Take Profit</Label>
             <div className="flex items-center space-x-2">
+              <div className="flex flex-col">
+                <button
+                  onClick={() => adjustPercentageValue('takeProfit', 0.1)}
+                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                >
+                  <ChevronUp className="h-2 w-2 text-gray-400" />
+                </button>
+                <button
+                  onClick={() => adjustPercentageValue('takeProfit', -0.1)}
+                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                >
+                  <ChevronDown className="h-2 w-2 text-gray-400" />
+                </button>
+              </div>
               <Input
                 value={config.takeProfit}
                 onChange={(e) => handleInputChange('takeProfit', e.target.value)}
@@ -275,6 +326,20 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
             <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
               <Label className="text-sm text-gray-400">Trailing Profit</Label>
               <div className="flex items-center space-x-2">
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => adjustPercentageValue('trailingProfit', 0.1)}
+                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                  >
+                    <ChevronUp className="h-2 w-2 text-gray-400" />
+                  </button>
+                  <button
+                    onClick={() => adjustPercentageValue('trailingProfit', -0.1)}
+                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                  >
+                    <ChevronDown className="h-2 w-2 text-gray-400" />
+                  </button>
+                </div>
                 <Input
                   value={config.trailingProfit}
                   onChange={(e) => handleInputChange('trailingProfit', e.target.value)}
@@ -295,7 +360,20 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
           <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
             <Label className="text-sm text-gray-400">Base Order</Label>
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-400">≥</span>
+              <div className="flex flex-col">
+                <button
+                  onClick={() => adjustAmountValue('baseOrderSize', 0.01)}
+                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                >
+                  <ChevronUp className="h-2 w-2 text-gray-400" />
+                </button>
+                <button
+                  onClick={() => adjustAmountValue('baseOrderSize', -0.01)}
+                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                >
+                  <ChevronDown className="h-2 w-2 text-gray-400" />
+                </button>
+              </div>
               <Input
                 value={config.baseOrderSize}
                 onChange={(e) => handleInputChange('baseOrderSize', e.target.value)}
@@ -308,7 +386,20 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
           <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
             <Label className="text-sm text-gray-400">Safety Orders</Label>
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-400">≥</span>
+              <div className="flex flex-col">
+                <button
+                  onClick={() => adjustAmountValue('safetyOrderSize', 0.01)}
+                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                >
+                  <ChevronUp className="h-2 w-2 text-gray-400" />
+                </button>
+                <button
+                  onClick={() => adjustAmountValue('safetyOrderSize', -0.01)}
+                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                >
+                  <ChevronDown className="h-2 w-2 text-gray-400" />
+                </button>
+              </div>
               <Input
                 value={config.safetyOrderSize}
                 onChange={(e) => handleInputChange('safetyOrderSize', e.target.value)}
@@ -339,22 +430,44 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
               
               {config.activeSafetyOrdersEnabled && (
                 <div className="flex items-center space-x-2">
-                  <Input
-                    value={config.activeSafetyOrders}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      const maxValue = parseInt(config.maxSafetyOrders) || 8;
-                      const numValue = parseInt(value) || 1;
-                      if (numValue >= 1 && numValue <= maxValue) {
-                        handleInputChange('activeSafetyOrders', value);
-                      }
-                    }}
-                    className="w-12 h-6 bg-crypto-darker border-gray-600 text-white text-xs text-center"
-                    min="1"
-                    max={config.maxSafetyOrders}
-                    type="number"
-                  />
-                  <span className="text-xs text-gray-500">/ {config.maxSafetyOrders}</span>
+                  <div className="flex items-center space-x-1">
+                    <div className="flex flex-col">
+                      <button
+                        onClick={() => adjustIntegerValue('activeSafetyOrders', 1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
+                        className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                      >
+                        <ChevronUp className="h-2 w-2 text-gray-400" />
+                      </button>
+                      <button
+                        onClick={() => adjustIntegerValue('activeSafetyOrders', -1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
+                        className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                      >
+                        <ChevronDown className="h-2 w-2 text-gray-400" />
+                      </button>
+                    </div>
+                    <Input
+                      value={config.activeSafetyOrders}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        const maxValue = Math.max(1, parseInt(config.maxSafetyOrders) - 1) || 1;
+                        const numValue = parseInt(value) || 1;
+                        if (numValue >= 1 && numValue <= maxValue) {
+                          handleInputChange('activeSafetyOrders', value);
+                        }
+                      }}
+                      className="w-12 h-6 bg-crypto-darker border-gray-600 text-white text-xs text-center"
+                      min="1"
+                      max={Math.max(1, parseInt(config.maxSafetyOrders) - 1)}
+                      type="number"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className="text-xs text-gray-500">/ {Math.max(1, parseInt(config.maxSafetyOrders) - 1)}</span>
+                    <span className="text-xs text-gray-500">
+                      ({parseInt(config.maxSafetyOrders) - parseInt(config.activeSafetyOrders)} 
+                      <span className="text-gray-600 ml-1">remaining</span>)
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
