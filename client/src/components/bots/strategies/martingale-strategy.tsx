@@ -9,15 +9,18 @@ import { Switch } from "@/components/ui/switch";
 import { ChevronUp, ChevronDown, Info } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 interface MartingaleStrategyProps {
   className?: string;
   selectedSymbol: string;
   selectedExchangeId?: number;
+  exchanges?: any[];
+  onExchangeChange?: (exchangeId: number) => void;
   onBotCreated?: () => void;
 }
 
-export function MartingaleStrategy({ className, selectedSymbol, selectedExchangeId, onBotCreated }: MartingaleStrategyProps) {
+export function MartingaleStrategy({ className, selectedSymbol, selectedExchangeId, exchanges, onExchangeChange, onBotCreated }: MartingaleStrategyProps) {
   const [localDirection, setLocalDirection] = useState<"long" | "short">("long");
   const [config, setConfig] = useState({
     // Price Settings
@@ -138,6 +141,30 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
 
   return (
     <div className={`space-y-4 ${className}`}>
+      {/* Exchange Selector */}
+      <div className="space-y-2">
+        <Label className="text-sm text-gray-400">Exchange Account</Label>
+        <Select 
+          value={selectedExchangeId?.toString()} 
+          onValueChange={(value) => onExchangeChange?.(parseInt(value))}
+        >
+          <SelectTrigger className="w-full bg-crypto-darker border-gray-600 text-white">
+            <SelectValue placeholder="Select exchange account" />
+          </SelectTrigger>
+          <SelectContent className="bg-crypto-darker border-gray-600">
+            {exchanges?.map((exchange: any) => (
+              <SelectItem 
+                key={exchange.id} 
+                value={exchange.id.toString()}
+                className="text-white hover:bg-gray-700"
+              >
+                {exchange.name} {exchange.isTestnet ? "(Testnet)" : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Direction Selector */}
       <div className="grid grid-cols-2 gap-2">
         <Button

@@ -29,12 +29,7 @@ export default function TradingBots() {
 
   // Fetch exchanges for balance data
   const { data: exchanges } = useQuery({
-    queryKey: ['/api/exchanges'],
-    queryFn: async () => {
-      const response = await fetch('/api/exchanges');
-      if (!response.ok) throw new Error('Failed to fetch exchanges');
-      return response.json();
-    }
+    queryKey: ['/api/exchanges']
   });
 
   // Auto-select first exchange if available
@@ -43,6 +38,10 @@ export default function TradingBots() {
       setSelectedExchangeId(exchanges[0].id);
     }
   }, [exchanges, selectedExchangeId]);
+
+  const handleExchangeChange = (exchangeId: number) => {
+    setSelectedExchangeId(exchangeId);
+  };
 
   const strategies = [
     { id: "grid", name: "Grid", active: true },
@@ -210,6 +209,8 @@ export default function TradingBots() {
                   className="flex-1" 
                   selectedSymbol={selectedSymbol}
                   selectedExchangeId={selectedExchangeId}
+                  exchanges={exchanges}
+                  onExchangeChange={handleExchangeChange}
                 />
               )}
 
