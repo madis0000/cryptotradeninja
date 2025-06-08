@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { ChevronUp, ChevronDown, Info } from "lucide-react";
 
 interface MartingaleStrategyProps {
@@ -25,6 +26,8 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
     baseOrderSize: "7.5",
     safetyOrderSize: "7.5",
     maxSafetyOrders: "8",
+    activeSafetyOrdersEnabled: false,
+    activeSafetyOrders: "1",
     
     // Available
     available: "0.000",
@@ -169,13 +172,46 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
             </div>
           </div>
 
-          <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-            <Label className="text-sm text-gray-400">Max Safety Orders</Label>
-            <Input
-              value={config.maxSafetyOrders}
-              onChange={(e) => handleInputChange('maxSafetyOrders', e.target.value)}
-              className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
-            />
+          <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+            <div className="flex justify-between items-center mb-3">
+              <Label className="text-sm text-gray-400">Max Safety Orders</Label>
+              <Input
+                value={config.maxSafetyOrders}
+                onChange={(e) => handleInputChange('maxSafetyOrders', e.target.value)}
+                className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+              />
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  checked={config.activeSafetyOrdersEnabled}
+                  onCheckedChange={(checked) => setConfig(prev => ({...prev, activeSafetyOrdersEnabled: checked}))}
+                />
+                <Label className="text-sm text-gray-500">Active Safety Orders</Label>
+              </div>
+              
+              {config.activeSafetyOrdersEnabled && (
+                <div className="flex items-center space-x-2">
+                  <Input
+                    value={config.activeSafetyOrders}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      const maxValue = parseInt(config.maxSafetyOrders) || 8;
+                      const numValue = parseInt(value) || 1;
+                      if (numValue >= 1 && numValue <= maxValue) {
+                        handleInputChange('activeSafetyOrders', value);
+                      }
+                    }}
+                    className="w-12 h-6 bg-crypto-darker border-gray-600 text-white text-xs text-center"
+                    min="1"
+                    max={config.maxSafetyOrders}
+                    type="number"
+                  />
+                  <span className="text-xs text-gray-500">/ {config.maxSafetyOrders}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
