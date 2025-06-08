@@ -322,6 +322,9 @@ export class WebSocketService {
         this.binanceKlineWs.send(JSON.stringify(unsubscribeMessage));
       }
       
+      // Fetch historical data before subscribing to real-time streams
+      await this.fetchHistoricalKlinesREST(symbols, interval);
+      
       // Subscribe to new kline streams
       const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
       const subscribeMessage = {
@@ -338,6 +341,9 @@ export class WebSocketService {
     
     // If no existing connection, create a new one specifically for klines
     console.log(`[WEBSOCKET] Creating new connection for kline streams`);
+    
+    // Fetch historical data first, then start real-time streams
+    await this.fetchHistoricalKlinesREST(symbols, interval);
     
     const { storage } = await import('./storage');
     let baseUrl = 'wss://stream.testnet.binance.vision/stream';
@@ -1604,6 +1610,90 @@ export class WebSocketService {
     this.binanceUserStreams.clear();
     
     console.log('[WEBSOCKET] All Binance streams stopped');
+  }
+
+  private async fetchHistoricalKlinesREST(symbols: string[], interval: string) {
+    console.log(`[HISTORICAL] Fetching historical klines for:`, symbols, 'interval:', interval);
+    
+    for (const symbol of symbols) {
+      try {
+        // Determine the API endpoint based on configuration
+        const { storage } = await import('./storage');
+        let baseUrl = 'https://testnet.binance.vision/api/v3/klines';
+        
+        try {
+          const exchanges = await storage.getExchangesByUserId(1);
+          if (exchanges.length > 0 && exchanges[0].restApiEndpoint) {
+            const endpoint = exchanges[0].restApiEndpoint;
+            if (endpoint.includes('testnet')) {
+              baseUrl = 'https://testnet.binance.vision/api/v3/klines';
+            } else {
+              baseUrl = 'https://api.binance.com/api/v3/klines';
+            }
+          }
+        } catch (error) {
+          console.log(`[HISTORICAL] Using default testnet endpoint`);
+        }
+        
+        // Calculate time range for last 100 candles
+        const endTime = Date.now();
+        const intervalMs = this.getIntervalInMs(interval);
+        const startTime = endTime - (intervalMs * 100);
+        
+        const url = `${baseUrl}?symbol=${symbol.toUpperCase()}&interval=${interval}&startTime=${startTime}&endTime=${endTime}&limit=100`;
+        
+        console.log(`[HISTORICAL] Fetching from: ${url}`);
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const klines = await response.json();
+        console.log(`[HISTORICAL] Received ${klines.length} klines for ${symbol} ${interval}`);
+        
+        // Process and store historical klines
+        const processedKlines = klines.map((kline: any[]) => ({
+          symbol: symbol.toUpperCase(),
+          interval: interval,
+          openTime: parseInt(kline[0]),
+          closeTime: parseInt(kline[6]),
+          open: parseFloat(kline[1]),
+          high: parseFloat(kline[2]),
+          low: parseFloat(kline[3]),
+          close: parseFloat(kline[4]),
+          volume: parseFloat(kline[5]),
+          isClosed: true,
+          timestamp: Date.now()
+        }));
+        
+        // Store in historical data cache
+        if (!this.historicalData.has(symbol.toUpperCase())) {
+          this.historicalData.set(symbol.toUpperCase(), new Map());
+        }
+        this.historicalData.get(symbol.toUpperCase())!.set(interval, processedKlines);
+        
+        // Send historical data to connected clients
+        this.sendHistoricalDataToClients([symbol], interval);
+        
+      } catch (error) {
+        console.error(`[HISTORICAL] Error fetching klines for ${symbol}:`, error);
+      }
+    }
+  }
+
+  private getIntervalInMs(interval: string): number {
+    const unit = interval.slice(-1);
+    const value = parseInt(interval.slice(0, -1));
+    
+    switch (unit) {
+      case 'm': return value * 60 * 1000;
+      case 'h': return value * 60 * 60 * 1000;
+      case 'd': return value * 24 * 60 * 60 * 1000;
+      case 'w': return value * 7 * 24 * 60 * 60 * 1000;
+      case 'M': return value * 30 * 24 * 60 * 60 * 1000; // Approximate
+      default: return 60 * 1000; // Default to 1 minute
+    }
   }
 
   public close() {
