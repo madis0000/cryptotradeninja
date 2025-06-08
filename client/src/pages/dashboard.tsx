@@ -33,28 +33,17 @@ export default function Dashboard() {
     }
   });
 
-  // Manual WebSocket connection (no auto-connect to prevent loops)
+  // WebSocket connection disabled since dashboard has no chart components
   useEffect(() => {
-    let mounted = true;
-    
-    const connectWebSocket = () => {
-      if (mounted && publicWs.status === 'disconnected') {
-        console.log('[DASHBOARD] Attempting manual WebSocket connection...');
-        publicWs.connect(['BTCUSDT']);
-      }
-    };
-
-    // Delayed connection to prevent rapid reconnects
-    const timer = setTimeout(connectWebSocket, 2000);
+    console.log('[DASHBOARD] WebSocket connection disabled - no chart components present');
     
     return () => {
-      mounted = false;
-      clearTimeout(timer);
+      // Cleanup if needed
       if (publicWs.status === 'connected') {
         publicWs.disconnect();
       }
     };
-  }, []); // No dependencies to prevent reconnection loops
+  }, []);
 
   return (
     <div className="flex-1 overflow-auto p-6">
