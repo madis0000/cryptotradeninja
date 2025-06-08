@@ -376,9 +376,17 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
           <span className="text-gray-400">
             {(() => {
               const baseOrder = parseFloat(config.baseOrderSize) || 0;
-              const safetyOrder = parseFloat(config.safetyOrderSize) || 0;
+              const safetyOrderBase = parseFloat(config.safetyOrderSize) || 0;
               const maxSafetyOrders = parseInt(config.maxSafetyOrders) || 0;
-              const total = baseOrder + (safetyOrder * maxSafetyOrders);
+              const multiplier = config.safetyOrderSizeMultiplier[0] || 1;
+              
+              // Calculate total safety orders with multiplier
+              let totalSafetyOrderAmount = 0;
+              for (let i = 0; i < maxSafetyOrders; i++) {
+                totalSafetyOrderAmount += safetyOrderBase * Math.pow(multiplier, i);
+              }
+              
+              const total = baseOrder + totalSafetyOrderAmount;
               return total.toFixed(2);
             })()} USDT
           </span>
