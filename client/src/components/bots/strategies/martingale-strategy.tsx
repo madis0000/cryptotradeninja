@@ -10,6 +10,8 @@ import { ChevronUp, ChevronDown, Info } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { useAuth } from "@/hooks/useAuth";
 
 interface MartingaleStrategyProps {
   className?: string;

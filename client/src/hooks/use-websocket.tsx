@@ -1,13 +1,14 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { MarketData, WebSocketMessage } from '@/types';
+import type { MarketData, WebSocketMessage } from '@/types';
 
 interface UseWebSocketProps {
   onMarketUpdate?: (data: MarketData) => void;
   onTradeExecuted?: (data: any) => void;
   onBotStatusChange?: (data: any) => void;
+  onBalanceUpdate?: (data: any) => void;
 }
 
-export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChange }: UseWebSocketProps) {
+export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChange, onBalanceUpdate }: UseWebSocketProps) {
   const ws = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -49,6 +50,13 @@ export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChang
             console.log('CLIENT WS: Market update -', message.data?.symbol, message.data?.price);
             onMarketUpdate?.(message.data);
             break;
+          case 'balance_update':
+            console.log('CLIENT WS: Balance update -', message.data);
+            onBalanceUpdate?.(message.data);
+            break;
+          case 'balance_subscribed':
+            console.log('CLIENT WS: Balance subscription confirmed -', message);
+            break;
           case 'trade_executed':
             onTradeExecuted?.(message.data);
             break;
@@ -85,5 +93,31 @@ export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChang
     };
   }, [connect]);
 
-  return { connect };
+  const subscribeToBalance = useCallback((userId: number, exchangeId: number, symbol: string) => {
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      const message = {
+        type: 'subscribe_balance',
+        userId,
+        exchangeId,
+        symbol
+      };
+      ws.current.send(JSON.stringify(message));
+      console.log('[CLIENT WS] Subscribed to balance updates:', message);
+    }
+  }, []);
+
+  const unsubscribeFromBalance = useCallback((userId: number, exchangeId: number, symbol: string) => {
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      const message = {
+        type: 'unsubscribe_balance',
+        userId,
+        exchangeId,
+        symbol
+      };
+      ws.current.send(JSON.stringify(message));
+      console.log('[CLIENT WS] Unsubscribed from balance updates:', message);
+    }
+  }, []);
+
+  return { connect, subscribeToBalance, unsubscribeFromBalance };
 }

@@ -1494,10 +1494,9 @@ export class WebSocketService {
     });
     
     // Update balance for each unique subscription
-    const subscriptionsArray = Array.from(uniqueSubscriptions.values());
-    for (const subscription of subscriptionsArray) {
+    uniqueSubscriptions.forEach(async (subscription) => {
       await this.updateBalanceForSubscription(subscription);
-    }
+    });
   }
 
   private async updateBalanceForSubscription(subscription: BalanceSubscription) {
