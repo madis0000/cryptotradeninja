@@ -213,18 +213,19 @@ export default function TradingBots() {
                 />
               )}
 
-              {/* Create Bot Button */}
-              <div className="mt-auto pt-6">
-                <div className="text-center">
-                  <p className="text-xs text-gray-500 mb-3">Preview</p>
-                  <Button 
-                    className="w-full bg-orange-500 hover:bg-orange-600 text-white"
-                    disabled
-                  >
-                    Create {strategies.find(s => s.id === selectedStrategy)?.name} Bot
-                  </Button>
+              {selectedStrategy === "grid" && (
+                <div className="mt-auto pt-6">
+                  <div className="text-center">
+                    <p className="text-xs text-gray-500 mb-3">Preview</p>
+                    <Button 
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+                      disabled
+                    >
+                      Create Grid Bot
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

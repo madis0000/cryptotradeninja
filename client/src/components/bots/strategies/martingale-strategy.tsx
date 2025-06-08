@@ -96,6 +96,44 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     setConfig(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleCreateBot = () => {
+    if (!selectedExchangeId) {
+      toast({
+        title: "Error",
+        description: "Please select an exchange",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const botData = {
+      name: `Martingale ${selectedSymbol} (${localDirection.toUpperCase()})`,
+      strategy: "martingale",
+      tradingPair: selectedSymbol,
+      exchangeId: selectedExchangeId,
+      direction: localDirection,
+      baseOrderAmount: config.baseOrderSize,
+      safetyOrderAmount: config.safetyOrderSize,
+      maxSafetyOrders: parseInt(config.maxSafetyOrders),
+      activeSafetyOrdersEnabled: config.activeSafetyOrdersEnabled,
+      activeSafetyOrders: parseInt(config.activeSafetyOrders),
+      priceDeviation: parseFloat(config.priceDeviation),
+      takeProfitPercentage: parseFloat(config.takeProfit),
+      takeProfitType: config.takeProfitType,
+      trailingProfitPercentage: config.takeProfitType === "trailing" ? parseFloat(config.trailingProfit) : null,
+      triggerType: config.triggerType,
+      triggerPrice: config.triggerPrice ? parseFloat(config.triggerPrice) : null,
+      priceDeviationMultiplier: config.priceDeviationMultiplier[0],
+      safetyOrderSizeMultiplier: config.safetyOrderSizeMultiplier[0],
+      cooldownBetweenRounds: parseInt(config.cooldownBetweenRounds),
+      lowerPriceLimit: config.lowerPrice ? parseFloat(config.lowerPrice) : null,
+      upperPriceLimit: config.upperPrice ? parseFloat(config.upperPrice) : null,
+      isActive: false
+    };
+
+    createBotMutation.mutate(botData);
+  };
+
   const baseCurrency = selectedSymbol.replace('USDT', '');
 
   return (
@@ -398,6 +436,17 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Create Bot Button */}
+      <div className="mt-6 pt-4 border-t border-gray-700">
+        <Button 
+          onClick={handleCreateBot}
+          disabled={createBotMutation.isPending || !selectedExchangeId}
+          className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+        >
+          {createBotMutation.isPending ? "Creating..." : "Create Martingale Bot"}
+        </Button>
       </div>
     </div>
   );
