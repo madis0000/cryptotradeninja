@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, CandlestickData, IChartApi, ISeriesApi } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickData } from 'lightweight-charts';
 import { cn } from '@/lib/utils';
 
 interface TradingChartProps {
@@ -10,8 +10,8 @@ interface TradingChartProps {
 export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const chartRef = useRef<any>(null);
+  const seriesRef = useRef<any>(null);
   const [currentInterval, setCurrentInterval] = useState('1m');
   const [isConnected, setIsConnected] = useState(false);
   const [priceData, setPriceData] = useState<CandlestickData[]>([]);
@@ -66,7 +66,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     });
 
     // Add candlestick series with v5 API
-    const candlestickSeries = chart.addCandlestickSeries({
+    const candlestickSeries = chart.addSeries('Candlestick', {
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderUpColor: '#22c55e',
@@ -95,7 +95,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     if (wsRef.current) {
       wsRef.current.close();
     }
-
+    
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}:8080`;
     
@@ -172,38 +172,55 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     };
   };
 
-  const handleHistoricalData = (klines: any[]) => {
-    const chartData = klines.map((kline) => ({
-      time: new Date(kline.openTime).toLocaleTimeString(),
-      open: parseFloat(kline.open),
-      high: parseFloat(kline.high),
-      low: parseFloat(kline.low),
-      close: parseFloat(kline.close),
-      volume: parseFloat(kline.volume),
-    }));
-
-    setPriceData(chartData.slice(-50)); // Keep last 50 candles
-  };
-
-  const handleKlineUpdate = (kline: any) => {
-    const newData = {
-      time: new Date(kline.openTime).toLocaleTimeString(),
-      open: parseFloat(kline.open),
-      high: parseFloat(kline.high),
-      low: parseFloat(kline.low),
-      close: parseFloat(kline.close),
-      volume: parseFloat(kline.volume),
+  const handleKlineUpdate = (klineData: any) => {
+    console.log('[CHART] Processing kline data:', klineData);
+    
+    if (!seriesRef.current) return;
+    
+    const candlestick: CandlestickData = {
+      time: Math.floor(klineData.openTime / 1000) as any, // Convert to seconds
+      open: klineData.open,
+      high: klineData.high,
+      low: klineData.low,
+      close: klineData.close,
     };
-
+    
+    // Update the chart data
     setPriceData(prev => {
       const updated = [...prev];
-      if (updated.length > 0 && updated[updated.length - 1].time === newData.time) {
-        updated[updated.length - 1] = newData; // Update last candle
+      const existingIndex = updated.findIndex(item => item.time === candlestick.time);
+      
+      if (existingIndex >= 0) {
+        updated[existingIndex] = candlestick;
+        // Update existing candle
+        seriesRef.current?.update(candlestick);
       } else {
-        updated.push(newData); // Add new candle
+        updated.push(candlestick);
+        // Add new candle
+        seriesRef.current?.update(candlestick);
       }
-      return updated.slice(-50); // Keep last 50 candles
+      
+      return updated.sort((a, b) => (a.time as number) - (b.time as number));
     });
+  };
+
+  const handleHistoricalData = (klines: any[]) => {
+    console.log('[CHART] Processing historical data:', klines);
+    if (!seriesRef.current || !Array.isArray(klines)) return;
+    
+    const candles: CandlestickData[] = klines.map(kline => ({
+      time: Math.floor(kline.openTime / 1000) as any,
+      open: parseFloat(kline.open),
+      high: parseFloat(kline.high),
+      low: parseFloat(kline.low),
+      close: parseFloat(kline.close),
+    }));
+
+    const sortedCandles = candles.sort((a, b) => (a.time as number) - (b.time as number));
+    setPriceData(sortedCandles);
+    
+    // Set all historical data at once
+    seriesRef.current.setData(sortedCandles);
   };
 
   const intervals = [
@@ -213,128 +230,94 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     { label: '15m', value: '15m' },
     { label: '30m', value: '30m' },
     { label: '1h', value: '1h' },
-    { label: '2h', value: '2h' },
     { label: '4h', value: '4h' },
+    { label: '1d', value: '1d' },
   ];
 
-  const currentPrice = priceData.length > 0 ? priceData[priceData.length - 1].close : 0;
-  const priceChange = priceData.length > 1 ? 
-    ((currentPrice - priceData[priceData.length - 2].close) / priceData[priceData.length - 2].close * 100) : 0;
+  const handleIntervalChange = (newInterval: string) => {
+    setCurrentInterval(newInterval);
+  };
 
   return (
-    <div className={cn("relative bg-crypto-dark border border-crypto-border rounded-lg", className)}>
-      {/* Chart Controls */}
-      <div className="absolute top-4 left-4 z-10 flex items-center space-x-2">
-        <div className="flex items-center space-x-1 bg-crypto-darker rounded-lg p-1">
+    <div className={cn("bg-card border rounded-lg", className)}>
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center space-x-4">
+          <h3 className="text-lg font-semibold">{symbol} Chart</h3>
+          <div className={cn(
+            "w-2 h-2 rounded-full",
+            isConnected ? "bg-green-500" : "bg-red-500"
+          )} />
+          <span className="text-sm text-muted-foreground">
+            {isConnected ? 'Connected' : 'Disconnected'}
+          </span>
+        </div>
+        
+        {/* Interval selector */}
+        <div className="flex space-x-1">
           {intervals.map((interval) => (
             <button
               key={interval.value}
-              onClick={() => setCurrentInterval(interval.value)}
+              onClick={() => handleIntervalChange(interval.value)}
               className={cn(
-                "px-3 py-1 text-xs font-medium rounded transition-colors",
+                "px-3 py-1 text-xs rounded transition-colors",
                 currentInterval === interval.value
-                  ? "bg-crypto-purple text-white"
-                  : "text-crypto-light hover:text-white hover:bg-gray-700"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted"
               )}
             >
               {interval.label}
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Chart container */}
+      <div className="relative">
+        <div ref={chartContainerRef} className="w-full h-[400px]" />
         
-        {/* Connection Status */}
-        <div className="flex items-center space-x-2">
-          <div className={cn(
-            "w-2 h-2 rounded-full",
-            isConnected ? "bg-green-500" : "bg-red-500"
-          )} />
-          <span className="text-xs text-crypto-light">
-            {isConnected ? 'Live' : 'Connecting...'}
-          </span>
-        </div>
-
-        {/* Symbol Display */}
-        <div className="bg-crypto-darker rounded px-3 py-1">
-          <span className="text-sm font-medium text-white">
-            {symbol.replace('USDT', '/USDT')}
-          </span>
-        </div>
-      </div>
-
-      {/* Price Header */}
-      <div className="absolute top-4 right-4 z-10 bg-crypto-darker rounded px-4 py-2">
-        <div className="text-right">
-          <div className="text-lg font-bold text-white">
-            ${currentPrice.toFixed(symbol.includes('BTC') ? 2 : 5)}
-          </div>
-          <div className={cn(
-            "text-sm font-medium",
-            priceChange >= 0 ? "text-green-500" : "text-red-500"
-          )}>
-            {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
-          </div>
-        </div>
-      </div>
-
-      {/* Simple Chart Display */}
-      <div className="p-6 pt-20">
-        {priceData.length > 0 ? (
-          <div className="space-y-4">
-            {/* Price Chart Area */}
-            <div className="h-80 bg-crypto-darker rounded border border-crypto-border relative overflow-hidden">
-              <div className="absolute inset-0 flex items-end justify-between px-2 pb-2">
-                {priceData.slice(-20).map((candle, index) => {
-                  const isGreen = candle.close >= candle.open;
-                  const height = Math.max(5, (Math.abs(candle.high - candle.low) / candle.high) * 200);
-                  
-                  return (
-                    <div key={index} className="flex flex-col items-center space-y-1">
-                      <div 
-                        className={cn(
-                          "w-2 rounded-sm",
-                          isGreen ? "bg-green-500" : "bg-red-500"
-                        )}
-                        style={{ height: `${height}px` }}
-                      />
-                      <div className="text-xs text-crypto-light transform -rotate-45 whitespace-nowrap">
-                        {candle.time.split(':').slice(0, 2).join(':')}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Data Table */}
-            <div className="bg-crypto-darker rounded border border-crypto-border">
-              <div className="p-4">
-                <h3 className="text-sm font-semibold text-white mb-3">Recent Price Data</h3>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {priceData.slice(-5).reverse().map((candle, index) => (
-                    <div key={index} className="flex justify-between items-center text-xs">
-                      <span className="text-crypto-light">{candle.time}</span>
-                      <span className="text-white">${candle.close.toFixed(symbol.includes('BTC') ? 2 : 5)}</span>
-                      <span className={cn(
-                        "font-medium",
-                        candle.close >= candle.open ? "text-green-500" : "text-red-500"
-                      )}>
-                        {candle.close >= candle.open ? '+' : ''}
-                        {((candle.close - candle.open) / candle.open * 100).toFixed(2)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="h-80 flex items-center justify-center">
+        {!isConnected && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/80">
             <div className="text-center">
-              <div className="text-crypto-light mb-2">Loading chart data...</div>
-              <div className="w-8 h-8 border-2 border-crypto-purple border-t-transparent rounded-full animate-spin mx-auto" />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Connecting to market data...</p>
             </div>
           </div>
         )}
+      </div>
+
+      {/* Data table */}
+      <div className="p-4 border-t">
+        <div className="grid grid-cols-5 gap-4 text-sm">
+          <div className="text-center">
+            <p className="text-muted-foreground">Open</p>
+            <p className="font-mono">
+              {priceData.length > 0 ? priceData[priceData.length - 1]?.open?.toFixed(2) : '--'}
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-muted-foreground">High</p>
+            <p className="font-mono text-green-500">
+              {priceData.length > 0 ? priceData[priceData.length - 1]?.high?.toFixed(2) : '--'}
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-muted-foreground">Low</p>
+            <p className="font-mono text-red-500">
+              {priceData.length > 0 ? priceData[priceData.length - 1]?.low?.toFixed(2) : '--'}
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-muted-foreground">Close</p>
+            <p className="font-mono">
+              {priceData.length > 0 ? priceData[priceData.length - 1]?.close?.toFixed(2) : '--'}
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-muted-foreground">Candles</p>
+            <p className="font-mono">{priceData.length}</p>
+          </div>
+        </div>
       </div>
     </div>
   );
