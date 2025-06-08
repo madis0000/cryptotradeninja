@@ -365,6 +365,52 @@ export default function Settings() {
               <div className="flex space-x-2">
                 <Button 
                   size="sm" 
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={async () => {
+                    if (streamConfig.symbol) {
+                      try {
+                        // Configure stream via backend API endpoint
+                        const response = await fetch('/api/websocket/configure-stream', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            dataType: streamConfig.dataType,
+                            symbol: streamConfig.symbol,
+                            interval: streamConfig.interval,
+                            depth: streamConfig.depth
+                          })
+                        });
+                        
+                        if (!response.ok) {
+                          throw new Error('Configuration failed');
+                        }
+
+                        toast({
+                          title: "Stream Configured",
+                          description: `Successfully configured ${streamConfig.dataType} stream for ${streamConfig.symbol}`,
+                        });
+                      } catch (error) {
+                        toast({
+                          title: "Configuration Failed",
+                          description: "Failed to configure stream",
+                          variant: "destructive",
+                        });
+                      }
+                    } else {
+                      toast({
+                        title: "No Symbol",
+                        description: "Please select a trading symbol first",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  disabled={!streamConfig.symbol}
+                >
+                  <i className="fas fa-cog mr-2"></i>
+                  Configure Stream
+                </Button>
+                <Button 
+                  size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
                   onClick={async () => {
                     if (streamConfig.symbol) {

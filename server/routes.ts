@@ -394,16 +394,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Configure stream connection - Public endpoint for market data configuration
   app.post("/api/websocket/configure-stream", async (req: Request, res: Response) => {
     try {
-      const { dataType, symbols, interval, depth } = req.body;
+      const { dataType, symbol, symbols, interval, depth } = req.body;
       
-      if (!dataType || !symbols || !Array.isArray(symbols) || symbols.length === 0) {
+      // Handle both single symbol and legacy symbols array for backward compatibility
+      const symbolsArray = symbol ? [symbol] : (symbols || []);
+      
+      if (!dataType || !symbolsArray || symbolsArray.length === 0) {
         return res.status(400).json({ message: "Invalid stream configuration" });
       }
 
-      wsService.connectConfigurableStream(dataType, symbols, interval, depth);
+      await wsService.connectConfigurableStream(dataType, symbolsArray, interval, depth);
       res.json({ 
         message: "Stream configured successfully",
-        configuration: { dataType, symbols, interval, depth }
+        configuration: { dataType, symbols: symbolsArray, interval, depth }
       });
     } catch (error) {
       console.error("Error configuring stream:", error);
