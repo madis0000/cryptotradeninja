@@ -244,45 +244,79 @@ export class WebSocketService {
   // Removed - streams now started on-demand when frontend subscribes
 
   private async setupKlineStream(symbols: string[], interval: string) {
-    console.log(`[WEBSOCKET] Setting up dedicated kline stream for symbols:`, symbols, 'interval:', interval);
+    console.log(`[WEBSOCKET] Setting up kline subscription using existing connection for symbols:`, symbols, 'interval:', interval);
     
-    // Close existing kline connection if any
-    if (this.binanceKlineWs && this.binanceKlineWs.readyState === WebSocket.OPEN) {
-      this.binanceKlineWs.close();
+    // Use the existing subscription-based connection to add kline streams
+    if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+      console.log(`[WEBSOCKET] Adding kline streams to existing connection`);
+      
+      // Subscribe to kline streams using the existing WebSocket connection
+      const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
+      const subscribeMessage = {
+        method: 'SUBSCRIBE',
+        params: klineStreamPaths,
+        id: Date.now()
+      };
+      
+      console.log(`[WEBSOCKET] Subscribing to kline streams:`, klineStreamPaths);
+      this.binancePublicWs.send(JSON.stringify(subscribeMessage));
+      
+      return;
     }
     
+    // If no existing connection, create a new one specifically for klines
+    console.log(`[WEBSOCKET] Creating new connection for kline streams`);
+    
     const { storage } = await import('./storage');
-    let baseUrl = 'wss://stream.binance.com:9443/ws/';
+    let baseUrl = 'wss://stream.testnet.binance.vision/stream';
     
     try {
       const exchanges = await storage.getExchangesByUserId(1);
       if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
         const endpoint = exchanges[0].wsStreamEndpoint;
         if (endpoint.includes('testnet')) {
-          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
+          baseUrl = 'wss://stream.testnet.binance.vision/stream';
+        } else {
+          baseUrl = 'wss://stream.binance.com:9443/stream';
         }
       }
     } catch (error) {
       console.error(`[WEBSOCKET] Error fetching exchange config for kline:`, error);
     }
     
-    const streamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
-    console.log(`[WEBSOCKET] Kline stream paths:`, streamPaths);
+    console.log(`[WEBSOCKET] Connecting to kline stream: ${baseUrl}`);
     
-    const wsUrl = `${baseUrl}${streamPaths.join('/')}`;
-    console.log(`[WEBSOCKET] Connecting to kline stream: ${wsUrl}`);
-    
-    this.binanceKlineWs = new WebSocket(wsUrl);
+    this.binanceKlineWs = new WebSocket(baseUrl);
     
     this.binanceKlineWs.on('open', () => {
-      console.log(`[KLINE STREAM] Connected to Binance kline stream for interval: ${interval}`);
+      console.log(`[KLINE STREAM] Connected to Binance kline stream`);
+      
+      // Subscribe to kline streams
+      const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
+      const subscribeMessage = {
+        method: 'SUBSCRIBE',
+        params: klineStreamPaths,
+        id: Date.now()
+      };
+      
+      console.log(`[KLINE STREAM] Subscribing to kline streams:`, klineStreamPaths);
+      if (this.binanceKlineWs && this.binanceKlineWs.readyState === WebSocket.OPEN) {
+        this.binanceKlineWs.send(JSON.stringify(subscribeMessage));
+      }
     });
     
     this.binanceKlineWs.on('message', (data) => {
       try {
         const message = JSON.parse(data.toString());
         
-        if (message.stream && message.data && message.data.k) {
+        // Handle subscription confirmation
+        if (message.result === null && message.id) {
+          console.log(`[KLINE STREAM] ✓ Subscription confirmed for ID: ${message.id}`);
+          return;
+        }
+        
+        // Handle kline stream data
+        if (message.stream && message.data && message.data.e === 'kline' && message.data.k) {
           const kline = message.data.k;
           const klineUpdate = {
             symbol: kline.s,
@@ -298,7 +332,7 @@ export class WebSocketService {
             timestamp: Date.now()
           };
           
-          console.log(`[KLINE STREAM] Received kline for ${kline.s} (${kline.i}): ${kline.c}`);
+          console.log(`[KLINE STREAM] ✓ Received kline for ${kline.s} (${kline.i}): OHLC=[${kline.o},${kline.h},${kline.l},${kline.c}] closed:${kline.x}`);
           this.broadcastKlineUpdate(klineUpdate);
         }
       } catch (error) {
