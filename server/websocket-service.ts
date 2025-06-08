@@ -30,6 +30,7 @@ export class WebSocketService {
   private currentStreamType: string = 'ticker';
   private currentInterval: string = '1m';
   private currentSubscriptions: string[] = [];
+  private currentKlineSubscriptions: string[] = [];
   private binanceKlineWs: WebSocket | null = null;
 
   constructor(server: Server) {
@@ -144,21 +145,65 @@ export class WebSocketService {
             subscription.dataType = message.dataType || 'ticker';
             subscription.interval = message.interval || '1m';
             
-            // Check if we need to start a new stream type
+            // Get all unique symbols from both ticker and kline clients
+            const allSymbols = new Set<string>();
+            this.marketSubscriptions.forEach(sub => {
+              sub.symbols.forEach(symbol => allSymbols.add(symbol));
+            });
+            const symbolsArray = Array.from(allSymbols);
+            
+            // Check if we need to start streams for different data types
             const hasKlineClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'kline');
             const hasTickerClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'ticker');
             
-            console.log(`[WEBSOCKET] Client types - Kline: ${hasKlineClients}, Ticker: ${hasTickerClients}`);
+            console.log(`[WEBSOCKET] Client types - Kline: ${hasKlineClients}, Ticker: ${hasTickerClients}, All symbols:`, symbolsArray);
             
-            // Configure the stream with the requested data type and interval
-            await this.connectConfigurableStream(
-              message.dataType || 'ticker',
-              message.symbols || ['BTCUSDT'],
-              message.interval || '1m',
-              message.depth
-            );
+            // Configure streams based on client type without circular calls
+            if (hasKlineClients && hasTickerClients) {
+              console.log(`[WEBSOCKET] Synchronizing both ticker and kline streams to symbols:`, symbolsArray);
+              
+              // Direct subscription updates without recursive calls
+              if (message.dataType === 'ticker' || !message.dataType) {
+                // Update ticker stream directly
+                if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+                  const tickerStreams = symbolsArray.map(symbol => `${symbol.toLowerCase()}@ticker`);
+                  const subscribeMessage = {
+                    method: 'SUBSCRIBE',
+                    params: tickerStreams,
+                    id: Date.now()
+                  };
+                  console.log(`[WEBSOCKET] Direct ticker subscription:`, tickerStreams);
+                  this.binancePublicWs.send(JSON.stringify(subscribeMessage));
+                  this.currentSubscriptions = tickerStreams;
+                }
+              }
+              
+              if (message.dataType === 'kline') {
+                // Update kline stream directly
+                await this.setupKlineStream(symbolsArray, message.interval || '1m');
+              }
+            } else {
+              // Single client type - use appropriate stream method
+              if (message.dataType === 'kline') {
+                await this.setupKlineStream(symbolsArray, message.interval || '1m');
+              } else {
+                // Direct ticker subscription for single ticker client
+                if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
+                  await this.connectWithSubscription('wss://stream.testnet.binance.vision/stream', []);
+                }
+                const tickerStreams = symbolsArray.map(symbol => `${symbol.toLowerCase()}@ticker`);
+                const subscribeMessage = {
+                  method: 'SUBSCRIBE',
+                  params: tickerStreams,
+                  id: Date.now()
+                };
+                console.log(`[WEBSOCKET] Single ticker subscription:`, tickerStreams);
+                this.binancePublicWs?.send(JSON.stringify(subscribeMessage));
+                this.currentSubscriptions = tickerStreams;
+              }
+            }
             
-            console.log(`[WEBSOCKET] Stream configured for ${message.dataType} with symbols:`, message.symbols, 'for client:', subscription.clientId);
+            console.log(`[WEBSOCKET] Stream configured for ${message.dataType} with symbols:`, symbolsArray, 'for client:', subscription.clientId);
           }
         } catch (error) {
           console.error('[WEBSOCKET] Error processing message:', error);
@@ -244,13 +289,24 @@ export class WebSocketService {
   // Removed - streams now started on-demand when frontend subscribes
 
   private async setupKlineStream(symbols: string[], interval: string) {
-    console.log(`[WEBSOCKET] Setting up kline subscription using existing connection for symbols:`, symbols, 'interval:', interval);
+    console.log(`[WEBSOCKET] Setting up kline subscription for symbols:`, symbols, 'interval:', interval);
     
-    // Use the existing subscription-based connection to add kline streams
-    if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
-      console.log(`[WEBSOCKET] Adding kline streams to existing connection`);
+    // If we have an existing kline connection, update subscriptions
+    if (this.binanceKlineWs && this.binanceKlineWs.readyState === WebSocket.OPEN) {
+      console.log(`[WEBSOCKET] Updating existing kline connection subscriptions`);
       
-      // Subscribe to kline streams using the existing WebSocket connection
+      // Unsubscribe from old kline streams first
+      if (this.currentKlineSubscriptions.length > 0) {
+        const unsubscribeMessage = {
+          method: 'UNSUBSCRIBE',
+          params: this.currentKlineSubscriptions,
+          id: Date.now()
+        };
+        console.log(`[WEBSOCKET] Unsubscribing from old kline streams:`, unsubscribeMessage.params);
+        this.binanceKlineWs.send(JSON.stringify(unsubscribeMessage));
+      }
+      
+      // Subscribe to new kline streams
       const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
       const subscribeMessage = {
         method: 'SUBSCRIBE',
@@ -258,9 +314,9 @@ export class WebSocketService {
         id: Date.now()
       };
       
-      console.log(`[WEBSOCKET] Subscribing to kline streams:`, klineStreamPaths);
-      this.binancePublicWs.send(JSON.stringify(subscribeMessage));
-      
+      console.log(`[WEBSOCKET] Subscribing to new kline streams:`, klineStreamPaths);
+      this.binanceKlineWs.send(JSON.stringify(subscribeMessage));
+      this.currentKlineSubscriptions = klineStreamPaths;
       return;
     }
     
