@@ -2203,7 +2203,7 @@ export class WebSocketService {
       const activeBots = await storage.getTradingBotsByUserId(0); // We'll iterate through all users
       
       for (const bot of activeBots) {
-        if (bot.strategyType === 'martingale' && bot.isActive) {
+        if (bot.strategy === 'martingale' && bot.isActive) {
           await this.monitorBotCycle(bot.id);
         }
       }
@@ -2246,8 +2246,7 @@ export class WebSocketService {
       await storage.updateCycleOrder(order.id, {
         status: 'filled',
         filledQuantity: order.quantity,
-        filledPrice: order.price,
-        filledAt: new Date()
+        filledPrice: order.price
       });
 
       if (order.orderType === 'safety_order') {
@@ -2267,8 +2266,8 @@ export class WebSocketService {
   private async handleSafetyOrderFill(order: CycleOrder, cycle: BotCycle) {
     try {
       // Recalculate average entry price
-      const totalInvested = parseFloat(cycle.totalInvested) + (parseFloat(order.quantity) * parseFloat(order.price || '0'));
-      const totalQuantity = parseFloat(cycle.totalQuantity) + parseFloat(order.quantity);
+      const totalInvested = parseFloat(cycle.totalInvested || '0') + (parseFloat(order.quantity) * parseFloat(order.price || '0'));
+      const totalQuantity = parseFloat(cycle.totalQuantity || '0') + parseFloat(order.quantity);
       const newAveragePrice = totalInvested / totalQuantity;
 
       // Update cycle metrics
@@ -2276,7 +2275,7 @@ export class WebSocketService {
         currentAveragePrice: newAveragePrice.toString(),
         totalInvested: totalInvested.toString(),
         totalQuantity: totalQuantity.toString(),
-        filledSafetyOrders: cycle.filledSafetyOrders + 1
+        filledSafetyOrders: (cycle.filledSafetyOrders || 0) + 1
       });
 
       // Cancel existing take profit order and place new one with updated price
@@ -2292,7 +2291,7 @@ export class WebSocketService {
   private async handleTakeProfitFill(order: CycleOrder, cycle: BotCycle) {
     try {
       // Calculate profit
-      const totalInvested = parseFloat(cycle.totalInvested);
+      const totalInvested = parseFloat(cycle.totalInvested || '0');
       const totalReceived = parseFloat(order.quantity) * parseFloat(order.price || '0');
       const profit = totalReceived - totalInvested;
 
@@ -2300,7 +2299,7 @@ export class WebSocketService {
       await storage.completeBotCycle(cycle.id);
 
       // Start new cycle automatically
-      await this.startNewMartingaleCycle(cycle.botId, cycle.cycleNumber + 1);
+      await this.startNewMartingaleCycle(cycle.botId, (cycle.cycleNumber || 1) + 1);
 
       console.log(`[MARTINGALE] Take profit filled - Profit: ${profit.toFixed(8)} - Starting new cycle`);
 
@@ -2326,7 +2325,7 @@ export class WebSocketService {
         side: 'SELL',
         orderCategory: 'LIMIT',
         symbol: bot.tradingPair,
-        quantity: cycle.totalQuantity,
+        quantity: cycle.totalQuantity ?? '0',
         price: takeProfitPrice.toString(),
         clientOrderId: `TP_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       });
