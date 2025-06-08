@@ -23,7 +23,9 @@ interface MartingaleStrategyProps {
 }
 
 export function MartingaleStrategy({ className, selectedSymbol, selectedExchangeId, exchanges, onExchangeChange, onBotCreated }: MartingaleStrategyProps) {
+  const { user } = useAuth();
   const [localDirection, setLocalDirection] = useState<"long" | "short">("long");
+  const [realtimeBalance, setRealtimeBalance] = useState<string | null>(null);
   const [config, setConfig] = useState({
     // Price Settings
     priceDeviation: "1",
@@ -53,6 +55,32 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // WebSocket for real-time balance updates
+  const { connect, subscribeToBalance, unsubscribeFromBalance } = useWebSocket({
+    onBalanceUpdate: (data) => {
+      console.log('[MARTINGALE] Received balance update:', data);
+      if (data.userId === user?.id && data.exchangeId === selectedExchangeId && data.symbol === selectedSymbol) {
+        setRealtimeBalance(data.balance);
+      }
+    }
+  });
+
+  // Initialize WebSocket connection
+  useEffect(() => {
+    connect();
+  }, [connect]);
+
+  // Subscribe to balance updates when exchange or symbol changes
+  useEffect(() => {
+    if (user?.id && selectedExchangeId && selectedSymbol) {
+      subscribeToBalance(user.id, selectedExchangeId, selectedSymbol);
+      
+      return () => {
+        unsubscribeFromBalance(user.id, selectedExchangeId, selectedSymbol);
+      };
+    }
+  }, [user?.id, selectedExchangeId, selectedSymbol, subscribeToBalance, unsubscribeFromBalance]);
 
   // Fetch available balance from exchange
   const { data: balanceData, isLoading: balanceLoading } = useQuery({
@@ -329,8 +357,16 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
           <div className="flex items-center space-x-1">
             <span className="text-gray-400">Available</span>
             <span className="text-orange-500 font-medium">
-              {balanceLoading ? '...' : balanceData ? parseFloat(balanceData.free).toFixed(3) : '0.000'} USDT
+              {(() => {
+                // Use real-time balance if available, otherwise fall back to API data
+                const displayBalance = realtimeBalance || (balanceData ? balanceData.free : '0.000000');
+                const balanceValue = parseFloat(displayBalance);
+                return `${balanceValue.toFixed(3)} USDT`;
+              })()}
             </span>
+            {realtimeBalance && (
+              <span className="text-green-400 text-xs animate-pulse">●</span>
+            )}
             <Info className="w-3 h-3 text-gray-400" />
           </div>
         </div>
