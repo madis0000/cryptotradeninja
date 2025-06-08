@@ -268,7 +268,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
 
   // Update symbol when prop changes
   useEffect(() => {
-    if (chartWs && chartWs.currentSymbol !== symbol) {
+    if (chartWs && chartWs.currentSymbol && chartWs.currentSymbol !== symbol) {
       console.log(`[CHART] Changing symbol from ${chartWs.currentSymbol} to ${symbol}`);
       chartWs.changeSymbol(symbol);
       setPriceData([]); // Clear existing data
@@ -298,7 +298,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
 
   // Update interval when state changes
   useEffect(() => {
-    if (chartWs.currentInterval !== currentInterval) {
+    if (chartWs && chartWs.currentInterval && chartWs.currentInterval !== currentInterval) {
       console.log(`[CHART] Switching to ${currentInterval} interval`);
       chartWs.changeInterval(currentInterval);
       
@@ -350,14 +350,14 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
   return (
     <div className={cn("bg-card border-gray-600 rounded-lg", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-600">
-        <div className="flex items-center space-x-4">
-          <h3 className="text-lg font-semibold">{symbol} Chart</h3>
+      <div className="flex items-center justify-between p-4 border-b border-gray-600 trading-chart-header">
+        <div className="flex items-center space-x-4" style={{ outline: 'none', border: 'none' }}>
+          <h3 className="text-lg font-semibold" style={{ outline: 'none', border: 'none' }}>{symbol} Chart</h3>
           <div className={cn(
             "w-2 h-2 rounded-full",
             chartWs.status === 'connected' ? "bg-green-500" : "bg-red-500"
           )} />
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground" style={{ outline: 'none', border: 'none' }}>
             {chartWs.status === 'connected' ? 'Connected' : 'Disconnected'}
           </span>
         </div>

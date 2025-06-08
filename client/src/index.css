@@ -184,3 +184,21 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--crypto-light) / 0.5);
 }
+
+/* Remove any debugging outlines */
+* {
+  outline: none !important;
+}
+
+/* Specific chart header styling to remove red outlines */
+[class*="chart"] h3,
+[class*="chart"] span,
+[class*="chart"] div {
+  outline: none !important;
+  border: none !important;
+}
+
+.trading-chart-header {
+  outline: none !important;
+  border: none !important;
+}
