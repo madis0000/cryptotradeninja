@@ -396,22 +396,24 @@ export class WebSocketService {
     this.currentStreamType = dataType;
     this.currentInterval = interval || '1m';
     
-    // For mixed client types, we need separate connections
-    if (hasTickerClients && hasKlineClients) {
-      console.log(`[WEBSOCKET] Mixed client types detected - setting up separate streams`);
+    // Always set up kline connection for chart clients
+    if (dataType === 'kline') {
+      console.log(`[WEBSOCKET] Setting up dedicated kline stream for chart client`);
+      await this.setupKlineStream(symbols, interval || '1m');
       
-      // If requesting kline data, set up a separate kline connection
-      if (dataType === 'kline') {
-        await this.setupKlineStream(symbols, interval || '1m');
-        return;
-      }
-      
-      // For ticker requests with existing ticker connection, just update symbols
-      if (dataType === 'ticker' && this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
-        console.log(`[WEBSOCKET] Updating ticker subscription for mixed client setup`);
+      // If we also have ticker clients but no active ticker connection, start ticker stream too
+      if (hasTickerClients && (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN)) {
+        console.log(`[WEBSOCKET] Also starting ticker stream for header clients`);
         await this.updateBinanceSubscription(symbols);
-        return;
       }
+      return;
+    }
+    
+    // For ticker clients, use the main connection
+    if (dataType === 'ticker') {
+      console.log(`[WEBSOCKET] Configuring ticker stream for header client`);
+      await this.updateBinanceSubscription(symbols);
+      return;
     }
     
     // If we have an active connection and just changing ticker symbols, use hot subscription update
