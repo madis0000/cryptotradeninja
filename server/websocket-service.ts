@@ -30,6 +30,7 @@ export class WebSocketService {
   private currentStreamType: string = 'ticker';
   private currentInterval: string = '1m';
   private currentSubscriptions: string[] = [];
+  private binanceKlineWs: WebSocket | null = null;
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -242,6 +243,79 @@ export class WebSocketService {
 
   // Removed - streams now started on-demand when frontend subscribes
 
+  private async setupKlineStream(symbols: string[], interval: string) {
+    console.log(`[WEBSOCKET] Setting up dedicated kline stream for symbols:`, symbols, 'interval:', interval);
+    
+    // Close existing kline connection if any
+    if (this.binanceKlineWs && this.binanceKlineWs.readyState === WebSocket.OPEN) {
+      this.binanceKlineWs.close();
+    }
+    
+    const { storage } = await import('./storage');
+    let baseUrl = 'wss://stream.binance.com:9443/ws/';
+    
+    try {
+      const exchanges = await storage.getExchangesByUserId(1);
+      if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
+        const endpoint = exchanges[0].wsStreamEndpoint;
+        if (endpoint.includes('testnet')) {
+          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
+        }
+      }
+    } catch (error) {
+      console.error(`[WEBSOCKET] Error fetching exchange config for kline:`, error);
+    }
+    
+    const streamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
+    console.log(`[WEBSOCKET] Kline stream paths:`, streamPaths);
+    
+    const wsUrl = `${baseUrl}${streamPaths.join('/')}`;
+    console.log(`[WEBSOCKET] Connecting to kline stream: ${wsUrl}`);
+    
+    this.binanceKlineWs = new WebSocket(wsUrl);
+    
+    this.binanceKlineWs.on('open', () => {
+      console.log(`[KLINE STREAM] Connected to Binance kline stream for interval: ${interval}`);
+    });
+    
+    this.binanceKlineWs.on('message', (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        
+        if (message.stream && message.data && message.data.k) {
+          const kline = message.data.k;
+          const klineUpdate = {
+            symbol: kline.s,
+            interval: kline.i,
+            openTime: parseInt(kline.t),
+            closeTime: parseInt(kline.T),
+            open: parseFloat(kline.o),
+            high: parseFloat(kline.h),
+            low: parseFloat(kline.l),
+            close: parseFloat(kline.c),
+            volume: parseFloat(kline.v),
+            isClosed: kline.x,
+            timestamp: Date.now()
+          };
+          
+          console.log(`[KLINE STREAM] Received kline for ${kline.s} (${kline.i}): ${kline.c}`);
+          this.broadcastKlineUpdate(klineUpdate);
+        }
+      } catch (error) {
+        console.error('[KLINE STREAM] Error parsing message:', error);
+      }
+    });
+    
+    this.binanceKlineWs.on('error', (error) => {
+      console.error('[KLINE STREAM] WebSocket error:', error);
+    });
+    
+    this.binanceKlineWs.on('close', () => {
+      console.log('[KLINE STREAM] Kline WebSocket connection closed');
+      this.binanceKlineWs = null;
+    });
+  }
+
   private async updateBinanceSubscription(symbols: string[]) {
     if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
       console.log(`[WEBSOCKET] No active Binance connection, creating new one for symbols:`, symbols);
@@ -278,9 +352,33 @@ export class WebSocketService {
   public async connectConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
     console.log(`[WEBSOCKET] Configuring stream: ${dataType}, symbols: ${symbols}, interval: ${interval}`);
     
+    // Check what types of clients we have
+    const hasTickerClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'ticker');
+    const hasKlineClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'kline');
+    
+    console.log(`[WEBSOCKET] Client types after config - Ticker: ${hasTickerClients}, Kline: ${hasKlineClients}`);
+    
     // Update current stream configuration
     this.currentStreamType = dataType;
     this.currentInterval = interval || '1m';
+    
+    // For mixed client types, we need separate connections
+    if (hasTickerClients && hasKlineClients) {
+      console.log(`[WEBSOCKET] Mixed client types detected - setting up separate streams`);
+      
+      // If requesting kline data, set up a separate kline connection
+      if (dataType === 'kline') {
+        await this.setupKlineStream(symbols, interval || '1m');
+        return;
+      }
+      
+      // For ticker requests with existing ticker connection, just update symbols
+      if (dataType === 'ticker' && this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+        console.log(`[WEBSOCKET] Updating ticker subscription for mixed client setup`);
+        await this.updateBinanceSubscription(symbols);
+        return;
+      }
+    }
     
     // If we have an active connection and just changing ticker symbols, use hot subscription update
     if (this.binancePublicWs && 
@@ -987,26 +1085,28 @@ export class WebSocketService {
       data: klineUpdate
     });
 
-    console.log(`[WEBSOCKET] Broadcasting kline update for ${klineUpdate.symbol} to ${this.marketSubscriptions.size} clients`);
+    console.log(`[WEBSOCKET] Broadcasting kline update for ${klineUpdate.symbol} to kline clients`);
     
     let sentCount = 0;
     this.marketSubscriptions.forEach((subscription) => {
-      if (subscription.ws.readyState === WebSocket.OPEN) {
-        // Check if client is subscribed to this symbol (case-insensitive matching)
+      // Only send kline updates to clients that requested kline data
+      if (subscription.ws.readyState === WebSocket.OPEN && subscription.dataType === 'kline') {
         const subscribedSymbols = Array.from(subscription.symbols).map(s => s.toUpperCase());
         const isMatched = subscription.symbols.size === 0 || subscribedSymbols.includes(klineUpdate.symbol.toUpperCase());
-        console.log(`[WEBSOCKET] Kline symbol: ${klineUpdate.symbol}, subscribed: [${Array.from(subscription.symbols).join(', ')}], matched: ${isMatched}`);
+        console.log(`[WEBSOCKET] Kline client ${subscription.clientId}: symbol ${klineUpdate.symbol}, subscribed: [${Array.from(subscription.symbols).join(', ')}], matched: ${isMatched}`);
         
         if (isMatched) {
-          console.log(`[WEBSOCKET] Sending kline to client ${sentCount + 1}, readyState: ${subscription.ws.readyState}`);
+          console.log(`[WEBSOCKET] Sending kline to client ${subscription.clientId}, readyState: ${subscription.ws.readyState}`);
           subscription.ws.send(message);
           sentCount++;
-          console.log(`[WEBSOCKET] Successfully sent kline update to client ${sentCount} for ${klineUpdate.symbol}`);
+          console.log(`[WEBSOCKET] Successfully sent kline update to client ${subscription.clientId} for ${klineUpdate.symbol}`);
         }
+      } else if (subscription.dataType !== 'kline') {
+        console.log(`[WEBSOCKET] Skipping client ${subscription.clientId} - wants ${subscription.dataType}, not kline`);
       }
     });
     
-    console.log(`[WEBSOCKET] Successfully sent kline update to ${sentCount} out of ${this.marketSubscriptions.size} clients`);
+    console.log(`[WEBSOCKET] Successfully sent kline update to ${sentCount} kline clients`);
   }
 
   private storeHistoricalKlineData(klineUpdate: any) {
@@ -1080,35 +1180,34 @@ export class WebSocketService {
       data: marketUpdate
     });
 
-    console.log(`[WEBSOCKET] Broadcasting update for ${marketUpdate.symbol} to ${this.marketSubscriptions.size} clients`);
+    console.log(`[WEBSOCKET] Broadcasting ticker update for ${marketUpdate.symbol} to ticker clients`);
     
     let sentCount = 0;
     Array.from(this.marketSubscriptions).forEach((subscription, index) => {
       const clientIndex = index + 1;
-      console.log(`[WEBSOCKET] Checking client ${clientIndex}, readyState: ${subscription.ws.readyState}, subscribed symbols: [${Array.from(subscription.symbols).join(', ')}]`);
       
-      if (subscription.ws.readyState === WebSocket.OPEN) {
-        // Check if client is subscribed to this symbol (normalize to uppercase for comparison)
+      // Only send ticker updates to clients that requested ticker data
+      if (subscription.ws.readyState === WebSocket.OPEN && subscription.dataType === 'ticker') {
         const isSubscribed = subscription.symbols.size === 0 || 
                            subscription.symbols.has(marketUpdate.symbol.toUpperCase());
+        
+        console.log(`[WEBSOCKET] Checking ticker client ${clientIndex} (${subscription.clientId}), subscribed: [${Array.from(subscription.symbols).join(', ')}]`);
         
         if (isSubscribed) {
           try {
             subscription.ws.send(message);
             sentCount++;
-            console.log(`[WEBSOCKET] Successfully sent update to client ${clientIndex} for ${marketUpdate.symbol}`);
+            console.log(`[WEBSOCKET] Successfully sent ticker to client ${clientIndex} (${subscription.clientId}) for ${marketUpdate.symbol}`);
           } catch (error) {
             console.error(`[WEBSOCKET] Failed to send to client ${clientIndex}:`, error);
           }
-        } else {
-          console.log(`[WEBSOCKET] Client ${clientIndex} not subscribed to ${marketUpdate.symbol}`);
         }
-      } else {
-        console.log(`[WEBSOCKET] Client ${clientIndex} connection not open, readyState: ${subscription.ws.readyState}`);
+      } else if (subscription.dataType !== 'ticker') {
+        console.log(`[WEBSOCKET] Skipping client ${clientIndex} (${subscription.clientId}) - wants ${subscription.dataType}, not ticker`);
       }
     });
     
-    console.log(`[WEBSOCKET] Successfully sent to ${sentCount} out of ${this.marketSubscriptions.size} clients`);
+    console.log(`[WEBSOCKET] Successfully sent ticker to ${sentCount} ticker clients`);
   }
 
   private broadcastUserUpdate(userId: number, userData: any) {
