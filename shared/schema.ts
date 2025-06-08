@@ -109,6 +109,58 @@ export const portfolio = pgTable("portfolio", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Bot cycles for tracking Martingale rounds
+export const botCycles = pgTable("bot_cycles", {
+  id: serial("id").primaryKey(),
+  botId: integer("bot_id").notNull(),
+  userId: integer("user_id").notNull(),
+  cycleNumber: integer("cycle_number").notNull().default(1),
+  status: text("status").notNull().default("active"), // active, completed, failed, cancelled
+  baseOrderId: text("base_order_id"), // Exchange order ID for base order
+  takeProfitOrderId: text("take_profit_order_id"), // Exchange order ID for take profit
+  activeOrderIds: text("active_order_ids").array().default([]), // All active order IDs
+  
+  // Cycle metrics
+  baseOrderPrice: decimal("base_order_price", { precision: 20, scale: 8 }),
+  currentAveragePrice: decimal("current_average_price", { precision: 20, scale: 8 }),
+  totalInvested: decimal("total_invested", { precision: 20, scale: 8 }).default("0"),
+  totalQuantity: decimal("total_quantity", { precision: 20, scale: 8 }).default("0"),
+  
+  // Safety order tracking
+  filledSafetyOrders: integer("filled_safety_orders").default(0),
+  maxSafetyOrders: integer("max_safety_orders").notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+// Individual orders within cycles
+export const cycleOrders = pgTable("cycle_orders", {
+  id: serial("id").primaryKey(),
+  cycleId: integer("cycle_id").notNull(),
+  botId: integer("bot_id").notNull(),
+  userId: integer("user_id").notNull(),
+  
+  exchangeOrderId: text("exchange_order_id"), // Binance order ID
+  clientOrderId: text("client_order_id"), // Our internal tracking ID
+  orderType: text("order_type").notNull(), // base_order, safety_order, take_profit
+  safetyOrderLevel: integer("safety_order_level"), // 1, 2, 3... for safety orders
+  
+  side: text("side").notNull(), // BUY, SELL
+  orderCategory: text("order_category").notNull(), // MARKET, LIMIT
+  symbol: text("symbol").notNull(),
+  quantity: decimal("quantity", { precision: 20, scale: 8 }).notNull(),
+  price: decimal("price", { precision: 20, scale: 8 }),
+  stopPrice: decimal("stop_price", { precision: 20, scale: 8 }),
+  
+  status: text("status").notNull().default("pending"), // pending, filled, cancelled, partially_filled, failed
+  filledQuantity: decimal("filled_quantity", { precision: 20, scale: 8 }).default("0"),
+  filledPrice: decimal("filled_price", { precision: 20, scale: 8 }),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  filledAt: timestamp("filled_at"),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   exchanges: many(exchanges),
@@ -135,6 +187,7 @@ export const tradingBotsRelations = relations(tradingBots, ({ one, many }) => ({
     references: [exchanges.id],
   }),
   trades: many(trades),
+  cycles: many(botCycles),
 }));
 
 export const tradesRelations = relations(trades, ({ one }) => ({
@@ -151,6 +204,33 @@ export const tradesRelations = relations(trades, ({ one }) => ({
 export const portfolioRelations = relations(portfolio, ({ one }) => ({
   user: one(users, {
     fields: [portfolio.userId],
+    references: [users.id],
+  }),
+}));
+
+export const botCyclesRelations = relations(botCycles, ({ one, many }) => ({
+  bot: one(tradingBots, {
+    fields: [botCycles.botId],
+    references: [tradingBots.id],
+  }),
+  user: one(users, {
+    fields: [botCycles.userId],
+    references: [users.id],
+  }),
+  orders: many(cycleOrders),
+}));
+
+export const cycleOrdersRelations = relations(cycleOrders, ({ one }) => ({
+  cycle: one(botCycles, {
+    fields: [cycleOrders.cycleId],
+    references: [botCycles.id],
+  }),
+  bot: one(tradingBots, {
+    fields: [cycleOrders.botId],
+    references: [tradingBots.id],
+  }),
+  user: one(users, {
+    fields: [cycleOrders.userId],
     references: [users.id],
   }),
 }));
@@ -191,6 +271,18 @@ export const insertPortfolioSchema = createInsertSchema(portfolio).omit({
   updatedAt: true,
 });
 
+export const insertBotCycleSchema = createInsertSchema(botCycles).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
+export const insertCycleOrderSchema = createInsertSchema(cycleOrders).omit({
+  id: true,
+  createdAt: true,
+  filledAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -206,3 +298,9 @@ export type InsertTrade = z.infer<typeof insertTradeSchema>;
 
 export type Portfolio = typeof portfolio.$inferSelect;
 export type InsertPortfolio = z.infer<typeof insertPortfolioSchema>;
+
+export type BotCycle = typeof botCycles.$inferSelect;
+export type InsertBotCycle = z.infer<typeof insertBotCycleSchema>;
+
+export type CycleOrder = typeof cycleOrders.$inferSelect;
+export type InsertCycleOrder = z.infer<typeof insertCycleOrderSchema>;

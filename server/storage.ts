@@ -1,10 +1,12 @@
 import { 
-  users, exchanges, tradingBots, trades, portfolio,
+  users, exchanges, tradingBots, trades, portfolio, botCycles, cycleOrders,
   type User, type InsertUser,
   type Exchange, type InsertExchange,
   type TradingBot, type InsertTradingBot,
   type Trade, type InsertTrade,
-  type Portfolio, type InsertPortfolio
+  type Portfolio, type InsertPortfolio,
+  type BotCycle, type InsertBotCycle,
+  type CycleOrder, type InsertCycleOrder
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sum, count } from "drizzle-orm";
@@ -47,6 +49,19 @@ export interface IStorage {
     totalTrades: number;
     winRate: string;
   }>;
+
+  // Bot Cycle Management
+  createBotCycle(cycle: InsertBotCycle): Promise<BotCycle>;
+  getActiveBotCycle(botId: number): Promise<BotCycle | undefined>;
+  updateBotCycle(cycleId: number, updates: Partial<InsertBotCycle>): Promise<BotCycle>;
+  completeBotCycle(cycleId: number): Promise<void>;
+
+  // Cycle Order Management
+  createCycleOrder(order: InsertCycleOrder): Promise<CycleOrder>;
+  getCycleOrders(cycleId: number): Promise<CycleOrder[]>;
+  updateCycleOrder(orderId: number, updates: Partial<InsertCycleOrder>): Promise<CycleOrder>;
+  getCycleOrderByExchangeId(exchangeOrderId: string): Promise<CycleOrder | undefined>;
+  getPendingCycleOrders(botId: number): Promise<CycleOrder[]>;
 }
 
 export class DatabaseStorage implements IStorage {
