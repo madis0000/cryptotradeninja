@@ -64,18 +64,6 @@ export function TradingHeader({ selectedSymbol, tickerData, className = "" }: Tr
             </div>
           </div>
         </div>
-        
-        <div className="flex items-center space-x-2">
-          <button className="text-gray-400 hover:text-white text-sm px-3 py-1">
-            Original
-          </button>
-          <button className="text-gray-400 hover:text-white text-sm px-3 py-1">
-            Trading View
-          </button>
-          <button className="text-gray-400 hover:text-white text-sm px-3 py-1">
-            Depth
-          </button>
-        </div>
       </div>
     </div>
   );

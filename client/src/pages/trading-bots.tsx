@@ -80,33 +80,22 @@ export default function TradingBots() {
       <div className="h-full flex flex-col">
         {/* Orange Section - Strategy Selection */}
         <div className="bg-crypto-dark border-b border-gray-800 px-4 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-6">
-              {strategies.map((strategy) => (
-                <Button
-                  key={strategy.id}
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedStrategy(strategy.id)}
-                  className={`text-xs px-3 py-1.5 ${
-                    selectedStrategy === strategy.id
-                      ? 'text-orange-400 bg-orange-400/10 border border-orange-400/20' 
-                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                  }`}
-                >
-                  {strategy.name}
-                </Button>
-              ))}
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <Button variant="outline" size="sm" className="border-gray-600 text-gray-300">
-                Buy {selectedSymbol.replace('USDT', '')}
+          <div className="flex items-center space-x-6">
+            {strategies.map((strategy) => (
+              <Button
+                key={strategy.id}
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedStrategy(strategy.id)}
+                className={`text-xs px-3 py-1.5 ${
+                  selectedStrategy === strategy.id
+                    ? 'text-orange-400 bg-orange-400/10 border border-orange-400/20' 
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                {strategy.name}
               </Button>
-              <Button variant="outline" size="sm" className="border-gray-600 text-gray-300">
-                Sell {selectedSymbol.replace('USDT', '')}
-              </Button>
-            </div>
+            ))}
           </div>
         </div>
 
@@ -183,7 +172,17 @@ export default function TradingBots() {
           {/* Gray Section - Strategy Configuration Panel */}
           <div className="w-80 bg-crypto-dark border-l border-gray-800 flex flex-col">
             <div className="p-4 flex-1">
-              <h3 className="text-white font-semibold mb-4">Create {strategies.find(s => s.id === selectedStrategy)?.name} Bot</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-semibold">Create {strategies.find(s => s.id === selectedStrategy)?.name} Bot</h3>
+                <div className="flex items-center space-x-2">
+                  <Button variant="outline" size="sm" className="border-gray-600 text-gray-300 text-xs px-2 py-1">
+                    Buy {selectedSymbol.replace('USDT', '')}
+                  </Button>
+                  <Button variant="outline" size="sm" className="border-gray-600 text-gray-300 text-xs px-2 py-1">
+                    Sell {selectedSymbol.replace('USDT', '')}
+                  </Button>
+                </div>
+              </div>
               
               {selectedStrategy === "grid" && (
                 <div className="space-y-4">
