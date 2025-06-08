@@ -286,14 +286,20 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
     }
   }, [currentInterval, chartWs]);
 
-  // Update strategy lines when strategy prop changes
+  // Update strategy lines when strategy prop changes or price data updates
   useEffect(() => {
-    if (chartRef.current && strategy) {
-      drawStrategyLines(chartRef.current, strategy);
+    if (chartRef.current && strategy && priceData.length > 0) {
+      // Use current market price from latest candlestick data
+      const latestPrice = priceData[priceData.length - 1]?.close || strategy.baseOrderPrice;
+      const dynamicStrategy = {
+        ...strategy,
+        baseOrderPrice: latestPrice
+      };
+      drawStrategyLines(chartRef.current, dynamicStrategy);
     } else if (chartRef.current && !strategy) {
       clearStrategyLines();
     }
-  }, [strategy]);
+  }, [strategy, priceData]);
 
   const intervals = [
     { label: '1m', value: '1m' },

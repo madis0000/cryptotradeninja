@@ -26,15 +26,13 @@ export default function TradingBots() {
   const [selectedStrategy, setSelectedStrategy] = useState("grid");
   const [tickerData, setTickerData] = useState<TickerData | null>(null);
   const [selectedExchangeId, setSelectedExchangeId] = useState<number | undefined>();
-
-  // Demo trading strategy for chart visualization
-  const demoStrategy = {
-    baseOrderPrice: 5.64, // Current ICP price
-    takeProfitDeviation: 3.0, // 3% above base order
-    safetyOrderDeviation: 2.5, // 2.5% below base order for first safety order
-    maxSafetyOrders: 4,
-    priceDeviationMultiplier: 1.5, // Each safety order 1.5x further down
-  };
+  const [martingaleConfig, setMartingaleConfig] = useState({
+    baseOrderPrice: 5.64, // Will be updated by current market price
+    takeProfitDeviation: 1.5, // From takeProfit setting
+    safetyOrderDeviation: 1.0, // From priceDeviation setting
+    maxSafetyOrders: 8, // From maxSafetyOrders setting
+    priceDeviationMultiplier: 1.5, // From priceDeviationMultiplier setting
+  });
 
   // Fetch exchanges for balance data
   const { data: exchanges } = useQuery({
@@ -153,7 +151,7 @@ export default function TradingBots() {
                 <div className="flex-1 bg-crypto-dark">
                   <TradingChart 
                     symbol={selectedSymbol} 
-                    strategy={selectedStrategy === "martingale" ? demoStrategy : undefined} 
+                    strategy={selectedStrategy === "martingale" ? martingaleConfig : undefined} 
                   />
                 </div>
               </div>
@@ -223,6 +221,15 @@ export default function TradingBots() {
                   selectedExchangeId={selectedExchangeId}
                   exchanges={Array.isArray(exchanges) ? exchanges : []}
                   onExchangeChange={handleExchangeChange}
+                  onConfigChange={(config) => {
+                    setMartingaleConfig({
+                      baseOrderPrice: martingaleConfig.baseOrderPrice, // Keep current market price
+                      takeProfitDeviation: parseFloat(config.takeProfit || "1.5"),
+                      safetyOrderDeviation: parseFloat(config.priceDeviation || "1.0"),
+                      maxSafetyOrders: parseInt(config.maxSafetyOrders || "8"),
+                      priceDeviationMultiplier: config.priceDeviationMultiplier?.[0] || 1.5,
+                    });
+                  }}
                 />
               )}
 

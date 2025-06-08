@@ -20,9 +20,10 @@ interface MartingaleStrategyProps {
   exchanges?: any[];
   onExchangeChange?: (exchangeId: number) => void;
   onBotCreated?: () => void;
+  onConfigChange?: (config: any) => void;
 }
 
-export function MartingaleStrategy({ className, selectedSymbol, selectedExchangeId, exchanges, onExchangeChange, onBotCreated }: MartingaleStrategyProps) {
+export function MartingaleStrategy({ className, selectedSymbol, selectedExchangeId, exchanges, onExchangeChange, onBotCreated, onConfigChange }: MartingaleStrategyProps) {
   const { user } = useAuth();
   const [localDirection, setLocalDirection] = useState<"long" | "short">("long");
   const [realtimeBalance, setRealtimeBalance] = useState<string | null>(null);
