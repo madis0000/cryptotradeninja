@@ -54,12 +54,12 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Direction Selector */}
-      <div className="flex items-center space-x-6">
+      <div className="grid grid-cols-2 gap-2">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setLocalDirection("long")}
-          className={`text-xs px-3 py-1.5 ${
+          className={`w-full text-xs px-3 py-1.5 ${
             localDirection === "long"
               ? 'text-green-400 bg-green-400/10 border border-green-400/20' 
               : 'text-gray-400 hover:text-white hover:bg-gray-800'
@@ -71,7 +71,7 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
           variant="ghost"
           size="sm"
           onClick={() => setLocalDirection("short")}
-          className={`text-xs px-3 py-1.5 ${
+          className={`w-full text-xs px-3 py-1.5 ${
             localDirection === "short"
               ? 'text-red-400 bg-red-400/10 border border-red-400/20' 
               : 'text-gray-400 hover:text-white hover:bg-gray-800'
