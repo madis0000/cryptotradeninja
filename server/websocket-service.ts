@@ -38,7 +38,10 @@ export class WebSocketService {
 
     this.setupWebSocket();
     
-    console.log(`[WEBSOCKET] Unified service initialized on port ${wsPort} with 0.0.0.0 binding. External streams connect on-demand only.`);
+    // Stop any automatic streaming on initialization
+    this.stopBinanceStreams();
+    
+    console.log(`[WEBSOCKET] Unified service initialized on port ${wsPort} with 0.0.0.0 binding. Automatic streaming disabled.`);
   }
 
   private setupWebSocket() {
@@ -1175,18 +1178,10 @@ export class WebSocketService {
   }
 
   public async startAllMarketsTicker() {
-    console.log('[WEBSOCKET] Starting all markets ticker stream for real-time data');
+    console.log('[WEBSOCKET] Automatic streaming disabled - streams start only on-demand');
     
-    // Get common market symbols from our markets API
-    const commonSymbols = [
-      'BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT', 'SOLUSDT',
-      'XRPUSDT', 'AVAXUSDT', 'DOTUSDT', 'MATICUSDT', 'LINKUSDT', 'LTCUSDT',
-      'UNIUSDT', 'ATOMUSDT', 'ICPUSDT', 'BTCUSDC', 'ETHUSDC', 'ADAUSDC',
-      'BNBUSDC', 'SOLUSDC', 'AVAXUSDC', 'ETHBTC', 'ADABTC', 'BNBBTC',
-      'DOGEBTC', 'LTCBTC', 'XRPBTC'
-    ];
-    
-    await this.connectConfigurableStream('ticker', commonSymbols);
+    // Don't start automatic streams - wait for explicit frontend requests
+    // Streams will be started only when components specifically request data
   }
 
   public getMarketData(): Map<string, any> {
