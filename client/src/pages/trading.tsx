@@ -8,9 +8,10 @@ import { OrdersHistory } from "@/components/trading/orders-history";
 export default function Trading() {
   return (
     <div className="min-h-screen bg-crypto-darker">
-      <div className="flex">
-        {/* Header Section - Only spans Order Book and Chart */}
-        <div className="flex-1">
+      <div className="flex h-screen">
+        {/* Left Column */}
+        <div className="flex flex-col flex-1">
+          {/* Header Section */}
           <div className="bg-crypto-dark px-4 py-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
@@ -24,49 +25,29 @@ export default function Trading() {
               </div>
             </div>
           </div>
+
+          {/* Main Content Row */}
+          <div className="flex flex-1">
+            {/* Left Panel - Order Book */}
+            <OrderBook className="w-80 border-r border-gray-800" />
+
+            {/* Center Panel - Chart & Trading Interface */}
+            <div className="flex-1 flex flex-col">
+              {/* Chart Section */}
+              <TradingChart className="flex-1 border-b border-gray-800" />
+
+              {/* Order Form Section - Full Width */}
+              <OrderForm className="h-64 border-b border-gray-800" />
+            </div>
+          </div>
+
+          {/* Orders & History Section - Full Screen Width */}
+          <OrdersHistory className="h-64 border-t border-gray-800" />
         </div>
-        
-        {/* Right Panel Header - Markets Section Header */}
+
+        {/* Right Panel - Markets */}
         <MarketsPanel className="w-80 bg-crypto-dark border-l border-gray-800" />
       </div>
-
-      <div className="flex h-[calc(100vh-140px)]">
-        {/* Left Panel - Order Book */}
-        <OrderBook className="w-80 border-r border-gray-800" />
-
-        {/* Center Panel - Chart & Trading Interface */}
-        <div className="flex-1 flex flex-col">
-          {/* Chart Section */}
-          <TradingChart className="flex-1 border-b border-gray-800" />
-
-          {/* Order Form Section - Full Width */}
-          <OrderForm className="h-64 border-b border-gray-800" />
-        </div>
-
-        {/* Right Panel - Markets & Trades Continuation */}
-        <div className="w-80 border-l border-gray-800">
-          <div className="flex flex-col h-full">
-            {/* Markets List Content - Continues from header */}
-            <div className="flex-1 border-b border-gray-800">
-              <div className="bg-crypto-dark h-full flex items-center justify-center">
-                <div className="text-center">
-                  <div className="text-4xl text-gray-500 mb-4">
-                    <i className="fas fa-coins"></i>
-                  </div>
-                  <p className="text-gray-500 text-sm">Markets List</p>
-                  <p className="text-gray-600 text-xs">Trading pairs display</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Market Trades Section */}
-            <MarketTrades className="flex-1" />
-          </div>
-        </div>
-      </div>
-
-      {/* Orders & History Section - Full Screen Width */}
-      <OrdersHistory className="h-64 border-t border-gray-800" />
     </div>
   );
 }
