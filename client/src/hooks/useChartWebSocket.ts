@@ -75,6 +75,12 @@ export function useChartWebSocket(
           
           if (message.type === 'kline_update') {
             onKlineUpdate?.(message.data);
+          } else if (message.type === 'historical_klines') {
+            console.log(`[CHART] Received ${message.data.klines.length} historical klines for ${message.data.symbol} ${message.data.interval}`);
+            // Process each historical kline as individual updates
+            message.data.klines.forEach((kline: any) => {
+              onKlineUpdate?.(kline);
+            });
           }
         } catch (error) {
           console.error('[CHART] Error parsing WebSocket message:', error);

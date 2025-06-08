@@ -1306,13 +1306,18 @@ export class WebSocketService {
       const symbolData = this.historicalData.get(symbol.toUpperCase());
       if (symbolData && symbolData.has(interval)) {
         const intervalData = symbolData.get(interval)!;
-        console.log(`[WEBSOCKET] Sending ${intervalData.length} historical candles for ${symbol} ${interval}`);
+        console.log(`[HISTORICAL] Sending ${intervalData.length} historical candles for ${symbol} ${interval}`);
         
-        // Send historical data to all connected clients
+        // Send historical data only to kline clients
         this.marketSubscriptions.forEach((subscription) => {
-          if (subscription.ws.readyState === WebSocket.OPEN) {
+          if (subscription.ws.readyState === WebSocket.OPEN && subscription.dataType === 'kline') {
             const subscribedSymbols = Array.from(subscription.symbols).map(s => s.toUpperCase());
-            if (subscription.symbols.size === 0 || subscribedSymbols.includes(symbol.toUpperCase())) {
+            const clientInterval = subscription.interval;
+            
+            // Check if client is subscribed to this symbol and interval
+            if ((subscription.symbols.size === 0 || subscribedSymbols.includes(symbol.toUpperCase())) &&
+                clientInterval === interval) {
+              
               const message = JSON.stringify({
                 type: 'historical_klines',
                 data: {
@@ -1321,12 +1326,18 @@ export class WebSocketService {
                   klines: intervalData.slice(-100) // Send last 100 candles
                 }
               });
-              subscription.ws.send(message);
+              
+              try {
+                subscription.ws.send(message);
+                console.log(`[HISTORICAL] ✓ Sent ${intervalData.length} historical klines to ${subscription.clientId} for ${symbol} ${interval}`);
+              } catch (error) {
+                console.error(`[HISTORICAL] Failed to send historical data to ${subscription.clientId}:`, error);
+              }
             }
           }
         });
       } else {
-        console.log(`[WEBSOCKET] No historical data available for ${symbol} ${interval}`);
+        console.log(`[HISTORICAL] No historical data available for ${symbol} ${interval}`);
       }
     });
   }
