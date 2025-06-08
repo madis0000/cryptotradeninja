@@ -6,7 +6,7 @@ export default function Trading() {
       <div className="flex">
         {/* Header Section - Only spans Order Book and Chart */}
         <div className="flex-1">
-          <div className="bg-crypto-dark border-b border-gray-800 px-4 py-6">
+          <div className="bg-crypto-dark px-4 py-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
                 <h1 className="text-2xl font-bold text-white">ICP/USDT</h1>
@@ -22,9 +22,9 @@ export default function Trading() {
         </div>
         
         {/* Right Panel Header - Markets Section Header */}
-        <div className="w-80 bg-crypto-dark border-b border-gray-800 border-l border-gray-800">
+        <div className="w-80 bg-crypto-dark border-l border-gray-800">
           <Card className="bg-crypto-dark border-0 h-full rounded-none">
-            <CardHeader className="px-4 py-6 border-b border-gray-800">
+            <CardHeader className="px-4 py-6">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-white text-sm">Markets</CardTitle>
                 <div className="flex items-center space-x-2">
