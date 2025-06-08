@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, CandlestickData } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
 import { cn } from '@/lib/utils';
 
 interface TradingChartProps {
@@ -14,7 +14,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
   const seriesRef = useRef<any>(null);
   const [currentInterval, setCurrentInterval] = useState('1m');
   const [isConnected, setIsConnected] = useState(false);
-  const [priceData, setPriceData] = useState<CandlestickData[]>([]);
+  const [priceData, setPriceData] = useState<any[]>([]);
 
   useEffect(() => {
     // Initialize TradingView chart
@@ -66,7 +66,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     });
 
     // Add candlestick series with v5 API
-    const candlestickSeries = chart.addSeries('Candlestick', {
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderUpColor: '#22c55e',
@@ -106,7 +106,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       console.log(`[CHART] Connected to WebSocket for ${symbol} klines`);
       setIsConnected(true);
       
-      // Send connected message to establish client 2 for klines
+      // Send connected message
       const connectedMsg = {
         type: 'connected',
         clientId: 'chart_klines',
@@ -115,9 +115,8 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       console.log('[CHART] Sending connected message:', connectedMsg);
       ws.send(JSON.stringify(connectedMsg));
       
-      // Small delay to ensure connection is established
+      // Request kline data
       setTimeout(() => {
-        // Request kline data for the chart
         const klineMsg = {
           type: 'configure_stream',
           dataType: 'kline',
@@ -147,7 +146,6 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
             handleHistoricalData(message.data);
           }
         } else if (message.type === 'market_update') {
-          // Ignore ticker updates on the kline connection
           console.log('[CHART] Ignoring ticker update on kline connection');
         }
       } catch (error) {
@@ -159,7 +157,6 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       console.log(`[CHART] WebSocket disconnected for ${symbol}`);
       setIsConnected(false);
       
-      // Reconnect after 3 seconds
       setTimeout(() => {
         if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
           connectToKlineStream();
@@ -177,30 +174,27 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     
     if (!seriesRef.current) return;
     
-    const candlestick: CandlestickData = {
-      time: Math.floor(klineData.openTime / 1000) as any, // Convert to seconds
+    const candlestick = {
+      time: Math.floor(klineData.openTime / 1000),
       open: klineData.open,
       high: klineData.high,
       low: klineData.low,
       close: klineData.close,
     };
     
-    // Update the chart data
     setPriceData(prev => {
       const updated = [...prev];
       const existingIndex = updated.findIndex(item => item.time === candlestick.time);
       
       if (existingIndex >= 0) {
         updated[existingIndex] = candlestick;
-        // Update existing candle
         seriesRef.current?.update(candlestick);
       } else {
         updated.push(candlestick);
-        // Add new candle
         seriesRef.current?.update(candlestick);
       }
       
-      return updated.sort((a, b) => (a.time as number) - (b.time as number));
+      return updated.sort((a, b) => a.time - b.time);
     });
   };
 
@@ -208,18 +202,17 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     console.log('[CHART] Processing historical data:', klines);
     if (!seriesRef.current || !Array.isArray(klines)) return;
     
-    const candles: CandlestickData[] = klines.map(kline => ({
-      time: Math.floor(kline.openTime / 1000) as any,
+    const candles = klines.map(kline => ({
+      time: Math.floor(kline.openTime / 1000),
       open: parseFloat(kline.open),
       high: parseFloat(kline.high),
       low: parseFloat(kline.low),
       close: parseFloat(kline.close),
     }));
 
-    const sortedCandles = candles.sort((a, b) => (a.time as number) - (b.time as number));
+    const sortedCandles = candles.sort((a, b) => a.time - b.time);
     setPriceData(sortedCandles);
     
-    // Set all historical data at once
     seriesRef.current.setData(sortedCandles);
   };
 
