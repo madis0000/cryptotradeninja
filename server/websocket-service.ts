@@ -556,6 +556,7 @@ export class WebSocketService {
 
               console.log(`[BINANCE STREAM] Market update for ${symbol}: ${processedData.c} (${processedData.P}%)`);
               this.marketData.set(symbol, marketUpdate);
+              console.log(`[WEBSOCKET] Broadcasting update for ${symbol} to ${this.marketSubscriptions.size} clients`);
               this.broadcastMarketUpdate(marketUpdate);
             }
           }
