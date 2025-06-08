@@ -517,17 +517,15 @@ export class WebSocketService {
         }
 
         const message = JSON.parse(rawData.toString());
-        console.log('[BINANCE STREAM] Received ticker data');
         
         // Skip processing for subscription confirmations
         if (message.result !== undefined && message.id !== undefined) {
           console.log('[BINANCE STREAM] Skipping subscription confirmation message');
           return;
         }
-        console.log('[BINANCE STREAM] Processing ticker message');
         
-        console.log('[BINANCE STREAM] Message type:', typeof message, 'Keys:', Object.keys(message));
-        console.log('[BINANCE STREAM] About to process message...');
+        console.log('[BINANCE STREAM] Processing ticker message for:', message.stream);
+        console.log('[BINANCE STREAM] Message keys:', Object.keys(message));
         
         // Handle both single raw stream and combined stream formats
         let processedData = message;
