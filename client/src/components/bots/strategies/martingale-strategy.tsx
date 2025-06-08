@@ -236,7 +236,7 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
           className="flex items-center justify-between w-full text-sm text-gray-400 hover:text-white"
         >
           <div className="flex items-center space-x-1">
-            <span>Advanced (Optional)</span>
+            <span>3. Advanced settings</span>
             <Info className="w-3 h-3 text-gray-400" />
           </div>
           {advancedOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -321,22 +321,28 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
         )}
       </div>
 
-      {/* Price Range */}
+      {/* Risk Management */}
       <div className="space-y-3">
-        <h4 className="text-sm font-medium text-white">Price Range</h4>
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            value={config.lowerPrice}
-            onChange={(e) => handleInputChange('lowerPrice', e.target.value)}
-            placeholder="Lower"
-            className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
-          />
-          <Input
-            value={config.upperPrice}
-            onChange={(e) => handleInputChange('upperPrice', e.target.value)}
-            placeholder="Upper"
-            className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
-          />
+        <h4 className="text-sm font-medium text-white">4. Risk Management</h4>
+        
+        <div className="space-y-3">
+          <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+            <Label className="text-sm text-gray-400 mb-3 block">Price Range</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                value={config.lowerPrice}
+                onChange={(e) => handleInputChange('lowerPrice', e.target.value)}
+                placeholder="Lower"
+                className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
+              />
+              <Input
+                value={config.upperPrice}
+                onChange={(e) => handleInputChange('upperPrice', e.target.value)}
+                placeholder="Upper"
+                className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
