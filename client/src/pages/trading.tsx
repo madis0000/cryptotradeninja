@@ -83,60 +83,29 @@ export default function Trading() {
             </Card>
           </div>
 
-          {/* Trading Interface Section (Purple/Yellow) */}
-          <div className="h-64">
-            <div className="flex h-full">
-              {/* Order Form Section */}
-              <div className="flex-1 border-r border-gray-800">
-                <Card className="bg-crypto-dark border-0 h-full rounded-none">
-                  <CardHeader className="py-3 px-4 border-b border-gray-800">
-                    <div className="flex space-x-4">
-                      <button className="text-crypto-light hover:text-white text-sm">Spot</button>
-                      <button className="text-crypto-light hover:text-white text-sm">Cross</button>
-                      <button className="text-crypto-light hover:text-white text-sm">Isolated</button>
-                      <button className="text-crypto-light hover:text-white text-sm">Grid</button>
+          {/* Order Form Section - Full Width */}
+          <div className="h-64 border-b border-gray-800">
+            <Card className="bg-crypto-dark border-0 h-full rounded-none">
+              <CardHeader className="py-3 px-4 border-b border-gray-800">
+                <div className="flex space-x-4">
+                  <button className="text-crypto-light hover:text-white text-sm">Spot</button>
+                  <button className="text-crypto-light hover:text-white text-sm">Cross</button>
+                  <button className="text-crypto-light hover:text-white text-sm">Isolated</button>
+                  <button className="text-crypto-light hover:text-white text-sm">Grid</button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <div className="text-4xl text-gray-500 mb-4">
+                      <i className="fas fa-plus-circle"></i>
                     </div>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-center h-full">
-                      <div className="text-center">
-                        <div className="text-4xl text-gray-500 mb-4">
-                          <i className="fas fa-plus-circle"></i>
-                        </div>
-                        <p className="text-gray-500 text-sm">Order Form</p>
-                        <p className="text-gray-600 text-xs">Buy/Sell interface</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Order History & Positions */}
-              <div className="flex-1">
-                <Card className="bg-crypto-dark border-0 h-full rounded-none">
-                  <CardHeader className="py-3 px-4 border-b border-gray-800">
-                    <div className="flex space-x-4 text-xs">
-                      <button className="text-crypto-accent">Open Orders(0)</button>
-                      <button className="text-crypto-light hover:text-white">Order History</button>
-                      <button className="text-crypto-light hover:text-white">Trade History</button>
-                      <button className="text-crypto-light hover:text-white">Funds</button>
-                      <button className="text-crypto-light hover:text-white">Grid Orders</button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-center h-full">
-                      <div className="text-center">
-                        <div className="text-4xl text-gray-500 mb-4">
-                          <i className="fas fa-history"></i>
-                        </div>
-                        <p className="text-gray-500 text-sm">Orders & History</p>
-                        <p className="text-gray-600 text-xs">Trading activity</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
+                    <p className="text-gray-500 text-sm">Order Form</p>
+                    <p className="text-gray-600 text-xs">Buy/Sell interface - Full width</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
@@ -184,6 +153,32 @@ export default function Trading() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Orders & History Section - Full Screen Width */}
+      <div className="h-64 border-t border-gray-800">
+        <Card className="bg-crypto-dark border-0 h-full rounded-none">
+          <CardHeader className="py-3 px-4 border-b border-gray-800">
+            <div className="flex space-x-4 text-xs">
+              <button className="text-crypto-accent">Open Orders(0)</button>
+              <button className="text-crypto-light hover:text-white">Order History</button>
+              <button className="text-crypto-light hover:text-white">Trade History</button>
+              <button className="text-crypto-light hover:text-white">Funds</button>
+              <button className="text-crypto-light hover:text-white">Grid Orders</button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="text-4xl text-gray-500 mb-4">
+                  <i className="fas fa-history"></i>
+                </div>
+                <p className="text-gray-500 text-sm">Orders & History</p>
+                <p className="text-gray-600 text-xs">Trading activity - Full screen width</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
