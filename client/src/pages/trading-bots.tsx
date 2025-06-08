@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { MarketsPanel } from "@/components/shared/markets-panel";
 import { TradingHeader } from "@/components/shared/trading-header";
 import { TradingChart } from "@/components/trading/trading-chart";
-import { GridStrategy } from "@/components/trading/strategies/grid-strategy";
-import { MartingaleStrategy } from "@/components/trading/strategies/martingale-strategy";
+import { GridStrategy } from "@/components/bots/strategies/grid-strategy";
+import { MartingaleStrategy } from "@/components/bots/strategies/martingale-strategy";
 import { usePublicWebSocket } from "@/hooks/useWebSocketService";
 
 interface TickerData {
