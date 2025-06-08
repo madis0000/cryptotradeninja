@@ -419,6 +419,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get available balance for trading pair
+  app.get("/api/exchanges/:exchangeId/balance/:symbol", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { exchangeId, symbol } = req.params;
+      const userId = req.user!.id;
+
+      // Get exchange credentials
+      const exchanges = await storage.getExchangesByUserId(userId);
+      const targetExchange = exchanges.find(ex => ex.id === parseInt(exchangeId));
+      
+      if (!targetExchange) {
+        return res.status(404).json({ error: "Exchange not found" });
+      }
+
+      // Extract quote currency from symbol (e.g., ICPUSDT -> USDT)
+      const quoteCurrency = symbol.replace(/^[A-Z]+/, '');
+      
+      // For testnet, return mock balance for demo purposes
+      if (targetExchange.isTestnet) {
+        const mockBalances: Record<string, string> = {
+          'USDT': '1000.00000000',
+          'BTC': '0.05000000',
+          'ETH': '2.50000000',
+          'BNB': '10.00000000'
+        };
+        
+        const availableBalance = mockBalances[quoteCurrency] || '0.00000000';
+        return res.json({ 
+          asset: quoteCurrency,
+          free: availableBalance,
+          locked: '0.00000000'
+        });
+      }
+
+      // For production, would integrate with actual exchange API
+      res.status(501).json({ error: "Production exchange integration not implemented" });
+    } catch (error) {
+      console.error("Error fetching balance:", error);
+      res.status(500).json({ error: "Failed to fetch balance" });
+    }
+  });
+
   // Market Data API
   app.get("/api/market", async (req, res) => {
     try {

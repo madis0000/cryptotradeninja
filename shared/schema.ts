@@ -38,13 +38,44 @@ export const tradingBots = pgTable("trading_bots", {
   exchangeId: integer("exchange_id").notNull(),
   name: text("name").notNull(),
   strategy: text("strategy").notNull(), // grid, martingale, dca
-  tradingPair: text("trading_pair").notNull(), // BTC/USDT, ETH/USDT, etc.
-  investmentAmount: decimal("investment_amount", { precision: 20, scale: 8 }).notNull(),
-  isActive: boolean("is_active").default(true).notNull(),
-  configuration: jsonb("configuration").notNull(), // strategy-specific config
+  tradingPair: text("trading_pair").notNull(), // BTCUSDT, ETHUSDT, etc.
+  direction: text("direction").notNull(), // long, short (for martingale)
+  
+  // Investment Settings
+  baseOrderAmount: decimal("base_order_amount", { precision: 20, scale: 8 }).notNull(), // Quote currency amount
+  safetyOrderAmount: decimal("safety_order_amount", { precision: 20, scale: 8 }).notNull(), // First safety order amount
+  maxSafetyOrders: integer("max_safety_orders").notNull(),
+  activeSafetyOrdersEnabled: boolean("active_safety_orders_enabled").default(false).notNull(),
+  activeSafetyOrders: integer("active_safety_orders").default(1).notNull(),
+  
+  // Price Settings
+  priceDeviation: decimal("price_deviation", { precision: 10, scale: 4 }).notNull(), // % deviation for safety orders
+  takeProfitPercentage: decimal("take_profit_percentage", { precision: 10, scale: 4 }).notNull(), // % profit target
+  takeProfitType: text("take_profit_type").notNull().default("fix"), // fix, trailing
+  trailingProfitPercentage: decimal("trailing_profit_percentage", { precision: 10, scale: 4 }),
+  
+  // Advanced Settings
+  triggerType: text("trigger_type").notNull().default("market"), // market, limit
+  triggerPrice: decimal("trigger_price", { precision: 20, scale: 8 }),
+  priceDeviationMultiplier: decimal("price_deviation_multiplier", { precision: 10, scale: 2 }).notNull().default("1.0"),
+  safetyOrderSizeMultiplier: decimal("safety_order_size_multiplier", { precision: 10, scale: 2 }).notNull().default("1.0"),
+  cooldownBetweenRounds: integer("cooldown_between_rounds").default(60).notNull(), // seconds
+  
+  // Risk Management
+  lowerPriceLimit: decimal("lower_price_limit", { precision: 20, scale: 8 }),
+  upperPriceLimit: decimal("upper_price_limit", { precision: 20, scale: 8 }),
+  
+  // Bot Status
+  isActive: boolean("is_active").default(false).notNull(),
+  currentBasePrice: decimal("current_base_price", { precision: 20, scale: 8 }), // Entry price for current round
+  averageEntryPrice: decimal("average_entry_price", { precision: 20, scale: 8 }), // Weighted average of filled orders
+  totalInvested: decimal("total_invested", { precision: 20, scale: 8 }).default("0").notNull(),
+  
+  // Performance Tracking
   totalPnl: decimal("total_pnl", { precision: 20, scale: 8 }).default("0").notNull(),
   totalTrades: integer("total_trades").default(0).notNull(),
   winRate: decimal("win_rate", { precision: 5, scale: 2 }).default("0").notNull(),
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -53,12 +84,19 @@ export const trades = pgTable("trades", {
   id: serial("id").primaryKey(),
   botId: integer("bot_id").notNull(),
   userId: integer("user_id").notNull(),
+  exchangeOrderId: text("exchange_order_id"), // Binance order ID
   tradingPair: text("trading_pair").notNull(),
   side: text("side").notNull(), // buy, sell
-  amount: decimal("amount", { precision: 20, scale: 8 }).notNull(),
+  orderType: text("order_type").notNull(), // market, limit
+  orderCategory: text("order_category").notNull(), // base_order, safety_order, take_profit
+  safetyOrderLevel: integer("safety_order_level"), // 1, 2, 3... for safety orders
+  amount: decimal("amount", { precision: 20, scale: 8 }).notNull(), // Base asset amount
+  quoteAmount: decimal("quote_amount", { precision: 20, scale: 8 }).notNull(), // Quote currency amount
   price: decimal("price", { precision: 20, scale: 8 }).notNull(),
-  status: text("status").notNull(), // filled, pending, cancelled
+  status: text("status").notNull(), // filled, pending, cancelled, partially_filled
   pnl: decimal("pnl", { precision: 20, scale: 8 }).default("0").notNull(),
+  fee: decimal("fee", { precision: 20, scale: 8 }).default("0").notNull(),
+  feeAsset: text("fee_asset"), // BNB, USDT, etc.
   executedAt: timestamp("executed_at").defaultNow().notNull(),
 });
 
