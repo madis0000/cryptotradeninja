@@ -1,4 +1,9 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MarketsPanel } from "@/components/trading/markets-panel";
+import { OrderBook } from "@/components/trading/order-book";
+import { TradingChart } from "@/components/trading/trading-chart";
+import { OrderForm } from "@/components/trading/order-form";
+import { MarketTrades } from "@/components/trading/market-trades";
+import { OrdersHistory } from "@/components/trading/orders-history";
 
 export default function Trading() {
   return (
@@ -22,27 +27,7 @@ export default function Trading() {
         </div>
         
         {/* Right Panel Header - Markets Section Header */}
-        <div className="w-80 bg-crypto-dark border-l border-gray-800">
-          <Card className="bg-crypto-dark border-0 h-full rounded-none">
-            <CardHeader className="px-4 py-6">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-white text-sm">Markets</CardTitle>
-                <div className="flex items-center space-x-2">
-                  <input 
-                    type="text" 
-                    placeholder="Search"
-                    className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs w-20"
-                  />
-                </div>
-              </div>
-              <div className="flex space-x-2 mt-3">
-                <button className="px-3 py-1 text-xs bg-crypto-accent text-white rounded">USDT</button>
-                <button className="px-3 py-1 text-xs text-crypto-light hover:text-white border border-gray-700 rounded">USDC</button>
-                <button className="px-3 py-1 text-xs text-crypto-light hover:text-white border border-gray-700 rounded">BTC</button>
-              </div>
-            </CardHeader>
-          </Card>
-        </div>
+        <MarketsPanel className="w-80 bg-crypto-dark border-l border-gray-800" />
       </div>
 
       <div className="flex h-[calc(100vh-140px)]">
