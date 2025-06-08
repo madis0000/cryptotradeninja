@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insertUserSchema } from "@shared/schema";
@@ -417,9 +417,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Market Data API
   app.get("/api/market", async (req, res) => {
     try {
-      res.json(marketData);
+      const marketData = wsService.getMarketData();
+      res.json(Array.from(marketData.values()));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch market data" });
+    }
+  });
+
+  // Markets API - Fetch trading pairs from Binance
+  app.get("/api/markets", async (req, res) => {
+    try {
+      const { quote } = req.query;
+      
+      // Fetch exchange info from Binance
+      const binanceApiUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://api.binance.com/api/v3/exchangeInfo'
+        : 'https://testnet.binance.vision/api/v3/exchangeInfo';
+      
+      const response = await fetch(binanceApiUrl);
+      if (!response.ok) {
+        throw new Error(`Binance API error: ${response.status}`);
+      }
+      
+      const exchangeInfo = await response.json();
+      let symbols = exchangeInfo.symbols.filter((symbol: any) => 
+        symbol.status === 'TRADING' &&
+        symbol.permissions.includes('SPOT')
+      );
+      
+      // Filter by quote currency if specified
+      if (quote && typeof quote === 'string') {
+        symbols = symbols.filter((symbol: any) => 
+          symbol.quoteAsset === quote.toUpperCase()
+        );
+      }
+      
+      // Format for frontend
+      const markets = symbols.map((symbol: any) => ({
+        symbol: symbol.symbol,
+        baseAsset: symbol.baseAsset,
+        quoteAsset: symbol.quoteAsset,
+        status: symbol.status,
+        baseAssetPrecision: symbol.baseAssetPrecision,
+        quotePrecision: symbol.quotePrecision,
+        quoteAssetPrecision: symbol.quoteAssetPrecision,
+        orderTypes: symbol.orderTypes,
+        icebergAllowed: symbol.icebergAllowed,
+        ocoAllowed: symbol.ocoAllowed,
+        isSpotTradingAllowed: symbol.isSpotTradingAllowed,
+        isMarginTradingAllowed: symbol.isMarginTradingAllowed
+      }));
+      
+      res.json({
+        quote: quote || 'ALL',
+        count: markets.length,
+        markets: markets.slice(0, 100) // Limit to first 100 pairs
+      });
+    } catch (error) {
+      console.error("Error fetching markets:", error);
+      res.status(500).json({ error: "Failed to fetch markets data" });
     }
   });
 
