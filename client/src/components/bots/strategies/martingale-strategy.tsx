@@ -378,11 +378,17 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
               const baseOrder = parseFloat(config.baseOrderSize) || 0;
               const safetyOrderBase = parseFloat(config.safetyOrderSize) || 0;
               const maxSafetyOrders = parseInt(config.maxSafetyOrders) || 0;
+              const activeSafetyOrders = parseInt(config.activeSafetyOrders) || 0;
               const multiplier = config.safetyOrderSizeMultiplier[0] || 1;
+              
+              // Use active safety orders if enabled, otherwise use max safety orders
+              const safetyOrdersToCalculate = config.activeSafetyOrdersEnabled 
+                ? Math.min(activeSafetyOrders, maxSafetyOrders)
+                : maxSafetyOrders;
               
               // Calculate total safety orders with multiplier
               let totalSafetyOrderAmount = 0;
-              for (let i = 0; i < maxSafetyOrders; i++) {
+              for (let i = 0; i < safetyOrdersToCalculate; i++) {
                 totalSafetyOrderAmount += safetyOrderBase * Math.pow(multiplier, i);
               }
               
