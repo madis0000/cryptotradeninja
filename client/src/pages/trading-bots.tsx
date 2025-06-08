@@ -151,7 +151,7 @@ export default function TradingBots() {
 
                 {/* Green Section - Chart (specific to bots page with future enhancements) */}
                 <div className="flex-1 bg-crypto-dark">
-                  <TradingChart symbol={selectedSymbol} />
+                  <TradingChart symbol={selectedSymbol} strategy={demoStrategy} />
                 </div>
               </div>
             </div>
