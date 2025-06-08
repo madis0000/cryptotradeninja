@@ -17,20 +17,32 @@ export default function Trading() {
                 <span className="text-crypto-light text-sm">24h Volume/ICP</span>
                 <span className="text-crypto-light text-sm">24h Volume/USDT</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <input 
-                  type="text" 
-                  placeholder="Search"
-                  className="bg-gray-800 border border-gray-700 rounded px-3 py-1 text-white text-sm"
-                />
-              </div>
+
             </div>
           </div>
         </div>
         
         {/* Right Panel Header - Markets Section Header */}
-        <div className="w-80 bg-crypto-darker border-b border-gray-800">
-          {/* Empty space to align with main header */}
+        <div className="w-80 bg-crypto-dark border-b border-gray-800 border-l border-gray-800">
+          <Card className="bg-crypto-dark border-0 h-full rounded-none">
+            <CardHeader className="py-3 px-4 border-b border-gray-800">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white text-sm">Markets</CardTitle>
+                <div className="flex items-center space-x-2">
+                  <input 
+                    type="text" 
+                    placeholder="Search"
+                    className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs w-20"
+                  />
+                </div>
+              </div>
+              <div className="flex space-x-2 mt-3">
+                <button className="px-3 py-1 text-xs bg-crypto-accent text-white rounded">USDT</button>
+                <button className="px-3 py-1 text-xs text-crypto-light hover:text-white border border-gray-700 rounded">USDC</button>
+                <button className="px-3 py-1 text-xs text-crypto-light hover:text-white border border-gray-700 rounded">BTC</button>
+              </div>
+            </CardHeader>
+          </Card>
         </div>
       </div>
 
@@ -118,44 +130,27 @@ export default function Trading() {
           </div>
         </div>
 
-        {/* Right Panel - Markets & Trades */}
+        {/* Right Panel - Markets & Trades Continuation */}
         <div className="w-80 border-l border-gray-800">
           <div className="flex flex-col h-full">
-            {/* Markets Section with Search and Quote Filters */}
+            {/* Markets List Content - Continues from header */}
             <div className="flex-1 border-b border-gray-800">
               <Card className="bg-crypto-dark border-0 h-full rounded-none">
-                <CardHeader className="py-3 px-4 border-b border-gray-800">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-white text-sm">Markets</CardTitle>
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="text" 
-                        placeholder="Search"
-                        className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs w-20"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex space-x-2 mt-3">
-                    <button className="px-3 py-1 text-xs bg-crypto-accent text-white rounded">USDT</button>
-                    <button className="px-3 py-1 text-xs text-crypto-light hover:text-white border border-gray-700 rounded">USDC</button>
-                    <button className="px-3 py-1 text-xs text-crypto-light hover:text-white border border-gray-700 rounded">BTC</button>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0 h-[calc(100%-100px)]">
+                <CardContent className="p-0 h-full">
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
                       <div className="text-4xl text-gray-500 mb-4">
                         <i className="fas fa-coins"></i>
                       </div>
-                      <p className="text-gray-500 text-sm">Markets</p>
-                      <p className="text-gray-600 text-xs">Trading pairs list</p>
+                      <p className="text-gray-500 text-sm">Markets List</p>
+                      <p className="text-gray-600 text-xs">Trading pairs display</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Market Trades Section - Moved Down */}
+            {/* Market Trades Section */}
             <div className="flex-1">
               <Card className="bg-crypto-dark border-0 h-full rounded-none">
                 <CardHeader className="py-3 px-4 border-b border-gray-800">
