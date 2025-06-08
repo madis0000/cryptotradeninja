@@ -4,7 +4,7 @@ import { ActiveBots } from "@/components/dashboard/active-bots";
 import { MarketOverview } from "@/components/dashboard/market-overview";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { CreateBotModal } from "@/components/bots/create-bot-modal";
-import { CandlestickChart } from "@/components/charts/candlestick-chart";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { usePublicWebSocket } from "@/hooks/useWebSocketService";
@@ -67,11 +67,20 @@ export default function Dashboard() {
         {/* Main Content */}
         <div className="xl:col-span-2 space-y-6">
           {/* TradingView Real-time Chart */}
-          <CandlestickChart 
-            symbol="BTCUSDT" 
-            marketData={currentMarketData}
-            className="w-full"
-          />
+          {/* Chart Placeholder - Will be implemented later */}
+          <Card className="bg-crypto-dark border-gray-800">
+            <CardContent className="p-6">
+              <div className="h-96 flex items-center justify-center border-2 border-dashed border-gray-600 rounded-lg">
+                <div className="text-center">
+                  <div className="text-4xl text-gray-500 mb-4">
+                    <i className="fas fa-chart-line"></i>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-400">Chart Component</h3>
+                  <p className="text-sm text-gray-500 mt-2">Trading chart will be implemented here</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Active Bots */}
           <ActiveBots onCreateBot={() => setIsCreateBotModalOpen(true)} />
