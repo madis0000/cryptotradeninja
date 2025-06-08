@@ -17,6 +17,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize WebSocket service
   const wsService = new WebSocketService(httpServer);
   
+  // Start all markets ticker stream for real-time data
+  setTimeout(() => {
+    wsService.startAllMarketsTicker();
+  }, 2000);
+  
   // Configure trust proxy for Replit environment
   app.set('trust proxy', true);
   

@@ -1155,6 +1155,21 @@ export class WebSocketService {
     }
   }
 
+  public async startAllMarketsTicker() {
+    console.log('[WEBSOCKET] Starting all markets ticker stream for real-time data');
+    
+    // Get common market symbols from our markets API
+    const commonSymbols = [
+      'BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT', 'SOLUSDT',
+      'XRPUSDT', 'AVAXUSDT', 'DOTUSDT', 'MATICUSDT', 'LINKUSDT', 'LTCUSDT',
+      'UNIUSDT', 'ATOMUSDT', 'ICPUSDT', 'BTCUSDC', 'ETHUSDC', 'ADAUSDC',
+      'BNBUSDC', 'SOLUSDC', 'AVAXUSDC', 'ETHBTC', 'ADABTC', 'BNBBTC',
+      'DOGEBTC', 'LTCBTC', 'XRPBTC'
+    ];
+    
+    await this.connectConfigurableStream('ticker', commonSymbols);
+  }
+
   public getMarketData(): Map<string, any> {
     return this.marketData;
   }
