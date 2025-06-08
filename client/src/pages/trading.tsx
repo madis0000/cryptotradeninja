@@ -39,10 +39,7 @@ export default function Trading() {
           volume: marketData.volume,
           quoteVolume: marketData.quoteVolume
         });
-        console.log(`[TRADING] Updated ticker state for ${marketData.symbol}:`, {
-          price: marketData.price,
-          change: marketData.priceChangePercent
-        });
+        // State updated successfully
       }
     },
     onConnect: () => {

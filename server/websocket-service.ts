@@ -95,11 +95,22 @@ export class WebSocketService {
             const allSymbolsArray = Array.from(allSymbols);
             console.log(`[WEBSOCKET] All subscribed symbols across clients:`, allSymbolsArray);
             
-            // Start or update Binance streams with all requested symbols
-            if (allSymbolsArray.length > 0) {
-              console.log(`[WEBSOCKET] Starting/updating ticker streams for symbols:`, allSymbolsArray);
+            // Update Binance streams only if symbols have changed
+            const currentSymbolsArray = this.currentSubscriptions.map(s => s.replace('@ticker', '').toUpperCase());
+            const newSymbolsArray = allSymbolsArray.map(s => s.toUpperCase());
+            const symbolsChanged = currentSymbolsArray.length !== newSymbolsArray.length || 
+              !currentSymbolsArray.every(s => newSymbolsArray.includes(s));
+
+            if (symbolsChanged && allSymbolsArray.length > 0) {
+              console.log(`[WEBSOCKET] Fast symbol switch:`, allSymbolsArray);
+              await this.updateBinanceSubscription(allSymbolsArray);
+              this.isStreamsActive = true;
+            } else if (!this.isStreamsActive && allSymbolsArray.length > 0) {
+              console.log(`[WEBSOCKET] Initial connection:`, allSymbolsArray);
               await this.connectConfigurableStream('ticker', allSymbolsArray);
               this.isStreamsActive = true;
+            } else if (symbolsChanged) {
+              console.log(`[WEBSOCKET] No symbol change detected - using existing stream`);
             }
             
             // Send current market data from backend to frontend
@@ -195,6 +206,39 @@ export class WebSocketService {
   }
 
   // Removed - streams now started on-demand when frontend subscribes
+
+  private async updateBinanceSubscription(symbols: string[]) {
+    if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
+      console.log(`[WEBSOCKET] No active Binance connection, creating new one for symbols:`, symbols);
+      await this.connectConfigurableStream('ticker', symbols);
+      return;
+    }
+
+    const newStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@ticker`);
+    
+    // Unsubscribe from current streams if any
+    if (this.currentSubscriptions.length > 0) {
+      const unsubscribeMessage = {
+        method: 'UNSUBSCRIBE',
+        params: this.currentSubscriptions,
+        id: Date.now()
+      };
+      console.log(`[WEBSOCKET] Quick unsubscribe from:`, this.currentSubscriptions);
+      this.binancePublicWs.send(JSON.stringify(unsubscribeMessage));
+    }
+
+    // Subscribe to new streams
+    const subscribeMessage = {
+      method: 'SUBSCRIBE',
+      params: newStreamPaths,
+      id: Date.now() + 1
+    };
+    console.log(`[WEBSOCKET] Quick subscribe to:`, newStreamPaths);
+    this.binancePublicWs.send(JSON.stringify(subscribeMessage));
+    
+    // Update current subscriptions
+    this.currentSubscriptions = newStreamPaths;
+  }
 
   public async connectConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
     console.log(`[WEBSOCKET] Configuring stream: ${dataType}, symbols: ${symbols}, interval: ${interval}`);
