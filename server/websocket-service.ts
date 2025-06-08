@@ -25,6 +25,32 @@ interface BalanceSubscription {
   clientId?: string;
 }
 
+interface OrderRequest {
+  type: 'place_order';
+  userId: number;
+  exchangeId: number;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  orderType: 'MARKET' | 'LIMIT';
+  quantity: string;
+  price?: string;
+  timeInForce?: 'GTC' | 'IOC' | 'FOK';
+  clientOrderId?: string;
+}
+
+interface OrderResponse {
+  type: 'order_result';
+  success: boolean;
+  orderId?: string;
+  clientOrderId?: string;
+  symbol: string;
+  side: string;
+  quantity: string;
+  price?: string;
+  status?: string;
+  error?: string;
+}
+
 export class WebSocketService {
   private wss: WebSocketServer;
   private userConnections = new Map<number, UserConnection>();
@@ -152,6 +178,11 @@ export class WebSocketService {
           if (message.type === 'subscribe_balance') {
             console.log(`[WEBSOCKET] Balance subscription request:`, message);
             await this.subscribeToBalance(ws, message.userId, message.exchangeId, message.symbol, clientId);
+          }
+          
+          if (message.type === 'place_order') {
+            console.log(`[WEBSOCKET] Order placement request:`, message);
+            await this.handleOrderPlacement(ws, message as OrderRequest);
           }
           
           if (message.type === 'unsubscribe_balance') {

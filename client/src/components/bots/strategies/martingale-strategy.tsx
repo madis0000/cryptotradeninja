@@ -617,12 +617,30 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
       <div className="mt-6 pt-4 border-t border-gray-700">
         <Button 
           onClick={handleCreateBot}
-          disabled={createBotMutation.isPending || !selectedExchangeId}
+          disabled={isCreatingBot || !selectedExchangeId}
           className="w-full bg-orange-500 hover:bg-orange-600 text-white"
         >
-          {createBotMutation.isPending ? "Creating..." : "Create Martingale Bot"}
+          {isCreatingBot ? "Creating..." : "Create Martingale Bot"}
         </Button>
       </div>
+
+      {/* Progress Dialog */}
+      <MartingaleProgressDialog
+        open={progressDialogOpen}
+        onOpenChange={setProgressDialogOpen}
+        botConfig={{
+          symbol: selectedSymbol,
+          baseOrderSize: config.baseOrderSize,
+          safetyOrderSize: config.safetyOrderSize,
+          maxSafetyOrders: parseInt(config.maxSafetyOrders),
+          activeSafetyOrders: config.activeSafetyOrdersEnabled ? parseInt(config.activeSafetyOrders) : undefined,
+          takeProfit: config.takeProfit,
+          priceDeviation: config.priceDeviation,
+          priceDeviationMultiplier: config.priceDeviationMultiplier[0]
+        }}
+        onComplete={handleProgressComplete}
+        onError={handleProgressError}
+      />
     </div>
   );
 }
