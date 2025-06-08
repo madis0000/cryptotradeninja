@@ -20,12 +20,13 @@ interface TickerData {
 
 export default function Trading() {
   const [tickerData, setTickerData] = useState<TickerData | null>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSDT');
 
   const publicWs = usePublicWebSocket({
     onMessage: (data: any) => {
-      if (data && data.type === 'market_update' && data.data && data.data.symbol === 'BTCUSDT') {
+      if (data && data.type === 'market_update' && data.data && data.data.symbol === selectedSymbol) {
         const marketData = data.data;
-        console.log('[TRADING] Received BTCUSDT ticker update:', marketData);
+        console.log(`[TRADING] Received ${selectedSymbol} ticker update:`, marketData);
         setTickerData({
           symbol: marketData.symbol,
           price: marketData.price,
@@ -39,22 +40,34 @@ export default function Trading() {
       }
     },
     onConnect: () => {
-      console.log('[TRADING] Connected to WebSocket for BTCUSDT ticker');
+      console.log(`[TRADING] Connected to WebSocket for ${selectedSymbol} ticker`);
     },
     onDisconnect: () => {
       console.log('[TRADING] Disconnected from WebSocket');
     }
   });
 
+  const handleSymbolSelect = (symbol: string) => {
+    console.log(`[TRADING] Symbol selected: ${symbol}`);
+    setSelectedSymbol(symbol);
+    setTickerData(null); // Clear previous ticker data
+    
+    // Reconnect with new symbol
+    publicWs.disconnect();
+    setTimeout(() => {
+      publicWs.connect([symbol]);
+    }, 100);
+  };
+
   useEffect(() => {
-    // Connect and subscribe to BTCUSDT ticker only
-    console.log('[TRADING] Starting BTCUSDT ticker stream...');
-    publicWs.connect(['BTCUSDT']);
+    // Connect and subscribe to selected ticker
+    console.log(`[TRADING] Starting ${selectedSymbol} ticker stream...`);
+    publicWs.connect([selectedSymbol]);
 
     return () => {
       publicWs.disconnect();
     };
-  }, []);
+  }, [selectedSymbol]);
   return (
     <div className="min-h-screen bg-crypto-darker">
       <div className="flex h-screen">
@@ -64,7 +77,9 @@ export default function Trading() {
           <div className="bg-crypto-dark px-4 py-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-6">
-                <h1 className="text-2xl font-bold text-white">BTC/USDT</h1>
+                <h1 className="text-2xl font-bold text-white">
+                  {selectedSymbol ? `${selectedSymbol.replace('USDT', '')}/USDT` : 'BTC/USDT'}
+                </h1>
                 <div className="flex items-center space-x-2">
                   <span className="text-white text-xl font-semibold font-mono">
                     {tickerData ? parseFloat(tickerData.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}
