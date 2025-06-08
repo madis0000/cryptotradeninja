@@ -37,9 +37,11 @@ interface PriceData {
 
 interface MarketsPanelProps {
   className?: string;
+  selectedSymbol?: string;
+  onSymbolSelect?: (symbol: string) => void;
 }
 
-export function MarketsPanel({ className }: MarketsPanelProps) {
+export function MarketsPanel({ className, selectedSymbol, onSymbolSelect }: MarketsPanelProps) {
   const [selectedQuote, setSelectedQuote] = useState("USDT");
   const [searchTerm, setSearchTerm] = useState("");
   const [marketPrices, setMarketPrices] = useState<Record<string, PriceData>>({});
@@ -151,7 +153,10 @@ export function MarketsPanel({ className }: MarketsPanelProps) {
                 return (
                   <div 
                     key={market.symbol}
-                    className="grid grid-cols-3 gap-1 py-2 px-2 text-xs hover:bg-gray-800/50 cursor-pointer border-b border-gray-800/30"
+                    onClick={() => onSymbolSelect?.(market.symbol)}
+                    className={`grid grid-cols-3 gap-1 py-2 px-2 text-xs hover:bg-gray-800/50 cursor-pointer border-b border-gray-800/30 ${
+                      selectedSymbol === market.symbol ? 'bg-crypto-accent/20 border-crypto-accent/50' : ''
+                    }`}
                   >
                     <div className="text-white">
                       <div className="font-medium">{market.baseAsset}/{market.quoteAsset}</div>
