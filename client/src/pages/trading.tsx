@@ -52,22 +52,27 @@ export default function Trading() {
     setSelectedSymbol(symbol);
     setTickerData(null); // Clear previous ticker data
     
-    // Reconnect with new symbol
-    publicWs.disconnect();
-    setTimeout(() => {
-      publicWs.connect([symbol]);
-    }, 100);
+    // Change subscription without reconnecting
+    publicWs.subscribe([symbol]);
   };
 
   useEffect(() => {
-    // Connect and subscribe to selected ticker
-    console.log(`[TRADING] Starting ${selectedSymbol} ticker stream...`);
+    // Connect to WebSocket once
+    console.log(`[TRADING] Starting WebSocket connection...`);
     publicWs.connect([selectedSymbol]);
 
     return () => {
       publicWs.disconnect();
     };
-  }, [selectedSymbol]);
+  }, []); // Remove selectedSymbol dependency to avoid reconnecting
+
+  useEffect(() => {
+    // Change subscription when symbol changes
+    if (publicWs.status === 'connected') {
+      console.log(`[TRADING] Changing subscription to ${selectedSymbol}`);
+      publicWs.subscribe([selectedSymbol]);
+    }
+  }, [selectedSymbol, publicWs.status]);
   return (
     <div className="min-h-screen bg-crypto-darker">
       <div className="flex h-screen">

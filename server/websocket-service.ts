@@ -79,14 +79,26 @@ export class WebSocketService {
             // Frontend requests subscription to specific trading pairs
             const symbols = message.symbols || ['BTCUSDT'];
             console.log(`[WEBSOCKET] Frontend requesting subscription to symbols:`, symbols);
+            
+            // Clear previous symbols and set new ones
+            subscription.symbols.clear();
             symbols.forEach((symbol: string) => {
               subscription.symbols.add(symbol.toUpperCase());
             });
             
-            // Start Binance streams with the requested symbols - Use ticker data for Markets panel
-            if (!this.isStreamsActive) {
-              console.log(`[WEBSOCKET] Starting ticker streams for symbols:`, symbols);
-              await this.connectConfigurableStream('ticker', symbols);
+            // Collect all unique symbols from all subscriptions
+            const allSymbols = new Set<string>();
+            this.marketSubscriptions.forEach(sub => {
+              sub.symbols.forEach(symbol => allSymbols.add(symbol));
+            });
+            
+            const allSymbolsArray = Array.from(allSymbols);
+            console.log(`[WEBSOCKET] All subscribed symbols across clients:`, allSymbolsArray);
+            
+            // Start or update Binance streams with all requested symbols
+            if (allSymbolsArray.length > 0) {
+              console.log(`[WEBSOCKET] Starting/updating ticker streams for symbols:`, allSymbolsArray);
+              await this.connectConfigurableStream('ticker', allSymbolsArray);
               this.isStreamsActive = true;
             }
             
