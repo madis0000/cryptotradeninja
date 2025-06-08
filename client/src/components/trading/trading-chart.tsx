@@ -57,6 +57,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
     setPriceData(prev => {
       const updated = [...prev];
       const existingIndex = updated.findIndex(item => item.time === candlestick.time);
+      const isFirstData = prev.length === 0;
       
       if (existingIndex >= 0) {
         updated[existingIndex] = candlestick;
@@ -68,11 +69,28 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
       
       try {
         seriesRef.current?.update(candlestick);
+        
+        // Auto-scale chart when first data arrives for new symbol
+        if (isFirstData && chartRef.current) {
+          console.log('[CHART] Auto-scaling chart for new symbol data');
+          chartRef.current.timeScale().fitContent();
+          chartRef.current.priceScale('right').applyOptions({
+            autoScale: true,
+          });
+        }
       } catch (error) {
         console.error('[CHART] Error updating chart series:', error);
         // If update fails, try setting the data fresh
         if (sortedData.length > 0) {
           seriesRef.current?.setData(sortedData);
+          
+          // Auto-scale after setting fresh data
+          if (chartRef.current) {
+            chartRef.current.timeScale().fitContent();
+            chartRef.current.priceScale('right').applyOptions({
+              autoScale: true,
+            });
+          }
         }
       }
       
@@ -250,19 +268,29 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
 
   // Update symbol when prop changes
   useEffect(() => {
-    if (chartWs.currentSymbol !== symbol) {
+    if (chartWs && chartWs.currentSymbol !== symbol) {
+      console.log(`[CHART] Changing symbol from ${chartWs.currentSymbol} to ${symbol}`);
       chartWs.changeSymbol(symbol);
       setPriceData([]); // Clear existing data
       
-      // Clear chart series and auto-fit after new data loads
+      // Clear chart series and prepare for new data
       if (seriesRef.current) {
-        seriesRef.current.setData([]);
+        try {
+          seriesRef.current.setData([]);
+          console.log('[CHART] Cleared chart data for symbol change');
+        } catch (error) {
+          console.log('[CHART] Chart series cleared during symbol change');
+        }
       }
       
-      // Auto-fit chart to new symbol's price range after data loads
+      // Auto-scale chart when new data arrives
       setTimeout(() => {
         if (chartRef.current) {
+          console.log('[CHART] Auto-scaling after symbol change');
           chartRef.current.timeScale().fitContent();
+          chartRef.current.priceScale('right').applyOptions({
+            autoScale: true,
+          });
         }
       }, 1500);
     }

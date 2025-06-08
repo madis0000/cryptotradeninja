@@ -2012,74 +2012,48 @@ export class WebSocketService {
 
   private async requestMarketDataViaAPI(symbols: string[]) {
     try {
-      // Create WebSocket connection to Binance API for data requests
-      const wsUrl = 'wss://testnet.binance.vision/ws-api/v3';
-      const ws = new WebSocket(wsUrl);
+      // Use REST API for 24hr ticker statistics since testnet doesn't support WebSocket API
+      const baseUrl = 'https://testnet.binance.vision/api/v3/ticker/24hr';
       
-      console.log('[WEBSOCKET] Connecting to Binance WebSocket API for data request');
-
-      ws.on('open', () => {
-        console.log('[WEBSOCKET] Connected to Binance WebSocket API');
+      console.log(`[WEBSOCKET] Requesting ticker data for ${symbols.length} symbols via REST API`);
+      
+      // Request data for all symbols at once
+      const symbolsParam = symbols.join(',');
+      const url = `${baseUrl}?symbols=["${symbols.join('","')}"]`;
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const tickerData = await response.json();
+      
+      if (Array.isArray(tickerData)) {
+        console.log(`[WEBSOCKET] Received ticker data for ${tickerData.length} symbols via REST API`);
         
-        // Request 24hr ticker statistics for all symbols at once
-        const requestMessage = {
-          id: Date.now(),
-          method: 'ticker.24hr',
-          params: symbols.length > 0 ? { symbols: symbols } : {}
-        };
+        // Process each ticker update
+        tickerData.forEach((ticker: any) => {
+          const marketUpdate = {
+            symbol: ticker.symbol,
+            price: ticker.lastPrice,
+            priceChange: ticker.priceChange,
+            priceChangePercent: ticker.priceChangePercent,
+            highPrice: ticker.highPrice,
+            lowPrice: ticker.lowPrice,
+            volume: ticker.volume,
+            quoteVolume: ticker.quoteVolume,
+            timestamp: Date.now()
+          };
 
-        console.log(`[WEBSOCKET] Requesting ticker data for ${symbols.length} symbols via API`);
-        ws.send(JSON.stringify(requestMessage));
-      });
-
-      ws.on('message', (data) => {
-        try {
-          const response = JSON.parse(data.toString());
-          
-          if (response.result && Array.isArray(response.result)) {
-            console.log(`[WEBSOCKET] Received ticker data for ${response.result.length} symbols via API`);
-            
-            // Process each ticker update
-            response.result.forEach((ticker: any) => {
-              const marketUpdate = {
-                symbol: ticker.symbol,
-                price: ticker.lastPrice,
-                priceChange: ticker.priceChange,
-                priceChangePercent: ticker.priceChangePercent,
-                highPrice: ticker.highPrice,
-                lowPrice: ticker.lowPrice,
-                volume: ticker.volume,
-                quoteVolume: ticker.quoteVolume,
-                timestamp: Date.now()
-              };
-
-              // Store and broadcast the update
-              this.marketData.set(ticker.symbol, marketUpdate);
-              this.broadcastMarketUpdate(marketUpdate);
-            });
-          }
-        } catch (error) {
-          console.error('[WEBSOCKET] Error processing API response:', error);
-        }
-      });
-
-      ws.on('error', (error) => {
-        console.error('[WEBSOCKET] WebSocket API error:', error);
-      });
-
-      ws.on('close', () => {
-        console.log('[WEBSOCKET] WebSocket API connection closed');
-      });
-
-      // Close connection after 10 seconds to avoid keeping it open
-      setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close();
-        }
-      }, 10000);
+          // Store and broadcast the update
+          this.marketData.set(ticker.symbol, marketUpdate);
+          this.broadcastMarketUpdate(marketUpdate);
+        });
+      }
 
     } catch (error) {
-      console.error('[WEBSOCKET] Failed to request market data via API:', error);
+      console.error('[WEBSOCKET] Failed to request market data via REST API:', error);
     }
   }
 
