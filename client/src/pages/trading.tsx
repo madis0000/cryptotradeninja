@@ -140,7 +140,10 @@ export default function Trading() {
             {/* Center Panel - Chart & Trading Interface */}
             <div className="flex-1 flex flex-col">
               {/* Chart Section */}
-              <TradingChart className="flex-1 border-b border-gray-800" />
+              <TradingChart 
+                className="flex-1 border-b border-gray-800" 
+                symbol={selectedSymbol}
+              />
 
               {/* Order Form Section - Full Width */}
               <OrderForm className="h-64 border-b border-gray-800" />
