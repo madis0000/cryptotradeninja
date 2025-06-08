@@ -26,6 +26,7 @@ export class WebSocketService {
   private isStreamsActive = false;
   private currentStreamType: string = 'ticker';
   private currentInterval: string = '1m';
+  private currentSubscriptions: string[] = [];
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -231,7 +232,9 @@ export class WebSocketService {
         case 'ticker':
           return `${sym}@ticker`;
         case 'kline':
-          return `${sym}@kline_${interval || '1m'}`;
+          const streamPath = `${sym}@kline_${interval || '1m'}`;
+          console.log(`[WEBSOCKET] Generated kline stream path: ${streamPath} for interval: ${interval}`);
+          return streamPath;
         case 'depth':
           return `${sym}@depth${depth || '5'}`;
         case 'trade':
@@ -289,16 +292,30 @@ export class WebSocketService {
     this.binancePublicWs.on('open', () => {
       console.log('[BINANCE STREAM] Connected to Binance subscription stream successfully');
       
-      // Send subscription message for exact stream control
+      // First unsubscribe from any existing streams
+      if (this.currentSubscriptions.length > 0) {
+        const unsubscribeMessage = {
+          method: 'UNSUBSCRIBE',
+          params: this.currentSubscriptions,
+          id: 1
+        };
+        console.log(`[BINANCE STREAM] Unsubscribing from previous streams:`, this.currentSubscriptions);
+        this.binancePublicWs?.send(JSON.stringify(unsubscribeMessage));
+      }
+      
+      // Then subscribe to new streams
       const subscriptionMessage = {
         method: 'SUBSCRIBE',
         params: streamPaths,
-        id: 1
+        id: 2
       };
       
       console.log(`[BINANCE STREAM] Subscribing to specific streams:`, streamPaths);
       console.log(`[BINANCE STREAM] Subscription message:`, JSON.stringify(subscriptionMessage));
       this.binancePublicWs?.send(JSON.stringify(subscriptionMessage));
+      
+      // Update current subscriptions
+      this.currentSubscriptions = [...streamPaths];
     });
 
     this.binancePublicWs.on('message', (rawData) => {
@@ -311,9 +328,13 @@ export class WebSocketService {
         const message = JSON.parse(rawData.toString());
         console.log('[BINANCE STREAM] Received message:', JSON.stringify(message).substring(0, 200) + '...');
         
-        // Handle subscription response
-        if (message.result === null && message.id === 1) {
-          console.log('[BINANCE STREAM] Subscription confirmed successfully');
+        // Handle subscription/unsubscription responses
+        if (message.result === null && (message.id === 1 || message.id === 2)) {
+          if (message.id === 1) {
+            console.log('[BINANCE STREAM] Unsubscription confirmed successfully');
+          } else {
+            console.log('[BINANCE STREAM] Subscription confirmed successfully');
+          }
           return;
         }
         
