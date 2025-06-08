@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType } from 'lightweight-charts';
 import { cn } from '@/lib/utils';
 
 interface TradingChartProps {
@@ -9,83 +8,10 @@ interface TradingChartProps {
 
 export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
-  const seriesRef = useRef<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [currentInterval, setCurrentInterval] = useState('1m');
   const [isConnected, setIsConnected] = useState(false);
-
-  useEffect(() => {
-    if (!chartContainerRef.current) return;
-
-    // Create chart with professional styling
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: '#1a1a1a' },
-        textColor: '#d1d5db',
-      },
-      grid: {
-        vertLines: { color: '#2d3748' },
-        horzLines: { color: '#2d3748' },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: '#485563',
-        textColor: '#d1d5db',
-      },
-      timeScale: {
-        borderColor: '#485563',
-        timeVisible: true,
-        secondsVisible: false,
-      },
-    });
-
-    // Add line series for price data using v5 API
-    const lineSeries = chart.addLineSeries({
-      color: '#26a69a',
-      lineWidth: 2,
-      priceFormat: {
-        type: 'price',
-        precision: symbol.includes('BTC') ? 2 : 5,
-        minMove: symbol.includes('BTC') ? 0.01 : 0.00001,
-      },
-    });
-
-    // Add sample data to show chart is working
-    const now = Math.floor(Date.now() / 1000);
-    const basePrice = symbol.includes('BTC') ? 106000 : 5.62;
-    const sampleData = [];
-    
-    for (let i = 0; i < 100; i++) {
-      const time = now - (100 - i) * 60; // 1-minute intervals
-      const price = basePrice + Math.sin(i / 10) * (basePrice * 0.02) + Math.random() * (basePrice * 0.01);
-      sampleData.push({ time: time as any, value: price });
-    }
-
-    lineSeries.setData(sampleData);
-    seriesRef.current = lineSeries;
-    chartRef.current = chart;
-
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.remove();
-    };
-  }, [symbol]);
+  const [priceData, setPriceData] = useState<any[]>([]);
 
   useEffect(() => {
     // Connect to WebSocket for real-time data
@@ -104,7 +30,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     }
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
     
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -154,25 +80,37 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
   };
 
   const handleHistoricalData = (klines: any[]) => {
-    if (!seriesRef.current) return;
-
     const chartData = klines.map((kline) => ({
-      time: Math.floor(kline.openTime / 1000) as any,
-      value: parseFloat(kline.close),
+      time: new Date(kline.openTime).toLocaleTimeString(),
+      open: parseFloat(kline.open),
+      high: parseFloat(kline.high),
+      low: parseFloat(kline.low),
+      close: parseFloat(kline.close),
+      volume: parseFloat(kline.volume),
     }));
 
-    seriesRef.current.setData(chartData);
+    setPriceData(chartData.slice(-50)); // Keep last 50 candles
   };
 
   const handleKlineUpdate = (kline: any) => {
-    if (!seriesRef.current) return;
-
-    const update = {
-      time: Math.floor(kline.openTime / 1000) as any,
-      value: parseFloat(kline.close),
+    const newData = {
+      time: new Date(kline.openTime).toLocaleTimeString(),
+      open: parseFloat(kline.open),
+      high: parseFloat(kline.high),
+      low: parseFloat(kline.low),
+      close: parseFloat(kline.close),
+      volume: parseFloat(kline.volume),
     };
 
-    seriesRef.current.update(update);
+    setPriceData(prev => {
+      const updated = [...prev];
+      if (updated.length > 0 && updated[updated.length - 1].time === newData.time) {
+        updated[updated.length - 1] = newData; // Update last candle
+      } else {
+        updated.push(newData); // Add new candle
+      }
+      return updated.slice(-50); // Keep last 50 candles
+    });
   };
 
   const intervals = [
@@ -186,8 +124,12 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     { label: '4h', value: '4h' },
   ];
 
+  const currentPrice = priceData.length > 0 ? priceData[priceData.length - 1].close : 0;
+  const priceChange = priceData.length > 1 ? 
+    ((currentPrice - priceData[priceData.length - 2].close) / priceData[priceData.length - 2].close * 100) : 0;
+
   return (
-    <div className={cn("relative bg-crypto-dark", className)}>
+    <div className={cn("relative bg-crypto-dark border border-crypto-border rounded-lg", className)}>
       {/* Chart Controls */}
       <div className="absolute top-4 left-4 z-10 flex items-center space-x-2">
         <div className="flex items-center space-x-1 bg-crypto-darker rounded-lg p-1">
@@ -226,11 +168,81 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
         </div>
       </div>
 
-      {/* Chart Container */}
-      <div 
-        ref={chartContainerRef} 
-        className="w-full h-full min-h-[400px]"
-      />
+      {/* Price Header */}
+      <div className="absolute top-4 right-4 z-10 bg-crypto-darker rounded px-4 py-2">
+        <div className="text-right">
+          <div className="text-lg font-bold text-white">
+            ${currentPrice.toFixed(symbol.includes('BTC') ? 2 : 5)}
+          </div>
+          <div className={cn(
+            "text-sm font-medium",
+            priceChange >= 0 ? "text-green-500" : "text-red-500"
+          )}>
+            {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+          </div>
+        </div>
+      </div>
+
+      {/* Simple Chart Display */}
+      <div className="p-6 pt-20">
+        {priceData.length > 0 ? (
+          <div className="space-y-4">
+            {/* Price Chart Area */}
+            <div className="h-80 bg-crypto-darker rounded border border-crypto-border relative overflow-hidden">
+              <div className="absolute inset-0 flex items-end justify-between px-2 pb-2">
+                {priceData.slice(-20).map((candle, index) => {
+                  const isGreen = candle.close >= candle.open;
+                  const height = Math.max(5, (Math.abs(candle.high - candle.low) / candle.high) * 200);
+                  
+                  return (
+                    <div key={index} className="flex flex-col items-center space-y-1">
+                      <div 
+                        className={cn(
+                          "w-2 rounded-sm",
+                          isGreen ? "bg-green-500" : "bg-red-500"
+                        )}
+                        style={{ height: `${height}px` }}
+                      />
+                      <div className="text-xs text-crypto-light transform -rotate-45 whitespace-nowrap">
+                        {candle.time.split(':').slice(0, 2).join(':')}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Data Table */}
+            <div className="bg-crypto-darker rounded border border-crypto-border">
+              <div className="p-4">
+                <h3 className="text-sm font-semibold text-white mb-3">Recent Price Data</h3>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {priceData.slice(-5).reverse().map((candle, index) => (
+                    <div key={index} className="flex justify-between items-center text-xs">
+                      <span className="text-crypto-light">{candle.time}</span>
+                      <span className="text-white">${candle.close.toFixed(symbol.includes('BTC') ? 2 : 5)}</span>
+                      <span className={cn(
+                        "font-medium",
+                        candle.close >= candle.open ? "text-green-500" : "text-red-500"
+                      )}>
+                        {candle.close >= candle.open ? '+' : ''}
+                        {((candle.close - candle.open) / candle.open * 100).toFixed(2)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="h-80 flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-crypto-light mb-2">Loading chart data...</div>
+              <div className="w-8 h-8 border-2 border-crypto-purple border-t-transparent rounded-full animate-spin mx-auto" />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
