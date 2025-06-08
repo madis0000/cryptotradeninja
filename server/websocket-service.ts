@@ -12,6 +12,9 @@ interface UserConnection {
 interface MarketSubscription {
   ws: WebSocket;
   symbols: Set<string>;
+  dataType?: string;
+  interval?: string;
+  clientId?: string;
 }
 
 export class WebSocketService {
@@ -55,7 +58,10 @@ export class WebSocketService {
 
       const subscription: MarketSubscription = {
         ws,
-        symbols: new Set()
+        symbols: new Set(),
+        dataType: 'ticker', // default to ticker
+        interval: '1m',
+        clientId: clientId
       };
 
       this.marketSubscriptions.add(subscription);
@@ -127,13 +133,21 @@ export class WebSocketService {
           }
           
           if (message.type === 'configure_stream') {
-            console.log(`[WEBSOCKET] Configuring ${message.dataType} stream for symbols:`, message.symbols);
+            console.log(`[WEBSOCKET] Configuring ${message.dataType} stream for client ${subscription.clientId}:`, message.symbols, 'interval:', message.interval);
             
-            // Update the subscription with the requested symbols
+            // Update the subscription with the requested configuration
             subscription.symbols.clear();
             (message.symbols || []).forEach((symbol: string) => {
               subscription.symbols.add(symbol.toUpperCase());
             });
+            subscription.dataType = message.dataType || 'ticker';
+            subscription.interval = message.interval || '1m';
+            
+            // Check if we need to start a new stream type
+            const hasKlineClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'kline');
+            const hasTickerClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'ticker');
+            
+            console.log(`[WEBSOCKET] Client types - Kline: ${hasKlineClients}, Ticker: ${hasTickerClients}`);
             
             // Configure the stream with the requested data type and interval
             await this.connectConfigurableStream(
@@ -143,7 +157,7 @@ export class WebSocketService {
               message.depth
             );
             
-            console.log(`[WEBSOCKET] Stream configured for ${message.dataType} with symbols:`, message.symbols);
+            console.log(`[WEBSOCKET] Stream configured for ${message.dataType} with symbols:`, message.symbols, 'for client:', subscription.clientId);
           }
         } catch (error) {
           console.error('[WEBSOCKET] Error processing message:', error);
