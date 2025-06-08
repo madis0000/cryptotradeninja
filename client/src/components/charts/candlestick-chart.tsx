@@ -263,7 +263,7 @@ export function CandlestickChart({ symbol = 'BTCUSDT', marketData, className }: 
         },
         body: JSON.stringify({
           dataType: 'kline',
-          symbols: [symbol],
+          symbol: symbol,
           interval: interval
         }),
       });
