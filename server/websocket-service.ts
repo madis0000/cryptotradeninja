@@ -519,6 +519,15 @@ export class WebSocketService {
         const message = JSON.parse(rawData.toString());
         console.log('[BINANCE STREAM] Received message:', JSON.stringify(message).substring(0, 200) + '...');
         
+        // Skip processing for subscription confirmations
+        if (message.result !== undefined && message.id !== undefined) {
+          console.log('[BINANCE STREAM] Skipping subscription confirmation message');
+          return;
+        }
+        
+        console.log('[BINANCE STREAM] Message type:', typeof message, 'Keys:', Object.keys(message));
+        console.log('[BINANCE STREAM] About to process message...');
+        
         // Handle both single raw stream and combined stream formats
         let processedData = message;
         let streamName = '';
