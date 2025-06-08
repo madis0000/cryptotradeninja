@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { MarketsPanel } from "@/components/trading/markets-panel";
+import { MarketsPanel } from "@/components/shared/markets-panel";
+import { TradingHeader } from "@/components/shared/trading-header";
 import { OrderBook } from "@/components/trading/order-book";
 import { TradingChart } from "@/components/trading/trading-chart";
 import { OrderForm } from "@/components/trading/order-form";
@@ -81,56 +82,12 @@ export default function Trading() {
       <div className="flex h-screen">
         {/* Left Column */}
         <div className="flex flex-col flex-1">
-          {/* Header Section */}
-          <div className="bg-crypto-dark px-4 py-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-6">
-                <h1 className="text-2xl font-bold text-white">
-                  {selectedSymbol ? `${selectedSymbol.replace('USDT', '')}/USDT` : 'BTC/USDT'}
-                </h1>
-                <div className="flex items-center space-x-2">
-                  <span className="text-white text-xl font-semibold font-mono">
-                    {tickerData ? parseFloat(tickerData.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}
-                  </span>
-                  <span className={`text-sm font-medium ${
-                    tickerData && parseFloat(tickerData.priceChangePercent) > 0 
-                      ? 'text-green-400' 
-                      : tickerData && parseFloat(tickerData.priceChangePercent) < 0 
-                        ? 'text-red-400' 
-                        : 'text-gray-400'
-                  }`}>
-                    {tickerData ? `${parseFloat(tickerData.priceChangePercent) > 0 ? '+' : ''}${parseFloat(tickerData.priceChangePercent).toFixed(2)}%` : '--'}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-4 text-sm">
-                  <div className="flex flex-col">
-                    <span className="text-crypto-light text-xs">24h High</span>
-                    <span className="text-white font-mono">
-                      {tickerData ? parseFloat(tickerData.highPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-crypto-light text-xs">24h Low</span>
-                    <span className="text-white font-mono">
-                      {tickerData ? parseFloat(tickerData.lowPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'}
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-crypto-light text-xs">24h Volume</span>
-                    <span className="text-white font-mono">
-                      {tickerData ? `${parseFloat(tickerData.volume).toFixed(2)} BTC` : '--'}
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-crypto-light text-xs">24h Volume (USDT)</span>
-                    <span className="text-white font-mono">
-                      {tickerData ? `${(parseFloat(tickerData.quoteVolume) / 1000000).toFixed(2)}M` : '--'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Header Section using shared component */}
+          <TradingHeader 
+            selectedSymbol={selectedSymbol}
+            tickerData={tickerData}
+            showViewOptions={true}
+          />
 
           {/* Main Content Row */}
           <div className="flex flex-1">
@@ -154,9 +111,9 @@ export default function Trading() {
           <OrdersHistory className="h-64 border-t border-gray-800" />
         </div>
 
-        {/* Right Panel - Markets */}
+        {/* Right Panel - Markets using shared component */}
         <MarketsPanel 
-          className="w-80 bg-crypto-dark border-l border-gray-800"
+          className="w-80"
           onSymbolSelect={handleSymbolSelect}
           selectedSymbol={selectedSymbol}
         />
