@@ -34,8 +34,8 @@ export default function TradingBots() {
 
   // Auto-select first exchange if available
   useEffect(() => {
-    if (exchanges && exchanges.length > 0 && !selectedExchangeId) {
-      setSelectedExchangeId(exchanges[0].id);
+    if (exchanges && Array.isArray(exchanges) && exchanges.length > 0 && !selectedExchangeId) {
+      setSelectedExchangeId((exchanges as any[])[0].id);
     }
   }, [exchanges, selectedExchangeId]);
 
@@ -209,7 +209,7 @@ export default function TradingBots() {
                   className="flex-1" 
                   selectedSymbol={selectedSymbol}
                   selectedExchangeId={selectedExchangeId}
-                  exchanges={exchanges}
+                  exchanges={Array.isArray(exchanges) ? exchanges : []}
                   onExchangeChange={handleExchangeChange}
                 />
               )}

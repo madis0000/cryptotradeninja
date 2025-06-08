@@ -57,8 +57,7 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     queryKey: ['balance', selectedExchangeId, selectedSymbol],
     queryFn: async () => {
       if (!selectedExchangeId || !selectedSymbol) return null;
-      const response = await fetch(`/api/exchanges/${selectedExchangeId}/balance/${selectedSymbol}`);
-      if (!response.ok) throw new Error('Failed to fetch balance');
+      const response = await apiRequest(`/api/exchanges/${selectedExchangeId}/balance/${selectedSymbol}`);
       return response.json();
     },
     enabled: !!(selectedExchangeId && selectedSymbol),
