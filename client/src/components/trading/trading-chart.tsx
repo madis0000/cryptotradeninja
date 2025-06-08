@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createChart, ColorType, CandlestickData, IChartApi, ISeriesApi } from 'lightweight-charts';
 import { cn } from '@/lib/utils';
 
 interface TradingChartProps {
@@ -9,11 +10,16 @@ interface TradingChartProps {
 export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const [currentInterval, setCurrentInterval] = useState('1m');
   const [isConnected, setIsConnected] = useState(false);
-  const [priceData, setPriceData] = useState<any[]>([]);
+  const [priceData, setPriceData] = useState<CandlestickData[]>([]);
 
   useEffect(() => {
+    // Initialize TradingView chart
+    initializeChart();
+    
     // Connect to WebSocket for real-time data
     connectToKlineStream();
 
@@ -21,8 +27,69 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       if (wsRef.current) {
         wsRef.current.close();
       }
+      if (chartRef.current) {
+        chartRef.current.remove();
+      }
     };
   }, [symbol, currentInterval]);
+
+  const initializeChart = () => {
+    if (!chartContainerRef.current) return;
+
+    // Remove existing chart
+    if (chartRef.current) {
+      chartRef.current.remove();
+    }
+
+    // Create new chart with v5 API
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: '#1a1a1a' },
+        textColor: '#d1d5db',
+      },
+      grid: {
+        vertLines: { color: '#374151' },
+        horzLines: { color: '#374151' },
+      },
+      width: chartContainerRef.current.clientWidth,
+      height: 400,
+      timeScale: {
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      rightPriceScale: {
+        borderColor: '#374151',
+      },
+      crosshair: {
+        mode: 1,
+      },
+    });
+
+    // Add candlestick series with v5 API
+    const candlestickSeries = chart.addCandlestickSeries({
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderUpColor: '#22c55e',
+      borderDownColor: '#ef4444',
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+    });
+
+    chartRef.current = chart;
+    seriesRef.current = candlestickSeries;
+
+    // Handle resize
+    const handleResize = () => {
+      if (chartRef.current && chartContainerRef.current) {
+        chartRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+        });
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  };
 
   const connectToKlineStream = () => {
     if (wsRef.current) {
@@ -40,19 +107,26 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       setIsConnected(true);
       
       // Send connected message to establish client 2 for klines
-      ws.send(JSON.stringify({
+      const connectedMsg = {
         type: 'connected',
         clientId: 'chart_klines',
         message: 'Chart component requesting kline data'
-      }));
+      };
+      console.log('[CHART] Sending connected message:', connectedMsg);
+      ws.send(JSON.stringify(connectedMsg));
       
-      // Request kline data for the chart
-      ws.send(JSON.stringify({
-        type: 'configure_stream',
-        dataType: 'kline',
-        symbols: [symbol],
-        interval: currentInterval
-      }));
+      // Small delay to ensure connection is established
+      setTimeout(() => {
+        // Request kline data for the chart
+        const klineMsg = {
+          type: 'configure_stream',
+          dataType: 'kline',
+          symbols: [symbol],
+          interval: currentInterval
+        };
+        console.log('[CHART] Sending kline configuration:', klineMsg);
+        ws.send(JSON.stringify(klineMsg));
+      }, 100);
     };
 
     ws.onmessage = (event) => {

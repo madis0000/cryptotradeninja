@@ -74,6 +74,7 @@ export class WebSocketService {
         try {
           const message = JSON.parse(data.toString());
           console.log(`[WEBSOCKET] Received command from frontend:`, message);
+          console.log(`[WEBSOCKET] Message type: ${message.type}, symbols: ${message.symbols}, dataType: ${message.dataType}`);
           
           if (message.type === 'subscribe') {
             // Frontend requests subscription to specific trading pairs
