@@ -21,6 +21,19 @@ export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChang
 
     ws.current.onopen = () => {
       console.log('WebSocket connected');
+      
+      // Subscribe to all major trading pairs to receive market data
+      const subscribeMessage = {
+        type: 'subscribe',
+        symbols: [
+          'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'SOLUSDT', 'DOGEUSDT', 'AVAXUSDT',
+          'DOTUSDT', 'LINKUSDT', 'LTCUSDT', 'UNIUSDT', 'ATOMUSDT', 'ICPUSDT', 'APTUSDT',
+          'BTCUSDC', 'ETHUSDC', 'ADAUSDC', 'SOLUSDC', 'AVAXUSDC',
+          'ETHBTC', 'ADABTC', 'XRPBTC', 'LTCBTC', 'BNBBTC', 'DOGEBTC'
+        ]
+      };
+      
+      ws.current?.send(JSON.stringify(subscribeMessage));
     };
 
     ws.current.onmessage = (event) => {

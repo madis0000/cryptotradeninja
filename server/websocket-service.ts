@@ -80,10 +80,10 @@ export class WebSocketService {
               subscription.symbols.add(symbol.toUpperCase());
             });
             
-            // Start Binance streams with the requested symbols - Default to kline data for charts
+            // Start Binance streams with the requested symbols - Use ticker data for Markets panel
             if (!this.isStreamsActive) {
-              console.log(`[WEBSOCKET] Starting kline streams for symbols:`, symbols);
-              await this.connectConfigurableStream('kline', symbols, '1m');
+              console.log(`[WEBSOCKET] Starting ticker streams for symbols:`, symbols);
+              await this.connectConfigurableStream('ticker', symbols);
               this.isStreamsActive = true;
             }
             
@@ -546,14 +546,15 @@ export class WebSocketService {
               const marketUpdate = {
                 symbol,
                 price: parseFloat(processedData.c),
-                change: parseFloat(processedData.P),
+                change: parseFloat(processedData.p),
+                changePercent: parseFloat(processedData.P),
                 volume: parseFloat(processedData.v),
                 high: parseFloat(processedData.h),
                 low: parseFloat(processedData.l),
                 timestamp: Date.now()
               };
 
-              console.log(`[BINANCE STREAM] Market update for ${symbol}: ${processedData.c}`);
+              console.log(`[BINANCE STREAM] Market update for ${symbol}: ${processedData.c} (${processedData.P}%)`);
               this.marketData.set(symbol, marketUpdate);
               this.broadcastMarketUpdate(marketUpdate);
             }
@@ -791,7 +792,7 @@ export class WebSocketService {
     // Filter market data to only include subscribed symbols
     const subscribedSymbols = Array.from(subscription.symbols);
     const filteredData = Array.from(this.marketData.values()).filter(data => 
-      subscribedSymbols.length === 0 || subscribedSymbols.includes(data.symbol.toLowerCase())
+      subscribedSymbols.length === 0 || subscribedSymbols.includes(data.symbol.toUpperCase())
     );
     
     console.log(`[PUBLIC WS] Client subscribed to: ${subscribedSymbols.join(', ')}`);
