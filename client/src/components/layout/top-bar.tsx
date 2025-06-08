@@ -23,10 +23,14 @@ export function TopBar({ onLogout }: TopBarProps) {
 
   const navigationItems = [
     { path: '/', label: 'Dashboard', icon: 'fas fa-chart-line' },
-    { path: '/bots', label: 'Trading Bots', icon: 'fas fa-robot' },
     { path: '/portfolio', label: 'Portfolio', icon: 'fas fa-wallet' },
     { path: '/my-exchanges', label: 'My Exchanges', icon: 'fas fa-exchange-alt' },
     { path: '/settings', label: 'Settings', icon: 'fas fa-cog' },
+  ];
+
+  const tradingSubItems = [
+    { path: '/trading', label: 'Trading', icon: 'fas fa-chart-bar' },
+    { path: '/bots', label: 'Bots', icon: 'fas fa-robot' },
   ];
 
   return (
@@ -58,6 +62,38 @@ export function TopBar({ onLogout }: TopBarProps) {
                 </Button>
               </Link>
             ))}
+            
+            {/* Trading Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  className={`flex items-center space-x-2 text-sm ${
+                    location.startsWith('/trading') || location === '/bots'
+                      ? 'text-crypto-accent bg-crypto-accent/10' 
+                      : 'text-crypto-light hover:text-white hover:bg-gray-800'
+                  }`}
+                >
+                  <i className="fas fa-chart-line"></i>
+                  <span>Trading</span>
+                  <i className="fas fa-chevron-down text-xs ml-1"></i>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="bg-crypto-dark border-gray-700" align="start">
+                {tradingSubItems.map((subItem) => (
+                  <Link key={subItem.path} href={subItem.path}>
+                    <DropdownMenuItem className={`flex items-center space-x-2 cursor-pointer ${
+                      location === subItem.path 
+                        ? 'text-crypto-accent bg-crypto-accent/10' 
+                        : 'text-crypto-light hover:text-white hover:bg-gray-800'
+                    }`}>
+                      <i className={subItem.icon}></i>
+                      <span>{subItem.label}</span>
+                    </DropdownMenuItem>
+                  </Link>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </nav>
         </div>
         

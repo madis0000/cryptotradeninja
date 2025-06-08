@@ -7,6 +7,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { useAuth } from "@/hooks/useAuth";
 import Dashboard from "@/pages/dashboard";
+import Trading from "@/pages/trading";
 import TradingBots from "@/pages/trading-bots";
 import ApiKeys from "@/pages/api-keys";
 import Portfolio from "@/pages/portfolio";
@@ -24,6 +25,7 @@ function AuthenticatedApp() {
       <main className="flex-1">
         <Switch>
           <Route path="/" component={Dashboard} />
+          <Route path="/trading" component={Trading} />
           <Route path="/bots" component={TradingBots} />
           <Route path="/api-keys" component={ApiKeys} />
           <Route path="/portfolio" component={Portfolio} />
