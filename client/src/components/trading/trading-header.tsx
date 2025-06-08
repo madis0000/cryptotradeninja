@@ -1,16 +1,17 @@
-import { useState, useEffect } from "react";
-import { usePublicWebSocket } from "@/hooks/useWebSocketService";
-import { ChevronDown } from "lucide-react";
+import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronDown, TrendingUp, TrendingDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from '@/components/ui/dropdown-menu';
 
 interface TradingHeaderProps {
   selectedSymbol: string;
-  onSymbolChange?: (symbol: string) => void;
+  onSymbolChange: (symbol: string) => void;
 }
 
 interface TickerData {
@@ -21,160 +22,200 @@ interface TickerData {
   volume: number;
   high: number;
   low: number;
-  baseVolume?: number;
-  quoteVolume?: number;
+  timestamp: number;
 }
 
-const AVAILABLE_SYMBOLS = [
-  "BTCUSDT", "ETHUSDT", "ADAUSDT", "BNBUSDT", "DOGEUSDT", 
-  "SOLUSDT", "XRPUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT",
-  "LINKUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", "ICPUSDT"
+const POPULAR_SYMBOLS = [
+  'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 
+  'SOLUSDT', 'DOGEUSDT', 'AVAXUSDT', 'DOTUSDT', 'LINKUSDT'
 ];
 
 export function TradingHeader({ selectedSymbol, onSymbolChange }: TradingHeaderProps) {
   const [tickerData, setTickerData] = useState<TickerData | null>(null);
+  const [ws, setWs] = useState<WebSocket | null>(null);
 
-  const { connect, disconnect, subscribe, status, lastMessage } = usePublicWebSocket({
-    onMessage: (data) => {
-      if (data.type === 'market_update' && data.symbol === selectedSymbol) {
-        setTickerData({
-          symbol: data.symbol,
-          price: data.price,
-          change: data.change,
-          changePercent: data.changePercent,
-          volume: data.volume,
-          high: data.high,
-          low: data.low,
-          baseVolume: data.volume,
-          quoteVolume: data.volume * data.price
-        });
-      }
-    }
+  // Fetch initial ticker data
+  const { data: marketData } = useQuery({
+    queryKey: ['/api/market'],
+    refetchInterval: 5000,
   });
 
+  // Set up WebSocket connection for real-time ticker updates
   useEffect(() => {
-    connect([selectedSymbol]);
-    return () => disconnect();
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/websocket`;
+    
+    const websocket = new WebSocket(wsUrl);
+    
+    websocket.onopen = () => {
+      console.log('[TRADING HEADER] WebSocket connected');
+      
+      // Subscribe to the selected symbol
+      const subscribeMessage = {
+        type: 'subscribe',
+        symbols: [selectedSymbol]
+      };
+      websocket.send(JSON.stringify(subscribeMessage));
+    };
+    
+    websocket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        
+        if (message.type === 'market_update' && message.symbol === selectedSymbol) {
+          const ticker: TickerData = {
+            symbol: message.symbol,
+            price: message.price,
+            change: message.change,
+            changePercent: message.changePercent,
+            volume: message.volume,
+            high: message.high,
+            low: message.low,
+            timestamp: message.timestamp || Date.now()
+          };
+          setTickerData(ticker);
+        }
+      } catch (error) {
+        console.error('[TRADING HEADER] Error parsing WebSocket message:', error);
+      }
+    };
+    
+    websocket.onclose = () => {
+      console.log('[TRADING HEADER] WebSocket disconnected');
+    };
+    
+    websocket.onerror = (error) => {
+      console.error('[TRADING HEADER] WebSocket error:', error);
+    };
+    
+    setWs(websocket);
+    
+    return () => {
+      websocket.close();
+    };
   }, [selectedSymbol]);
 
-  const handleSymbolSelect = (symbol: string) => {
-    if (onSymbolChange) {
-      onSymbolChange(symbol);
+  // Update subscription when symbol changes
+  useEffect(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      const subscribeMessage = {
+        type: 'subscribe',
+        symbols: [selectedSymbol]
+      };
+      ws.send(JSON.stringify(subscribeMessage));
     }
-    // Subscribe to new symbol
-    subscribe([symbol]);
-  };
+  }, [selectedSymbol, ws]);
 
-  const formatPrice = (price: number) => {
-    if (price >= 1000) return price.toFixed(2);
-    if (price >= 1) return price.toFixed(4);
-    return price.toFixed(6);
+  // Get ticker data from marketData if WebSocket data is not available
+  const displayData = tickerData || (marketData && marketData.find((item: any) => item.symbol === selectedSymbol));
+
+  const formatPrice = (price: number, precision: number = 2) => {
+    if (price >= 1) {
+      return price.toFixed(precision);
+    } else {
+      return price.toFixed(Math.max(precision, 8));
+    }
   };
 
   const formatVolume = (volume: number) => {
-    if (volume >= 1000000) return `${(volume / 1000000).toFixed(2)}M`;
-    if (volume >= 1000) return `${(volume / 1000).toFixed(2)}K`;
-    return volume.toFixed(2);
+    if (volume >= 1000000) {
+      return `${(volume / 1000000).toFixed(1)}M`;
+    } else if (volume >= 1000) {
+      return `${(volume / 1000).toFixed(1)}K`;
+    }
+    return volume.toFixed(0);
   };
 
-  const getSymbolParts = (symbol: string) => {
-    if (symbol.endsWith('USDT')) {
-      return { base: symbol.slice(0, -4), quote: 'USDT' };
-    }
-    if (symbol.endsWith('USDC')) {
-      return { base: symbol.slice(0, -4), quote: 'USDC' };
-    }
-    if (symbol.endsWith('BTC')) {
-      return { base: symbol.slice(0, -3), quote: 'BTC' };
-    }
-    return { base: symbol.slice(0, -4), quote: symbol.slice(-4) };
-  };
-
-  const { base, quote } = getSymbolParts(selectedSymbol);
-  const isPositive = tickerData ? tickerData.changePercent >= 0 : false;
+  const isPositive = displayData?.changePercent > 0;
+  const isNegative = displayData?.changePercent < 0;
 
   return (
-    <div className="bg-crypto-dark px-4 py-6 border-b border-gray-800">
+    <div className="bg-crypto-dark border-b border-gray-800 p-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-6">
-          {/* Symbol Selector */}
+        {/* Symbol Selector */}
+        <div className="flex items-center space-x-4">
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center space-x-2 hover:bg-gray-800 px-3 py-2 rounded">
-              <h1 className="text-2xl font-bold text-white">{base}/{quote}</h1>
-              <ChevronDown className="w-4 h-4 text-gray-400" />
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="text-white hover:bg-gray-800 p-2">
+                <span className="font-semibold text-lg">{selectedSymbol}</span>
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-crypto-dark border-gray-700">
-              {AVAILABLE_SYMBOLS.map((symbol) => {
-                const parts = getSymbolParts(symbol);
-                return (
-                  <DropdownMenuItem
-                    key={symbol}
-                    onClick={() => handleSymbolSelect(symbol)}
-                    className="text-white hover:bg-gray-800 cursor-pointer"
-                  >
-                    {parts.base}/{parts.quote}
-                  </DropdownMenuItem>
-                );
-              })}
+              {POPULAR_SYMBOLS.map((symbol) => (
+                <DropdownMenuItem
+                  key={symbol}
+                  onClick={() => onSymbolChange(symbol)}
+                  className="text-white hover:bg-gray-800 cursor-pointer"
+                >
+                  {symbol}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
 
+        {/* Ticker Information */}
+        <div className="flex items-center space-x-8">
           {/* Price */}
-          <div className="flex flex-col">
-            <span className={`text-xl font-semibold ${isPositive ? 'text-crypto-success' : 'text-crypto-danger'}`}>
-              {tickerData ? formatPrice(tickerData.price) : '--'}
-            </span>
-            <span className="text-xs text-gray-400">Price</span>
+          <div className="text-right">
+            <div className="text-xs text-gray-400">Price</div>
+            <div className={`text-lg font-mono font-semibold ${
+              isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-white'
+            }`}>
+              ${displayData ? formatPrice(displayData.price) : '--'}
+            </div>
           </div>
 
           {/* 24h Change */}
-          <div className="flex flex-col">
-            <span className={`text-sm font-medium ${isPositive ? 'text-crypto-success' : 'text-crypto-danger'}`}>
-              {tickerData ? `${isPositive ? '+' : ''}${tickerData.changePercent.toFixed(2)}%` : '--'}
-            </span>
-            <span className="text-xs text-gray-400">24h Change</span>
+          <div className="text-right">
+            <div className="text-xs text-gray-400">24h Change</div>
+            <div className={`text-sm font-medium flex items-center ${
+              isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-gray-400'
+            }`}>
+              {displayData ? (
+                <>
+                  {isPositive ? <TrendingUp className="w-3 h-3 mr-1" /> : 
+                   isNegative ? <TrendingDown className="w-3 h-3 mr-1" /> : null}
+                  {displayData.changePercent > 0 ? '+' : ''}{displayData.changePercent.toFixed(2)}%
+                </>
+              ) : '--'}
+            </div>
           </div>
 
           {/* 24h High */}
-          <div className="flex flex-col">
-            <span className="text-sm text-white">
-              {tickerData ? formatPrice(tickerData.high) : '--'}
-            </span>
-            <span className="text-xs text-gray-400">24h High</span>
+          <div className="text-right">
+            <div className="text-xs text-gray-400">24h High</div>
+            <div className="text-sm font-mono text-white">
+              ${displayData ? formatPrice(displayData.high) : '--'}
+            </div>
           </div>
 
           {/* 24h Low */}
-          <div className="flex flex-col">
-            <span className="text-sm text-white">
-              {tickerData ? formatPrice(tickerData.low) : '--'}
-            </span>
-            <span className="text-xs text-gray-400">24h Low</span>
+          <div className="text-right">
+            <div className="text-xs text-gray-400">24h Low</div>
+            <div className="text-sm font-mono text-white">
+              ${displayData ? formatPrice(displayData.low) : '--'}
+            </div>
           </div>
 
-          {/* Volume Base */}
-          <div className="flex flex-col">
-            <span className="text-sm text-white">
-              {tickerData ? formatVolume(tickerData.baseVolume || tickerData.volume) : '--'}
-            </span>
-            <span className="text-xs text-gray-400">24h Volume ({base})</span>
+          {/* 24h Volume */}
+          <div className="text-right">
+            <div className="text-xs text-gray-400">24h Volume</div>
+            <div className="text-sm font-mono text-white">
+              {displayData ? formatVolume(displayData.volume) : '--'}
+            </div>
           </div>
 
-          {/* Volume Quote */}
-          <div className="flex flex-col">
-            <span className="text-sm text-white">
-              {tickerData ? formatVolume(tickerData.quoteVolume || (tickerData.volume * tickerData.price)) : '--'}
-            </span>
-            <span className="text-xs text-gray-400">24h Volume ({quote})</span>
+          {/* Connection Status */}
+          <div className="text-right">
+            <div className="text-xs text-gray-400">Status</div>
+            <div className={`text-xs font-medium ${
+              tickerData ? 'text-green-400' : 'text-yellow-400'
+            }`}>
+              {tickerData ? 'Live' : 'Static'}
+            </div>
           </div>
-        </div>
-
-        {/* Connection Status */}
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${
-            status === 'connected' ? 'bg-crypto-success' : 
-            status === 'connecting' ? 'bg-yellow-500' : 'bg-crypto-danger'
-          }`} />
-          <span className="text-xs text-gray-400 capitalize">{status}</span>
         </div>
       </div>
     </div>

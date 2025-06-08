@@ -25,12 +25,12 @@ export class WebSocketService {
   constructor(server: Server) {
     this.wss = new WebSocketServer({ 
       server, 
-      path: '/ws',
+      path: '/websocket',
       host: '0.0.0.0'
     });
     this.setupWebSocket();
-    console.log('[WEBSOCKET] Setting up unified WebSocket server on port 8080 with 0.0.0.0 binding');
-    console.log('[WEBSOCKET] Unified service initialized on port 8080 with 0.0.0.0 binding. External streams connect on-demand only.');
+    console.log('[WEBSOCKET] Setting up unified WebSocket server on /websocket path with 0.0.0.0 binding');
+    console.log('[WEBSOCKET] Unified service initialized on /websocket path. External streams connect on-demand only.');
   }
 
   private setupWebSocket() {
