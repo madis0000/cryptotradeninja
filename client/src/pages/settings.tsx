@@ -26,17 +26,31 @@ interface Exchange {
 
 interface StreamConfig {
   dataType: string;
-  symbols: string[];
+  symbol: string; // Changed to single symbol for proper subscription control
   interval?: string;
   depth?: string;
 }
+
+// Predefined trading symbols for dropdown selection
+const TRADING_SYMBOLS = [
+  { value: 'BTCUSDT', label: 'BTC/USDT' },
+  { value: 'ETHUSDT', label: 'ETH/USDT' },
+  { value: 'ADAUSDT', label: 'ADA/USDT' },
+  { value: 'BNBUSDT', label: 'BNB/USDT' },
+  { value: 'DOGEUSDT', label: 'DOGE/USDT' },
+  { value: 'SOLUSDT', label: 'SOL/USDT' },
+  { value: 'XRPUSDT', label: 'XRP/USDT' },
+  { value: 'AVAXUSDT', label: 'AVAX/USDT' },
+  { value: 'DOTUSDT', label: 'DOT/USDT' },
+  { value: 'MATICUSDT', label: 'MATIC/USDT' }
+];
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general');
   const [selectedExchangeId, setSelectedExchangeId] = useState<string>('');
   const [streamConfig, setStreamConfig] = useState<StreamConfig>({
     dataType: 'ticker',
-    symbols: ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'BNBUSDT', 'DOGEUSDT'],
+    symbol: 'BTCUSDT', // Single symbol for clean subscription
     interval: '1m',
     depth: '5'
   });
@@ -306,17 +320,19 @@ export default function Settings() {
             )}
             
             <div className="md:col-span-2 lg:col-span-1">
-              <Label htmlFor="symbols">Trading Symbols</Label>
-              <Input
-                id="symbols"
-                value={streamConfig.symbols.join(', ')}
-                onChange={(e) => setStreamConfig({
-                  ...streamConfig, 
-                  symbols: e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s)
-                })}
-                placeholder="BTCUSDT, ETHUSDT, ADAUSDT"
-                className="text-xs"
-              />
+              <Label htmlFor="symbol">Trading Symbol</Label>
+              <Select value={streamConfig.symbol} onValueChange={(value) => setStreamConfig({...streamConfig, symbol: value})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select trading pair" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TRADING_SYMBOLS.map((symbol) => (
+                    <SelectItem key={symbol.value} value={symbol.value}>
+                      {symbol.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           
@@ -325,11 +341,11 @@ export default function Settings() {
               <strong>Generated Stream URL:</strong>
               <div className="mt-1 text-white font-mono break-all">
                 {selectedExchange?.wsStreamEndpoint 
-                  ? `${selectedExchange.wsStreamEndpoint}/stream?streams=${streamConfig.symbols.map(symbol => 
-                      streamConfig.dataType === 'kline' ? `${symbol.toLowerCase()}@kline_${streamConfig.interval}` :
-                      streamConfig.dataType === 'depth' ? `${symbol.toLowerCase()}@depth${streamConfig.depth}` :
-                      `${symbol.toLowerCase()}@${streamConfig.dataType}`
-                    ).join('/')}`
+                  ? `${selectedExchange.wsStreamEndpoint}/stream?streams=${
+                      streamConfig.dataType === 'kline' ? `${streamConfig.symbol.toLowerCase()}@kline_${streamConfig.interval}` :
+                      streamConfig.dataType === 'depth' ? `${streamConfig.symbol.toLowerCase()}@depth${streamConfig.depth}` :
+                      `${streamConfig.symbol.toLowerCase()}@${streamConfig.dataType}`
+                    }`
                   : 'No exchange selected'
                 }
               </div>
@@ -351,14 +367,14 @@ export default function Settings() {
                   size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
                   onClick={async () => {
-                    if (streamConfig.symbols.length > 0) {
+                    if (streamConfig.symbol) {
                       try {
-                        // Connect directly to backend with configured symbols
-                        publicWs.connect(streamConfig.symbols);
+                        // Connect directly to backend with configured symbol
+                        publicWs.connect([streamConfig.symbol]);
 
                         toast({
                           title: "Stream Connected",
-                          description: `Connected to ${streamConfig.dataType} stream for ${streamConfig.symbols.join(', ')}`,
+                          description: `Connected to ${streamConfig.dataType} stream for ${streamConfig.symbol}`,
                         });
                       } catch (error) {
                         toast({
@@ -369,13 +385,13 @@ export default function Settings() {
                       }
                     } else {
                       toast({
-                        title: "No Symbols",
-                        description: "Please configure trading symbols first",
+                        title: "No Symbol",
+                        description: "Please select a trading symbol first",
                         variant: "destructive",
                       });
                     }
                   }}
-                  disabled={publicWs.status === 'connecting' || streamConfig.symbols.length === 0}
+                  disabled={publicWs.status === 'connecting' || !streamConfig.symbol}
                 >
                   <i className={`${publicWs.status === 'connecting' ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
                   {publicWs.status === 'connecting' ? 'Connecting...' : 'Test Connection'}
