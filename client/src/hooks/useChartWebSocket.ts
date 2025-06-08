@@ -57,12 +57,14 @@ export function useChartWebSocket(
         
         // Configure stream with current symbol and interval
         setTimeout(() => {
-          ws.send(JSON.stringify({
+          const configMessage = {
             type: 'configure_stream',
             dataType: 'kline',
             symbols: [currentSymbol],
             interval: currentInterval
-          }));
+          };
+          console.log('[CHART] Sending configure_stream message:', configMessage);
+          ws.send(JSON.stringify(configMessage));
         }, 100);
       };
 
@@ -132,18 +134,20 @@ export function useChartWebSocket(
   }, [currentInterval]);
 
   const changeInterval = useCallback((interval: string) => {
-    console.log(`[CHART] Changing interval to ${interval}`);
+    console.log(`[CHART] Changing interval from ${currentInterval} to ${interval}`);
     setCurrentInterval(interval);
     
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
+      const configMessage = {
         type: 'configure_stream',
         dataType: 'kline',
         symbols: [currentSymbol],
         interval: interval
-      }));
+      };
+      console.log('[CHART] Sending interval change configuration:', configMessage);
+      wsRef.current.send(JSON.stringify(configMessage));
     }
-  }, [currentSymbol]);
+  }, [currentSymbol, currentInterval]);
 
   // Cleanup on unmount
   useEffect(() => {
