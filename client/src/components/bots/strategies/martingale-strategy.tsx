@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { ChevronUp, ChevronDown, Info } from "lucide-react";
 
 interface MartingaleStrategyProps {
@@ -17,11 +18,13 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
     // Price Settings
     priceDeviation: "1",
     takeProfit: "1.5",
+    takeProfitType: "fix",
+    trailingProfit: "0.5",
     
     // Investment
     baseOrderSize: "7.5",
-    dcaOrderSize: "7.5",
-    maxDcaOrders: "8",
+    safetyOrderSize: "7.5",
+    maxSafetyOrders: "8",
     
     // Available
     available: "0.000",
@@ -29,9 +32,10 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
     
     // Advanced Settings
     advancedEnabled: false,
+    triggerType: "market",
     triggerPrice: "",
-    priceDeviationMultiplier: "0.1 - 10",
-    dcaOrderSizeMultiplier: "0.1 - 10",
+    priceDeviationMultiplier: [1.5],
+    safetyOrderSizeMultiplier: [2.0],
     cooldownBetweenRounds: "60",
     
     // Price Range
@@ -103,17 +107,34 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
                 className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
               />
               <span className="text-sm text-gray-400">%</span>
-              <Select defaultValue="fix">
-                <SelectTrigger className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs">
+              <Select 
+                value={config.takeProfitType}
+                onValueChange={(value) => handleInputChange('takeProfitType', value)}
+              >
+                <SelectTrigger className="w-20 h-7 bg-crypto-darker border-gray-600 text-white text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-crypto-darker border-gray-600">
                   <SelectItem value="fix" className="text-white hover:bg-gray-700">Fix</SelectItem>
-                  <SelectItem value="variable" className="text-white hover:bg-gray-700">Variable</SelectItem>
+                  <SelectItem value="trailing" className="text-white hover:bg-gray-700">Trailing</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
+
+          {config.takeProfitType === "trailing" && (
+            <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
+              <Label className="text-sm text-gray-400">Trailing Profit</Label>
+              <div className="flex items-center space-x-2">
+                <Input
+                  value={config.trailingProfit}
+                  onChange={(e) => handleInputChange('trailingProfit', e.target.value)}
+                  className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+                />
+                <span className="text-sm text-gray-400">%</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -123,7 +144,7 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
         
         <div className="space-y-3">
           <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-            <Label className="text-sm text-gray-400">Base Order Size</Label>
+            <Label className="text-sm text-gray-400">Base Order</Label>
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-400">≥</span>
               <Input
@@ -136,12 +157,12 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
           </div>
 
           <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-            <Label className="text-sm text-gray-400">DCA Order Size</Label>
+            <Label className="text-sm text-gray-400">Safety Orders</Label>
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-400">≥</span>
               <Input
-                value={config.dcaOrderSize}
-                onChange={(e) => handleInputChange('dcaOrderSize', e.target.value)}
+                value={config.safetyOrderSize}
+                onChange={(e) => handleInputChange('safetyOrderSize', e.target.value)}
                 className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
               />
               <span className="text-sm text-gray-400">USDT</span>
@@ -149,10 +170,10 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
           </div>
 
           <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-            <Label className="text-sm text-gray-400">Max DCA Orders</Label>
+            <Label className="text-sm text-gray-400">Max Safety Orders</Label>
             <Input
-              value={config.maxDcaOrders}
-              onChange={(e) => handleInputChange('maxDcaOrders', e.target.value)}
+              value={config.maxSafetyOrders}
+              onChange={(e) => handleInputChange('maxSafetyOrders', e.target.value)}
               className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
             />
           </div>
@@ -187,27 +208,66 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
 
         {advancedOpen && (
           <div className="space-y-3 pl-4 border-l-2 border-gray-700">
-            <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-              <Label className="text-sm text-gray-400">Trigger Price</Label>
-              <div className="flex items-center space-x-2">
-                <Input
-                  value={config.triggerPrice}
-                  onChange={(e) => handleInputChange('triggerPrice', e.target.value)}
-                  className="w-20 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
-                  placeholder=""
-                />
-                <span className="text-sm text-gray-400">USDT</span>
+            <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+              <div className="flex justify-between items-center mb-2">
+                <Label className="text-sm text-gray-400">Trigger Price</Label>
+                <Select 
+                  value={config.triggerType}
+                  onValueChange={(value) => handleInputChange('triggerType', value)}
+                >
+                  <SelectTrigger className="w-20 h-7 bg-crypto-darker border-gray-600 text-white text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-crypto-darker border-gray-600">
+                    <SelectItem value="market" className="text-white hover:bg-gray-700">Market</SelectItem>
+                    <SelectItem value="limit" className="text-white hover:bg-gray-700">Limit</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+              {config.triggerType === "limit" && (
+                <div className="flex justify-between items-center">
+                  <Label className="text-sm text-gray-500">Price</Label>
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      value={config.triggerPrice}
+                      onChange={(e) => handleInputChange('triggerPrice', e.target.value)}
+                      className="w-20 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+                      placeholder="0.00"
+                    />
+                    <span className="text-sm text-gray-400">USDT</span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-              <Label className="text-sm text-gray-400">Price deviation multiplier</Label>
-              <span className="text-sm text-gray-400">{config.priceDeviationMultiplier}</span>
+            <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+              <div className="flex justify-between items-center mb-3">
+                <Label className="text-sm text-gray-400">Price deviation multiplier</Label>
+                <span className="text-sm text-white">{config.priceDeviationMultiplier[0]}</span>
+              </div>
+              <Slider
+                value={config.priceDeviationMultiplier}
+                onValueChange={(value) => setConfig(prev => ({...prev, priceDeviationMultiplier: value}))}
+                max={10}
+                min={1}
+                step={0.1}
+                className="w-full"
+              />
             </div>
 
-            <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-              <Label className="text-sm text-gray-400">DCA order size multiplier</Label>
-              <span className="text-sm text-gray-400">{config.dcaOrderSizeMultiplier}</span>
+            <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+              <div className="flex justify-between items-center mb-3">
+                <Label className="text-sm text-gray-400">Safety Order Size multiplier</Label>
+                <span className="text-sm text-white">{config.safetyOrderSizeMultiplier[0]}</span>
+              </div>
+              <Slider
+                value={config.safetyOrderSizeMultiplier}
+                onValueChange={(value) => setConfig(prev => ({...prev, safetyOrderSizeMultiplier: value}))}
+                max={10}
+                min={1}
+                step={0.1}
+                className="w-full"
+              />
             </div>
 
             <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
