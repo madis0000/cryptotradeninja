@@ -168,6 +168,18 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     if (chartWs.currentSymbol !== symbol) {
       chartWs.changeSymbol(symbol);
       setPriceData([]); // Clear existing data
+      
+      // Clear chart series and auto-fit after new data loads
+      if (seriesRef.current) {
+        seriesRef.current.setData([]);
+      }
+      
+      // Auto-fit chart to new symbol's price range after data loads
+      setTimeout(() => {
+        if (chartRef.current) {
+          chartRef.current.timeScale().fitContent();
+        }
+      }, 1500);
     }
   }, [symbol, chartWs]);
 

@@ -323,7 +323,7 @@ export class WebSocketService {
       }
       
       // Fetch historical data before subscribing to real-time streams
-      await this.fetchHistoricalKlinesREST(symbols, interval);
+      await this.fetchHistoricalKlinesWS(symbols, interval);
       
       // Subscribe to new kline streams
       const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
@@ -343,7 +343,7 @@ export class WebSocketService {
     console.log(`[WEBSOCKET] Creating new connection for kline streams`);
     
     // Fetch historical data first, then start real-time streams
-    await this.fetchHistoricalKlinesREST(symbols, interval);
+    await this.fetchHistoricalKlinesWS(symbols, interval);
     
     const { storage } = await import('./storage');
     let baseUrl = 'wss://stream.testnet.binance.vision/stream';
@@ -1623,27 +1623,29 @@ export class WebSocketService {
     console.log('[WEBSOCKET] All Binance streams stopped');
   }
 
-  private async fetchHistoricalKlinesREST(symbols: string[], interval: string) {
-    console.log(`[HISTORICAL] Fetching historical klines for:`, symbols, 'interval:', interval);
+  private async fetchHistoricalKlinesWS(symbols: string[], interval: string) {
+    console.log(`[HISTORICAL WS] Fetching historical klines for:`, symbols, 'interval:', interval);
     
     for (const symbol of symbols) {
       try {
-        // Determine the API endpoint based on configuration
+        // Determine the WebSocket API endpoint based on configuration
         const { storage } = await import('./storage');
-        let baseUrl = 'https://testnet.binance.vision/api/v3/klines';
+        let wsApiUrl = 'wss://ws-api.testnet.binance.vision/ws-api/v3';
         
         try {
           const exchanges = await storage.getExchangesByUserId(1);
-          if (exchanges.length > 0 && exchanges[0].restApiEndpoint) {
-            const endpoint = exchanges[0].restApiEndpoint;
+          if (exchanges.length > 0 && exchanges[0].wsApiEndpoint) {
+            wsApiUrl = exchanges[0].wsApiEndpoint;
+          } else if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
+            const endpoint = exchanges[0].wsStreamEndpoint;
             if (endpoint.includes('testnet')) {
-              baseUrl = 'https://testnet.binance.vision/api/v3/klines';
+              wsApiUrl = 'wss://ws-api.testnet.binance.vision/ws-api/v3';
             } else {
-              baseUrl = 'https://api.binance.com/api/v3/klines';
+              wsApiUrl = 'wss://ws-api.binance.com/ws-api/v3';
             }
           }
         } catch (error) {
-          console.log(`[HISTORICAL] Using default testnet endpoint`);
+          console.log(`[HISTORICAL WS] Using default testnet WebSocket API endpoint`);
         }
         
         // Calculate time range for last 100 candles
@@ -1651,44 +1653,86 @@ export class WebSocketService {
         const intervalMs = this.getIntervalInMs(interval);
         const startTime = endTime - (intervalMs * 100);
         
-        const url = `${baseUrl}?symbol=${symbol.toUpperCase()}&interval=${interval}&startTime=${startTime}&endTime=${endTime}&limit=100`;
+        console.log(`[HISTORICAL WS] Connecting to: ${wsApiUrl} for ${symbol} ${interval}`);
         
-        console.log(`[HISTORICAL] Fetching from: ${url}`);
+        // Create WebSocket connection for historical data
+        const ws = new WebSocket(wsApiUrl);
         
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
+        ws.onopen = () => {
+          console.log(`[HISTORICAL WS] Connected to WebSocket API for ${symbol}`);
+          
+          // Send klines request using WebSocket API
+          const klinesRequest = {
+            id: `historical-${symbol}-${interval}-${Date.now()}`,
+            method: 'klines',
+            params: {
+              symbol: symbol.toUpperCase(),
+              interval: interval,
+              startTime: startTime,
+              endTime: endTime,
+              limit: 100
+            }
+          };
+          
+          console.log(`[HISTORICAL WS] Sending klines request:`, klinesRequest);
+          ws.send(JSON.stringify(klinesRequest));
+        };
         
-        const klines = await response.json();
-        console.log(`[HISTORICAL] Received ${klines.length} klines for ${symbol} ${interval}`);
+        ws.onmessage = (event) => {
+          try {
+            const response = JSON.parse(event.data.toString());
+            console.log(`[HISTORICAL WS] Received response for ${symbol}:`, response);
+            
+            if (response.result && Array.isArray(response.result)) {
+              const klines = response.result;
+              console.log(`[HISTORICAL WS] Received ${klines.length} klines for ${symbol} ${interval}`);
+              
+              // Process and store historical klines
+              const processedKlines = klines.map((kline: any[]) => ({
+                symbol: symbol.toUpperCase(),
+                interval: interval,
+                openTime: parseInt(kline[0]),
+                closeTime: parseInt(kline[6]),
+                open: parseFloat(kline[1]),
+                high: parseFloat(kline[2]),
+                low: parseFloat(kline[3]),
+                close: parseFloat(kline[4]),
+                volume: parseFloat(kline[5]),
+                isClosed: true,
+                timestamp: Date.now()
+              }));
+              
+              // Store in historical data cache
+              if (!this.historicalData.has(symbol.toUpperCase())) {
+                this.historicalData.set(symbol.toUpperCase(), new Map());
+              }
+              this.historicalData.get(symbol.toUpperCase())!.set(interval, processedKlines);
+              
+              // Send historical data to connected clients
+              this.sendHistoricalDataToClients([symbol], interval);
+              
+              // Close the WebSocket connection
+              ws.close();
+            } else if (response.error) {
+              console.error(`[HISTORICAL WS] API Error for ${symbol}:`, response.error);
+              ws.close();
+            }
+          } catch (error) {
+            console.error(`[HISTORICAL WS] Error parsing response for ${symbol}:`, error);
+            ws.close();
+          }
+        };
         
-        // Process and store historical klines
-        const processedKlines = klines.map((kline: any[]) => ({
-          symbol: symbol.toUpperCase(),
-          interval: interval,
-          openTime: parseInt(kline[0]),
-          closeTime: parseInt(kline[6]),
-          open: parseFloat(kline[1]),
-          high: parseFloat(kline[2]),
-          low: parseFloat(kline[3]),
-          close: parseFloat(kline[4]),
-          volume: parseFloat(kline[5]),
-          isClosed: true,
-          timestamp: Date.now()
-        }));
+        ws.onerror = (error) => {
+          console.error(`[HISTORICAL WS] WebSocket error for ${symbol}:`, error);
+        };
         
-        // Store in historical data cache
-        if (!this.historicalData.has(symbol.toUpperCase())) {
-          this.historicalData.set(symbol.toUpperCase(), new Map());
-        }
-        this.historicalData.get(symbol.toUpperCase())!.set(interval, processedKlines);
-        
-        // Send historical data to connected clients
-        this.sendHistoricalDataToClients([symbol], interval);
+        ws.onclose = () => {
+          console.log(`[HISTORICAL WS] WebSocket closed for ${symbol}`);
+        };
         
       } catch (error) {
-        console.error(`[HISTORICAL] Error fetching klines for ${symbol}:`, error);
+        console.error(`[HISTORICAL WS] Error setting up WebSocket for ${symbol}:`, error);
       }
     }
   }
