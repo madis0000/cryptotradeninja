@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, CandlestickSeries, LineStyle } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
 import { cn } from '@/lib/utils';
 import { useChartWebSocket } from '@/hooks/useChartWebSocket';
 
@@ -106,7 +106,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
     const takeProfitPrice = baseOrderPrice + (baseOrderPrice * takeProfitDeviation / 100);
 
     // Draw Take Profit line (solid red)
-    const takeProfitLine = chart.addLineSeries({
+    const takeProfitLine = chart.addSeries(LineSeries, {
       color: '#ef4444',
       lineWidth: 2,
       lineStyle: LineStyle.Solid,
@@ -130,7 +130,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
       const deviation = safetyOrderDeviation * Math.pow(priceDeviationMultiplier, i);
       const safetyOrderPrice = baseOrderPrice - (baseOrderPrice * deviation / 100);
 
-      const safetyLine = chart.addLineSeries({
+      const safetyLine = chart.addSeries(LineSeries, {
         color: '#eab308',
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
