@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useAuth } from "@/hooks/useAuth";
+import { MartingaleProgressDialog } from "../martingale-progress-dialog";
 
 interface MartingaleStrategyProps {
   className?: string;
@@ -56,6 +57,10 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Progress dialog state
+  const [progressDialogOpen, setProgressDialogOpen] = useState(false);
+  const [isCreatingBot, setIsCreatingBot] = useState(false);
 
   // WebSocket for real-time balance updates
   const { connect, subscribeToBalance, unsubscribeFromBalance } = useWebSocket({
@@ -102,33 +107,32 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Create bot mutation
-  const createBotMutation = useMutation({
-    mutationFn: async (botData: any) => {
-      const response = await fetch('/api/bots', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(botData)
-      });
-      if (!response.ok) throw new Error('Failed to create bot');
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
-      toast({
-        title: "Bot Created",
-        description: "Your Martingale bot has been created successfully"
-      });
-      onBotCreated?.();
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create bot",
-        variant: "destructive"
-      });
-    }
-  });
+  // Handle progress dialog completion
+  const handleProgressComplete = (botId: string) => {
+    setProgressDialogOpen(false);
+    setIsCreatingBot(false);
+    
+    toast({
+      title: "Bot Created Successfully",
+      description: `Martingale bot ${botId} is now running with all orders placed`
+    });
+    
+    // Invalidate queries to refresh bot list
+    queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+    onBotCreated?.();
+  };
+
+  // Handle progress dialog error
+  const handleProgressError = (error: string) => {
+    setProgressDialogOpen(false);
+    setIsCreatingBot(false);
+    
+    toast({
+      title: "Bot Creation Failed",
+      description: error,
+      variant: "destructive"
+    });
+  };
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -162,39 +166,15 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
   const handleCreateBot = () => {
     if (!selectedExchangeId) {
       toast({
-        title: "Error",
-        description: "Please select an exchange",
+        title: "Exchange Required",
+        description: "Please select an exchange to create the bot",
         variant: "destructive"
       });
       return;
     }
 
-    const botData = {
-      name: `Martingale ${selectedSymbol} (${localDirection.toUpperCase()})`,
-      strategy: "martingale",
-      tradingPair: selectedSymbol,
-      exchangeId: selectedExchangeId,
-      direction: localDirection,
-      baseOrderAmount: config.baseOrderSize,
-      safetyOrderAmount: config.safetyOrderSize,
-      maxSafetyOrders: parseInt(config.maxSafetyOrders),
-      activeSafetyOrdersEnabled: config.activeSafetyOrdersEnabled,
-      activeSafetyOrders: parseInt(config.activeSafetyOrders),
-      priceDeviation: parseFloat(config.priceDeviation),
-      takeProfitPercentage: parseFloat(config.takeProfit),
-      takeProfitType: config.takeProfitType,
-      trailingProfitPercentage: config.takeProfitType === "trailing" ? parseFloat(config.trailingProfit) : null,
-      triggerType: config.triggerType,
-      triggerPrice: config.triggerPrice ? parseFloat(config.triggerPrice) : null,
-      priceDeviationMultiplier: config.priceDeviationMultiplier[0],
-      safetyOrderSizeMultiplier: config.safetyOrderSizeMultiplier[0],
-      cooldownBetweenRounds: parseInt(config.cooldownBetweenRounds),
-      lowerPriceLimit: config.lowerPrice ? parseFloat(config.lowerPrice) : null,
-      upperPriceLimit: config.upperPrice ? parseFloat(config.upperPrice) : null,
-      isActive: false
-    };
-
-    createBotMutation.mutate(botData);
+    setIsCreatingBot(true);
+    setProgressDialogOpen(true);
   };
 
   const baseCurrency = selectedSymbol.replace('USDT', '');

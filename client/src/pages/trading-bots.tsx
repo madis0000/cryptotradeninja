@@ -26,7 +26,14 @@ export default function TradingBots() {
   const [selectedStrategy, setSelectedStrategy] = useState("grid");
   const [tickerData, setTickerData] = useState<TickerData | null>(null);
   const [selectedExchangeId, setSelectedExchangeId] = useState<number | undefined>();
-  const [martingaleConfig, setMartingaleConfig] = useState({
+  const [martingaleConfig, setMartingaleConfig] = useState<{
+    baseOrderPrice: number;
+    takeProfitDeviation: number;
+    safetyOrderDeviation: number;
+    maxSafetyOrders: number;
+    priceDeviationMultiplier: number;
+    activeSafetyOrders?: number;
+  }>({
     baseOrderPrice: 5.64, // Will be updated by current market price
     takeProfitDeviation: 1.5, // From takeProfit setting
     safetyOrderDeviation: 1.0, // From priceDeviation setting
