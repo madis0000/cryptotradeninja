@@ -21,13 +21,27 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
     
     if (!seriesRef.current) return;
     
+    // Ensure we have valid numeric values and proper time formatting
+    const openTime = typeof klineData.openTime === 'number' ? klineData.openTime : parseInt(klineData.openTime);
+    const timeInSeconds = Math.floor(openTime / 1000);
+    
     const candlestick = {
-      time: Math.floor(klineData.openTime / 1000),
+      time: timeInSeconds,
       open: parseFloat(klineData.open),
       high: parseFloat(klineData.high),
       low: parseFloat(klineData.low),
       close: parseFloat(klineData.close),
     };
+    
+    // Validate the candlestick data before processing
+    if (!Number.isFinite(candlestick.time) || 
+        !Number.isFinite(candlestick.open) || 
+        !Number.isFinite(candlestick.high) || 
+        !Number.isFinite(candlestick.low) || 
+        !Number.isFinite(candlestick.close)) {
+      console.warn('[CHART] Invalid candlestick data, skipping:', candlestick);
+      return;
+    }
     
     setPriceData(prev => {
       const updated = [...prev];
@@ -40,7 +54,16 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       }
       
       const sortedData = updated.sort((a, b) => a.time - b.time);
-      seriesRef.current?.update(candlestick);
+      
+      try {
+        seriesRef.current?.update(candlestick);
+      } catch (error) {
+        console.error('[CHART] Error updating chart series:', error);
+        // If update fails, try setting the data fresh
+        if (sortedData.length > 0) {
+          seriesRef.current?.setData(sortedData);
+        }
+      }
       
       return sortedData;
     });
@@ -151,8 +174,18 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
   // Update interval when state changes
   useEffect(() => {
     if (chartWs.currentInterval !== currentInterval) {
+      console.log(`[CHART] Switching to ${currentInterval} interval`);
       chartWs.changeInterval(currentInterval);
-      setPriceData([]); // Clear existing data
+      
+      // Clear existing data and reset chart series for new interval
+      setPriceData([]);
+      if (seriesRef.current) {
+        try {
+          seriesRef.current.setData([]);
+        } catch (error) {
+          console.log('[CHART] Chart series reset during interval change');
+        }
+      }
     }
   }, [currentInterval, chartWs]);
 
