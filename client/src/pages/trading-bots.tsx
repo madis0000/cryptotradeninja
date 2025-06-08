@@ -1,68 +1,110 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MarketsPanel } from "@/components/shared/markets-panel";
+import { TradingHeader } from "@/components/shared/trading-header";
 import { TradingChart } from "@/components/trading/trading-chart";
+import { usePublicWebSocket } from "@/hooks/useWebSocketService";
+
+interface TickerData {
+  symbol: string;
+  price: string;
+  priceChange: string;
+  priceChangePercent: string;
+  highPrice: string;
+  lowPrice: string;
+  volume: string;
+  quoteVolume: string;
+}
 
 export default function TradingBots() {
   const [selectedSymbol, setSelectedSymbol] = useState("ICPUSDT");
+  const [selectedStrategy, setSelectedStrategy] = useState("grid");
+  const [tickerData, setTickerData] = useState<TickerData | null>(null);
 
-  // Mock data for trading pairs
-  const tradingPairs = [
-    { symbol: "1INCHUSDT", price: "0.3317", change: "-6.15%", volume: "3.3M", changeType: "negative" },
-    { symbol: "BTCUSDT", price: "106244.38", change: "+0.48%", volume: "1.2B", changeType: "positive" },
-    { symbol: "ETHUSDT", price: "3847.12", change: "+2.15%", volume: "800M", changeType: "positive" },
-    { symbol: "ICPUSDT", price: "5.635", change: "+9.58%", volume: "42M", changeType: "positive" },
-    { symbol: "ADAUSDT", price: "0.8945", change: "-1.23%", volume: "156M", changeType: "negative" },
-    { symbol: "DOGEUSDT", price: "0.3421", change: "+5.67%", volume: "89M", changeType: "positive" },
-    { symbol: "SOLUSDT", price: "198.45", change: "+3.21%", volume: "234M", changeType: "positive" },
-    { symbol: "AVAXUSDT", price: "38.92", change: "-2.11%", volume: "67M", changeType: "negative" },
-    { symbol: "DOTUSDT", price: "7.234", change: "+1.89%", volume: "45M", changeType: "positive" },
-    { symbol: "LINKUSDT", price: "23.45", change: "-0.95%", volume: "123M", changeType: "negative" },
+  const strategies = [
+    { id: "grid", name: "Grid", active: true },
+    { id: "martingale", name: "Martingale", active: false },
   ];
 
-  const botTypes = [
-    { id: "spot_grid", name: "Spot Grid", active: true },
-    { id: "futures_grid", name: "Futures Grid", active: false },
-    { id: "arbitrage", name: "Arbitrage Bot", active: false },
-    { id: "rebalancing", name: "Rebalancing Bot", active: false },
-    { id: "spot_dca", name: "Spot DCA", active: false },
-    { id: "futures_twap", name: "Futures TWAP", active: false },
-    { id: "algo_orders", name: "Spot Algo Orders", active: false },
-  ];
+  const publicWs = usePublicWebSocket({
+    onMessage: (data: any) => {
+      if (data && data.type === 'market_update' && data.data) {
+        const marketData = data.data;
+        setTickerData({
+          symbol: marketData.symbol,
+          price: marketData.price,
+          priceChange: marketData.priceChange,
+          priceChangePercent: marketData.priceChangePercent,
+          highPrice: marketData.highPrice,
+          lowPrice: marketData.lowPrice,
+          volume: marketData.volume,
+          quoteVolume: marketData.quoteVolume
+        });
+      }
+    },
+    onConnect: () => {
+      console.log(`[BOTS] Connected to WebSocket for ${selectedSymbol} ticker`);
+    },
+    onDisconnect: () => {
+      console.log('[BOTS] Disconnected from WebSocket');
+    }
+  });
+
+  const handleSymbolSelect = (symbol: string) => {
+    console.log(`[BOTS] Symbol selected: ${symbol}`);
+    setSelectedSymbol(symbol);
+    setTickerData(null);
+    publicWs.subscribe([symbol]);
+  };
+
+  useEffect(() => {
+    console.log(`[BOTS] Starting WebSocket connection...`);
+    publicWs.connect([selectedSymbol]);
+
+    return () => {
+      publicWs.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (publicWs.status === 'connected') {
+      console.log(`[BOTS] Changing subscription to ${selectedSymbol}`);
+      publicWs.subscribe([selectedSymbol]);
+    }
+  }, [selectedSymbol, publicWs.status]);
 
   return (
     <div className="h-screen bg-crypto-darker overflow-hidden">
       <div className="h-full flex flex-col">
-        {/* Top Navigation Bar */}
+        {/* Orange Section - Strategy Selection */}
         <div className="bg-crypto-dark border-b border-gray-800 px-4 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-6">
-              {botTypes.map((type) => (
+              {strategies.map((strategy) => (
                 <Button
-                  key={type.id}
+                  key={strategy.id}
                   variant="ghost"
                   size="sm"
+                  onClick={() => setSelectedStrategy(strategy.id)}
                   className={`text-xs px-3 py-1.5 ${
-                    type.active 
+                    selectedStrategy === strategy.id
                       ? 'text-orange-400 bg-orange-400/10 border border-orange-400/20' 
                       : 'text-gray-400 hover:text-white hover:bg-gray-800'
                   }`}
                 >
-                  {type.name}
+                  {strategy.name}
                 </Button>
               ))}
             </div>
             
             <div className="flex items-center space-x-4">
               <Button variant="outline" size="sm" className="border-gray-600 text-gray-300">
-                Buy ICP
+                Buy {selectedSymbol.replace('USDT', '')}
               </Button>
               <Button variant="outline" size="sm" className="border-gray-600 text-gray-300">
-                Sell ICP
+                Sell {selectedSymbol.replace('USDT', '')}
               </Button>
             </div>
           </div>
@@ -70,95 +112,28 @@ export default function TradingBots() {
 
         {/* Main Content Area */}
         <div className="flex-1 flex">
-          {/* Left Panel - Market List */}
-          <div className="w-80 bg-crypto-dark border-r border-gray-800 flex flex-col">
-            {/* Market Search */}
-            <div className="p-3 border-b border-gray-800">
-              <Input
-                placeholder="Search"
-                className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
-              />
-            </div>
+          {/* Red Section - Market List (shared component) */}
+          <MarketsPanel
+            className="w-80"
+            onSymbolSelect={handleSymbolSelect}
+            selectedSymbol={selectedSymbol}
+          />
 
-            {/* Market Headers */}
-            <div className="px-3 py-2 border-b border-gray-800">
-              <div className="grid grid-cols-4 gap-2 text-xs text-gray-400">
-                <span>Pair</span>
-                <span className="text-right">Last Price</span>
-                <span className="text-right">24h Change</span>
-                <span className="text-right">24h Volume</span>
-              </div>
-            </div>
+          {/* Center Area - Chart and Bottom Tabs */}
+          <div className="flex-1 flex flex-col">
+            {/* Blue Section - Trading Header (shared component) */}
+            <TradingHeader 
+              selectedSymbol={selectedSymbol}
+              tickerData={tickerData}
+            />
 
-            {/* Market List */}
-            <div className="flex-1 overflow-y-auto">
-              {tradingPairs.map((pair) => (
-                <div
-                  key={pair.symbol}
-                  onClick={() => setSelectedSymbol(pair.symbol)}
-                  className={`px-3 py-2 cursor-pointer hover:bg-gray-800/50 border-b border-gray-800/50 ${
-                    selectedSymbol === pair.symbol ? 'bg-blue-600/10 border-l-2 border-l-blue-500' : ''
-                  }`}
-                >
-                  <div className="grid grid-cols-4 gap-2 text-xs">
-                    <div className="text-white font-medium truncate">{pair.symbol}</div>
-                    <div className="text-white text-right">{pair.price}</div>
-                    <div className={`text-right ${
-                      pair.changeType === 'positive' ? 'text-green-400' : 'text-red-400'
-                    }`}>
-                      {pair.change}
-                    </div>
-                    <div className="text-gray-400 text-right">{pair.volume}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Center Panel - Chart */}
-          <div className="flex-1 bg-crypto-dark">
-            {/* Chart Header */}
-            <div className="border-b border-gray-800 p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-lg font-bold text-white">{selectedSymbol}</span>
-                    <Badge variant="secondary" className="bg-gray-700 text-gray-300 text-xs">
-                      {selectedSymbol.replace('USDT', '')}/USDT
-                    </Badge>
-                  </div>
-                  <div className="flex items-center space-x-4 text-sm">
-                    <span className="text-green-400">+9.58%</span>
-                    <span className="text-gray-400">24h High</span>
-                    <span className="text-white">6.00</span>
-                    <span className="text-gray-400">24h Low</span>
-                    <span className="text-white">5.145</span>
-                    <span className="text-gray-400">24h Volume(ICP)</span>
-                    <span className="text-white">7,885,734.17</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-                    Original
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-                    Trading View
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-                    Depth
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Chart Area */}
-            <div className="h-96">
+            {/* Green Section - Chart (specific to bots page with future enhancements) */}
+            <div className="flex-1 bg-crypto-dark">
               <TradingChart symbol={selectedSymbol} />
             </div>
 
-            {/* Bottom Tabs */}
-            <div className="border-t border-gray-800">
+            {/* Black Section - Bottom Tabs spanning market and chart */}
+            <div className="border-t border-gray-800 bg-crypto-dark">
               <Tabs defaultValue="running" className="w-full">
                 <TabsList className="bg-transparent border-b border-gray-800 rounded-none h-auto p-0">
                   <TabsTrigger 
@@ -205,86 +180,131 @@ export default function TradingBots() {
             </div>
           </div>
 
-          {/* Right Panel - Bot Configuration */}
+          {/* Gray Section - Strategy Configuration Panel */}
           <div className="w-80 bg-crypto-dark border-l border-gray-800 flex flex-col">
-            <div className="p-4">
-              <h3 className="text-white font-semibold mb-4">Create Bot</h3>
+            <div className="p-4 flex-1">
+              <h3 className="text-white font-semibold mb-4">Create {strategies.find(s => s.id === selectedStrategy)?.name} Bot</h3>
               
-              {/* Investment Section */}
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm text-gray-400 mb-2 block">1. Price Settings</label>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-400">Price Deviation</span>
-                      <span className="text-white">1 %</span>
-                    </div>
-                    <Input
-                      placeholder="Grid number"
-                      className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm text-gray-400 mb-2 block">2. Investment</label>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-400">Quote Order Size</span>
-                      <span className="text-white flex items-center">
-                        77.5 <span className="text-gray-400 ml-1">USDT</span>
-                      </span>
-                    </div>
-                    <Input
-                      placeholder="5.000"
-                      className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
-                    />
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-400">DCA Order Size</span>
-                      <span className="text-white flex items-center">
-                        77.5 <span className="text-gray-400 ml-1">USDT</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-400">Max DCA Orders</span>
-                      <span className="text-white">8</span>
+              {selectedStrategy === "grid" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm text-gray-400 mb-2 block">1. Price Settings</label>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-400">Price Deviation</span>
+                        <span className="text-white">1 %</span>
+                      </div>
+                      <Input
+                        placeholder="Grid number"
+                        className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
+                      />
                     </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="text-sm text-gray-400 mb-2 block">Available</label>
-                  <div className="text-sm space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-400">Spot Balance</span>
-                      <span className="text-white">0.00 USDT</span>
+                  <div>
+                    <label className="text-sm text-gray-400 mb-2 block">2. Investment</label>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-400">Quote Order Size</span>
+                        <span className="text-white flex items-center">
+                          77.5 <span className="text-gray-400 ml-1">USDT</span>
+                        </span>
+                      </div>
+                      <Input
+                        placeholder="5.000"
+                        className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
+                      />
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-400">DCA Order Size</span>
+                        <span className="text-white flex items-center">
+                          77.5 <span className="text-gray-400 ml-1">USDT</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-400">Max DCA Orders</span>
+                        <span className="text-white">8</span>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-400"></span>
-                      <span className="text-white">-- USDT</span>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-gray-400 mb-2 block">Available</label>
+                    <div className="text-sm space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400">Spot Balance</span>
+                        <span className="text-white">0.00 USDT</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400"></span>
+                        <span className="text-white">-- USDT</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-gray-400 mb-2 block">Advanced (Optional)</label>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="w-full justify-start text-gray-400 hover:text-white h-8"
+                    >
+                      <i className="fas fa-chevron-right mr-2"></i>
+                      Advanced Settings
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {selectedStrategy === "martingale" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm text-gray-400 mb-2 block">1. Martingale Settings</label>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-400">Multiplier</span>
+                        <span className="text-white">2.0x</span>
+                      </div>
+                      <Input
+                        placeholder="Initial order size"
+                        className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-gray-400 mb-2 block">2. Risk Management</label>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-400">Max Orders</span>
+                        <span className="text-white">5</span>
+                      </div>
+                      <Input
+                        placeholder="Stop Loss %"
+                        className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-gray-400 mb-2 block">Available</label>
+                    <div className="text-sm space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400">Spot Balance</span>
+                        <span className="text-white">0.00 USDT</span>
+                      </div>
                     </div>
                   </div>
                 </div>
+              )}
 
-                <div>
-                  <label className="text-sm text-gray-400 mb-2 block">Advanced (Optional)</label>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="w-full justify-start text-gray-400 hover:text-white h-8"
-                  >
-                    <i className="fas fa-chevron-right mr-2"></i>
-                    Advanced Settings
-                  </Button>
-                </div>
-
-                <div className="text-center py-4">
+              <div className="mt-auto pt-6">
+                <div className="text-center">
                   <p className="text-xs text-gray-500 mb-3">Preview</p>
                   <Button 
                     className="w-full bg-orange-500 hover:bg-orange-600 text-white"
                     disabled
                   >
-                    Create Bot
+                    Create {strategies.find(s => s.id === selectedStrategy)?.name} Bot
                   </Button>
                 </div>
               </div>
