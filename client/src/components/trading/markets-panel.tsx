@@ -7,6 +7,15 @@ interface Market {
   baseAsset: string;
   quoteAsset: string;
   status: string;
+  displayName: string;
+  baseAssetPrecision: number;
+  quotePrecision: number;
+  quoteAssetPrecision: number;
+  orderTypes: string[];
+  icebergAllowed: boolean;
+  ocoAllowed: boolean;
+  isSpotTradingAllowed: boolean;
+  isMarginTradingAllowed: boolean;
 }
 
 interface MarketsResponse {
@@ -42,7 +51,8 @@ export function MarketsPanel({ className }: MarketsPanelProps) {
   // Filter markets based on search term
   const filteredMarkets = markets.filter((market: Market) =>
     market.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    market.baseAsset.toLowerCase().includes(searchTerm.toLowerCase())
+    market.baseAsset.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    market.displayName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
