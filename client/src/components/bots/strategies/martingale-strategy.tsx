@@ -83,6 +83,13 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     }
   }, [user?.id, selectedExchangeId, selectedSymbol, subscribeToBalance, unsubscribeFromBalance]);
 
+  // Notify parent component when configuration changes for real-time chart updates
+  useEffect(() => {
+    if (onConfigChange) {
+      onConfigChange(config);
+    }
+  }, [config, onConfigChange]);
+
   // Fetch available balance from exchange
   const { data: balanceData, isLoading: balanceLoading } = useQuery({
     queryKey: ['balance', selectedExchangeId, selectedSymbol],
