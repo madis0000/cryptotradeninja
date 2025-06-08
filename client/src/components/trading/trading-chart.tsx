@@ -109,7 +109,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
     const takeProfitLine = chart.addSeries(LineSeries, {
       color: '#ef4444',
       lineWidth: 2,
-      lineStyle: LineStyle.Solid,
+      lineStyle: 0, // Solid line
       title: 'Take Profit',
     });
 
@@ -133,7 +133,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
       const safetyLine = chart.addSeries(LineSeries, {
         color: '#eab308',
         lineWidth: 1,
-        lineStyle: LineStyle.Dashed,
+        lineStyle: 1, // Dashed line
         title: `Safety Order ${i + 1}`,
       });
 

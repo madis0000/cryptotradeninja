@@ -29,10 +29,10 @@ export default function TradingBots() {
 
   // Demo trading strategy for chart visualization
   const demoStrategy = {
-    baseOrderPrice: 5.65, // Current ICP price
+    baseOrderPrice: 5.64, // Current ICP price
     takeProfitDeviation: 3.0, // 3% above base order
     safetyOrderDeviation: 2.5, // 2.5% below base order for first safety order
-    maxSafetyOrders: 5,
+    maxSafetyOrders: 4,
     priceDeviationMultiplier: 1.5, // Each safety order 1.5x further down
   };
 
