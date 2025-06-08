@@ -144,7 +144,11 @@ export default function Trading() {
         </div>
 
         {/* Right Panel - Markets */}
-        <MarketsPanel className="w-80 bg-crypto-dark border-l border-gray-800" />
+        <MarketsPanel 
+          className="w-80 bg-crypto-dark border-l border-gray-800"
+          onSymbolSelect={handleSymbolSelect}
+          selectedSymbol={selectedSymbol}
+        />
       </div>
     </div>
   );
