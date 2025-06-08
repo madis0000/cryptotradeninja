@@ -145,6 +145,22 @@ export class WebSocketService {
             subscription.dataType = message.dataType || 'ticker';
             subscription.interval = message.interval || '1m';
             
+            // For kline data type, update the current interval and hot-swap subscription
+            if (message.dataType === 'kline') {
+              const newInterval = message.interval || '1m';
+              const symbols = Array.from(subscription.symbols);
+              
+              console.log(`[WEBSOCKET] Hot-swapping kline interval from ${this.currentInterval} to ${newInterval}`);
+              this.currentInterval = newInterval;
+              
+              // Update kline subscription immediately
+              await this.setupKlineStream(symbols, newInterval);
+              
+              // Send historical data for the new interval
+              this.sendHistoricalDataToClients(symbols, newInterval);
+              return;
+            }
+            
             // Get all unique symbols from both ticker and kline clients
             const allSymbols = new Set<string>();
             this.marketSubscriptions.forEach(sub => {
@@ -390,6 +406,8 @@ export class WebSocketService {
           };
           
           console.log(`[KLINE STREAM] ✓ Received kline for ${kline.s} (${kline.i}): OHLC=[${kline.o},${kline.h},${kline.l},${kline.c}] closed:${kline.x}`);
+          // Only log but don't filter - let each client decide what interval data they want
+          console.log(`[KLINE STREAM] Broadcasting kline data for ${kline.s} interval ${kline.i}`);
           this.broadcastKlineUpdate(klineUpdate);
         }
       } catch (error) {
@@ -1208,12 +1226,6 @@ export class WebSocketService {
       return;
     }
 
-    // Critical fix: Only broadcast kline updates for the currently active interval
-    if (klineUpdate.interval !== this.currentInterval) {
-      console.log(`[WEBSOCKET] Filtering out non-active interval: ${klineUpdate.symbol} (${klineUpdate.interval}) - current: ${this.currentInterval}`);
-      return;
-    }
-
     // Store historical data for this symbol and interval
     this.storeHistoricalKlineData(klineUpdate);
 
@@ -1234,9 +1246,15 @@ export class WebSocketService {
         console.log(`[WEBSOCKET] KLINE CLIENT ${subscription.clientId}: subscribed to [${Array.from(subscription.symbols).join(', ')}], match: ${isMatched}`);
         
         if (isMatched) {
-          console.log(`[WEBSOCKET] ✓ Sending kline to ${subscription.clientId}: ${klineUpdate.symbol} ${klineUpdate.close} (${klineUpdate.interval})`);
-          subscription.ws.send(message);
-          sentCount++;
+          // Check if this kline data matches the client's requested interval
+          const clientInterval = subscription.interval || '1m';
+          if (klineUpdate.interval === clientInterval) {
+            console.log(`[WEBSOCKET] ✓ Sending kline to ${subscription.clientId}: ${klineUpdate.symbol} ${klineUpdate.close} (${klineUpdate.interval})`);
+            subscription.ws.send(message);
+            sentCount++;
+          } else {
+            console.log(`[WEBSOCKET] ⏭ Skipped kline for ${subscription.clientId}: interval mismatch (${klineUpdate.interval} vs ${clientInterval})`);
+          }
         }
       } else if (subscription.dataType === 'ticker') {
         skippedCount++;
