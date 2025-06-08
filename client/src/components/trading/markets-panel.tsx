@@ -59,25 +59,8 @@ export function MarketsPanel({ className }: MarketsPanelProps) {
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes since market list doesn't change often
   });
 
-  // Real-time market data via WebSocket
-  useWebSocket({
-    onMarketUpdate: (data: any) => {
-      if (data && data.symbol) {
-        setMarketPrices(prev => ({
-          ...prev,
-          [data.symbol]: {
-            price: parseFloat(data.price || data.c || 0),
-            change: parseFloat(data.change || data.p || 0),
-            changePercent: parseFloat(data.changePercent || data.P || 0),
-            volume: parseFloat(data.volume || data.v || 0),
-            high: parseFloat(data.high || data.h || 0),
-            low: parseFloat(data.low || data.l || 0),
-            timestamp: data.timestamp || Date.now()
-          }
-        }));
-      }
-    }
-  });
+  // WebSocket streaming disabled to prevent unnecessary market data consumption
+  // Markets panel will show static market list only
 
   const markets = marketsData?.markets || [];
 
