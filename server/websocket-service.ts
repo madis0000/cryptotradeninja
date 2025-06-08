@@ -247,7 +247,18 @@ export class WebSocketService {
     this.currentStreamType = dataType;
     this.currentInterval = interval || '1m';
     
-    // Force stop all existing streams and clear data when switching intervals
+    // If we have an active connection and just changing ticker symbols, use hot subscription update
+    if (this.binancePublicWs && 
+        this.binancePublicWs.readyState === WebSocket.OPEN && 
+        dataType === 'ticker' && 
+        this.currentStreamType === 'ticker') {
+      console.log(`[WEBSOCKET] Hot swapping ticker symbols without reconnection`);
+      await this.updateBinanceSubscription(symbols);
+      this.isStreamsActive = true;
+      return;
+    }
+    
+    // Only stop streams if changing data type or no active connection
     this.stopBinanceStreams(true);
     
     // Clear cached data for clean interval switch

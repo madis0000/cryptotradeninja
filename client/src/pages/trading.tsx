@@ -26,7 +26,7 @@ export default function Trading() {
     onMessage: (data: any) => {
       if (data && data.type === 'market_update' && data.data) {
         const marketData = data.data;
-        console.log(`[TRADING] Received ${marketData.symbol} ticker update:`, marketData);
+        // Update ticker data in real-time
         
         // Update ticker data for any received symbol (will be filtered by subscription)
         setTickerData({
