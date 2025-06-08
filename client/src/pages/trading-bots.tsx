@@ -101,27 +101,33 @@ export default function TradingBots() {
 
         {/* Main Content Area */}
         <div className="flex-1 flex">
-          {/* Red Section - Market List (shared component) */}
-          <MarketsPanel
-            className="w-80"
-            onSymbolSelect={handleSymbolSelect}
-            selectedSymbol={selectedSymbol}
-          />
-
-          {/* Center Area - Chart and Bottom Tabs */}
+          {/* Left Side - Market List and Chart with Bottom Tabs */}
           <div className="flex-1 flex flex-col">
-            {/* Blue Section - Trading Header (shared component) */}
-            <TradingHeader 
-              selectedSymbol={selectedSymbol}
-              tickerData={tickerData}
-            />
+            {/* Top Content Row */}
+            <div className="flex-1 flex">
+              {/* Red Section - Market List (shared component) */}
+              <MarketsPanel
+                className="w-80"
+                onSymbolSelect={handleSymbolSelect}
+                selectedSymbol={selectedSymbol}
+              />
 
-            {/* Green Section - Chart (specific to bots page with future enhancements) */}
-            <div className="flex-1 bg-crypto-dark">
-              <TradingChart symbol={selectedSymbol} />
+              {/* Center Area - Chart */}
+              <div className="flex-1 flex flex-col">
+                {/* Blue Section - Trading Header (shared component) */}
+                <TradingHeader 
+                  selectedSymbol={selectedSymbol}
+                  tickerData={tickerData}
+                />
+
+                {/* Green Section - Chart (specific to bots page with future enhancements) */}
+                <div className="flex-1 bg-crypto-dark">
+                  <TradingChart symbol={selectedSymbol} />
+                </div>
+              </div>
             </div>
 
-            {/* Black Section - Bottom Tabs spanning market and chart */}
+            {/* Black Section - Bottom Tabs spanning market and chart sections */}
             <div className="border-t border-gray-800 bg-crypto-dark">
               <Tabs defaultValue="running" className="w-full">
                 <TabsList className="bg-transparent border-b border-gray-800 rounded-none h-auto p-0">
