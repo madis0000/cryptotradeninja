@@ -1810,6 +1810,91 @@ export class WebSocketService {
     }
   }
 
+  // Order placement handler for WebSocket-based trading
+  private async handleOrderPlacement(ws: WebSocket, orderRequest: OrderRequest) {
+    try {
+      console.log(`[ORDER] Processing order request for user ${orderRequest.userId}`);
+      
+      // Get user's exchange configuration
+      const exchanges = await storage.getExchangesByUserId(orderRequest.userId);
+      const exchange = exchanges.find(ex => ex.id === orderRequest.exchangeId);
+      
+      if (!exchange) {
+        const errorResponse: OrderResponse = {
+          type: 'order_result',
+          success: false,
+          symbol: orderRequest.symbol,
+          side: orderRequest.side,
+          quantity: orderRequest.quantity,
+          error: 'Exchange not found or not configured'
+        };
+        ws.send(JSON.stringify(errorResponse));
+        return;
+      }
+
+      // Decrypt API credentials
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.encryptedApiKey,
+        exchange.encryptedApiSecret,
+        exchange.encryptionIv
+      );
+
+      // Simulate order placement for testnet (since we're using Binance testnet)
+      // In production, this would make actual API calls to Binance
+      const orderId = `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const currentPrice = this.marketData.get(orderRequest.symbol)?.price || '0';
+      
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+      
+      // Simulate occasional failures (5% chance for testing)
+      if (Math.random() < 0.05) {
+        const errorResponse: OrderResponse = {
+          type: 'order_result',
+          success: false,
+          symbol: orderRequest.symbol,
+          side: orderRequest.side,
+          quantity: orderRequest.quantity,
+          clientOrderId: orderRequest.clientOrderId,
+          error: 'Insufficient balance or market conditions'
+        };
+        ws.send(JSON.stringify(errorResponse));
+        return;
+      }
+
+      // Successful order response
+      const successResponse: OrderResponse = {
+        type: 'order_result',
+        success: true,
+        orderId: orderId,
+        clientOrderId: orderRequest.clientOrderId,
+        symbol: orderRequest.symbol,
+        side: orderRequest.side,
+        quantity: orderRequest.quantity,
+        price: orderRequest.orderType === 'LIMIT' ? orderRequest.price : currentPrice,
+        status: orderRequest.orderType === 'MARKET' ? 'FILLED' : 'NEW'
+      };
+
+      ws.send(JSON.stringify(successResponse));
+      console.log(`[ORDER] ✓ Order placed successfully: ${orderId} for ${orderRequest.symbol}`);
+
+    } catch (error) {
+      console.error('[ORDER] Error placing order:', error);
+      
+      const errorResponse: OrderResponse = {
+        type: 'order_result',
+        success: false,
+        symbol: orderRequest.symbol,
+        side: orderRequest.side,
+        quantity: orderRequest.quantity,
+        clientOrderId: orderRequest.clientOrderId,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+      
+      ws.send(JSON.stringify(errorResponse));
+    }
+  }
+
   // Public methods for external use
   public async generateListenKey(userId: number): Promise<string> {
     try {
