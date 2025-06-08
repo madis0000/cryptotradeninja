@@ -24,7 +24,6 @@ export default function TradingBots() {
   const [selectedSymbol, setSelectedSymbol] = useState("ICPUSDT");
   const [selectedStrategy, setSelectedStrategy] = useState("grid");
   const [tickerData, setTickerData] = useState<TickerData | null>(null);
-  const [direction, setDirection] = useState<"long" | "short">("long");
 
   const strategies = [
     { id: "grid", name: "Grid", active: true },
@@ -181,34 +180,6 @@ export default function TradingBots() {
           {/* Gray Section - Strategy Configuration Panel */}
           <div className="w-80 bg-crypto-dark border-l border-gray-800 flex flex-col">
             <div className="p-4 flex-1">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center bg-crypto-darker rounded-md border border-gray-600">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setDirection("long")}
-                    className={`text-xs px-3 py-1.5 rounded-l-md rounded-r-none ${
-                      direction === "long"
-                        ? 'bg-green-600 text-white hover:bg-green-600'
-                        : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                    }`}
-                  >
-                    Long
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setDirection("short")}
-                    className={`text-xs px-3 py-1.5 rounded-r-md rounded-l-none border-l border-gray-600 ${
-                      direction === "short"
-                        ? 'bg-red-600 text-white hover:bg-red-600'
-                        : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                    }`}
-                  >
-                    Short
-                  </Button>
-                </div>
-              </div>
               
               {/* Strategy Configuration Content */}
               {selectedStrategy === "grid" && (
@@ -219,7 +190,6 @@ export default function TradingBots() {
                 <MartingaleStrategy 
                   className="flex-1" 
                   selectedSymbol={selectedSymbol}
-                  direction={direction}
                 />
               )}
 

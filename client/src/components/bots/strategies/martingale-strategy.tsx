@@ -9,10 +9,10 @@ import { ChevronUp, ChevronDown, Info } from "lucide-react";
 interface MartingaleStrategyProps {
   className?: string;
   selectedSymbol: string;
-  direction: "long" | "short";
 }
 
-export function MartingaleStrategy({ className, selectedSymbol, direction }: MartingaleStrategyProps) {
+export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStrategyProps) {
+  const [localDirection, setLocalDirection] = useState<"long" | "short">("long");
   const [config, setConfig] = useState({
     // Price Settings
     priceDeviation: "1",
@@ -49,6 +49,33 @@ export function MartingaleStrategy({ className, selectedSymbol, direction }: Mar
 
   return (
     <div className={`space-y-4 ${className}`}>
+      {/* Direction Selector */}
+      <div className="flex items-center space-x-6">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setLocalDirection("long")}
+          className={`text-xs px-3 py-1.5 ${
+            localDirection === "long"
+              ? 'text-green-400 bg-green-400/10 border border-green-400/20' 
+              : 'text-gray-400 hover:text-white hover:bg-gray-800'
+          }`}
+        >
+          Long
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setLocalDirection("short")}
+          className={`text-xs px-3 py-1.5 ${
+            localDirection === "short"
+              ? 'text-red-400 bg-red-400/10 border border-red-400/20' 
+              : 'text-gray-400 hover:text-white hover:bg-gray-800'
+          }`}
+        >
+          Short
+        </Button>
+      </div>
 
       {/* Price Settings */}
       <div className="space-y-3">
