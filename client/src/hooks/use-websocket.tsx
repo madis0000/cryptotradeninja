@@ -21,7 +21,7 @@ export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChang
     ws.current = new WebSocket(wsUrl);
 
     ws.current.onopen = () => {
-      console.log('WebSocket connected');
+      console.log('[CLIENT WS] WebSocket connected');
       
       // Subscribe to all major trading pairs to receive market data
       const subscribeMessage = {
@@ -34,7 +34,10 @@ export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChang
         ]
       };
       
-      ws.current?.send(JSON.stringify(subscribeMessage));
+      if (ws.current?.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify(subscribeMessage));
+        console.log('[CLIENT WS] Sent market subscription message');
+      }
     };
 
     ws.current.onmessage = (event) => {
@@ -94,16 +97,22 @@ export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChang
   }, [connect]);
 
   const subscribeToBalance = useCallback((userId: number, exchangeId: number, symbol: string) => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      const message = {
-        type: 'subscribe_balance',
-        userId,
-        exchangeId,
-        symbol
-      };
-      ws.current.send(JSON.stringify(message));
-      console.log('[CLIENT WS] Subscribed to balance updates:', message);
-    }
+    const sendMessage = () => {
+      if (ws.current?.readyState === WebSocket.OPEN) {
+        const message = {
+          type: 'subscribe_balance',
+          userId,
+          exchangeId,
+          symbol
+        };
+        ws.current.send(JSON.stringify(message));
+        console.log('[CLIENT WS] Subscribed to balance updates:', message);
+      } else if (ws.current?.readyState === WebSocket.CONNECTING) {
+        // Wait for connection to open
+        setTimeout(sendMessage, 100);
+      }
+    };
+    sendMessage();
   }, []);
 
   const unsubscribeFromBalance = useCallback((userId: number, exchangeId: number, symbol: string) => {
