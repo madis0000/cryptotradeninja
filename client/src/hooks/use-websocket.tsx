@@ -15,7 +15,7 @@ export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChang
     if (ws.current?.readyState === WebSocket.OPEN) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/websocket`;
+    const wsUrl = `${protocol}//${window.location.hostname}:8080`;
 
     ws.current = new WebSocket(wsUrl);
 

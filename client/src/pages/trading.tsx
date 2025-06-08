@@ -1,22 +1,30 @@
-import { useState } from "react";
 import { MarketsPanel } from "@/components/trading/markets-panel";
 import { OrderBook } from "@/components/trading/order-book";
 import { TradingChart } from "@/components/trading/trading-chart";
 import { OrderForm } from "@/components/trading/order-form";
 import { MarketTrades } from "@/components/trading/market-trades";
 import { OrdersHistory } from "@/components/trading/orders-history";
-import { TradingHeader } from "@/components/trading/trading-header";
 
 export default function Trading() {
-  const [selectedSymbol, setSelectedSymbol] = useState("BTCUSDT");
-
   return (
     <div className="min-h-screen bg-crypto-darker">
       <div className="flex h-screen">
         {/* Left Column */}
         <div className="flex flex-col flex-1">
           {/* Header Section */}
-          <TradingHeader selectedSymbol={selectedSymbol} onSymbolChange={setSelectedSymbol} />
+          <div className="bg-crypto-dark px-4 py-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <h1 className="text-2xl font-bold text-white">ICP/USDT</h1>
+                <span className="text-crypto-success text-xl font-semibold">5.334</span>
+                <span className="text-crypto-success text-sm">24h Change</span>
+                <span className="text-crypto-light text-sm">24h High</span>
+                <span className="text-crypto-light text-sm">24h Low</span>
+                <span className="text-crypto-light text-sm">24h Volume/ICP</span>
+                <span className="text-crypto-light text-sm">24h Volume/USDT</span>
+              </div>
+            </div>
+          </div>
 
           {/* Main Content Row */}
           <div className="flex flex-1">
@@ -38,11 +46,7 @@ export default function Trading() {
         </div>
 
         {/* Right Panel - Markets */}
-        <MarketsPanel 
-          className="w-80 bg-crypto-dark border-l border-gray-800" 
-          selectedSymbol={selectedSymbol}
-          onSymbolSelect={setSelectedSymbol}
-        />
+        <MarketsPanel className="w-80 bg-crypto-dark border-l border-gray-800" />
       </div>
     </div>
   );
