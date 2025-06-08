@@ -17,10 +17,21 @@ interface MarketSubscription {
   clientId?: string;
 }
 
+interface BalanceSubscription {
+  ws: WebSocket;
+  userId: number;
+  exchangeId: number;
+  symbol: string;
+  clientId?: string;
+}
+
 export class WebSocketService {
   private wss: WebSocketServer;
   private userConnections = new Map<number, UserConnection>();
   private marketSubscriptions = new Set<MarketSubscription>();
+  private balanceSubscriptions = new Set<BalanceSubscription>();
+  private balanceData = new Map<string, any>(); // key: userId:exchangeId:symbol -> balance data
+  private balanceUpdateInterval: NodeJS.Timeout | null = null;
   private marketData = new Map<string, any>();
   private historicalData = new Map<string, Map<string, any[]>>(); // symbol -> interval -> kline data
   private binancePublicWs: WebSocket | null = null;
@@ -134,6 +145,15 @@ export class WebSocketService {
             this.requestAccountBalance(ws, message.userId, message.exchangeId);
           }
           
+          if (message.type === 'subscribe_balance') {
+            console.log(`[WEBSOCKET] Balance subscription request:`, message);
+            await this.subscribeToBalance(ws, message.userId, message.exchangeId, message.symbol, clientId);
+          }
+          
+          if (message.type === 'unsubscribe_balance') {
+            this.unsubscribeFromBalance(ws, message.userId, message.exchangeId, message.symbol);
+          }
+          
           if (message.type === 'configure_stream') {
             console.log(`[WEBSOCKET] Configuring ${message.dataType} stream for client ${subscription.clientId}:`, message.symbols, 'interval:', message.interval);
             
@@ -235,6 +255,20 @@ export class WebSocketService {
         console.log(`[WEBSOCKET] Subscriptions before removal: ${this.marketSubscriptions.size}`);
         this.marketSubscriptions.delete(subscription);
         console.log(`[WEBSOCKET] Subscriptions after removal: ${this.marketSubscriptions.size}`);
+        
+        // Clean up balance subscriptions for this WebSocket
+        const balanceSubscriptionsToRemove = Array.from(this.balanceSubscriptions).filter(sub => sub.ws === ws);
+        balanceSubscriptionsToRemove.forEach(sub => {
+          this.balanceSubscriptions.delete(sub);
+          console.log(`[BALANCE] Removed balance subscription for user ${sub.userId}, exchange ${sub.exchangeId}, symbol ${sub.symbol}`);
+        });
+        
+        // Stop balance updates if no more subscriptions
+        if (this.balanceSubscriptions.size === 0 && this.balanceUpdateInterval) {
+          clearInterval(this.balanceUpdateInterval);
+          this.balanceUpdateInterval = null;
+          console.log('[BALANCE] Stopped balance update interval - no active subscriptions');
+        }
         
         // Clean up user connection
         this.userConnections.forEach((connection, userId) => {
@@ -1393,6 +1427,201 @@ export class WebSocketService {
         data: userData
       }));
     }
+  }
+
+  public async subscribeToBalance(ws: WebSocket, userId: number, exchangeId: number, symbol: string, clientId?: string) {
+    console.log(`[BALANCE] Subscribing to balance updates for user ${userId}, exchange ${exchangeId}, symbol ${symbol}`);
+    
+    const balanceSubscription: BalanceSubscription = {
+      ws,
+      userId,
+      exchangeId,
+      symbol: symbol.toUpperCase(),
+      clientId
+    };
+    
+    this.balanceSubscriptions.add(balanceSubscription);
+    
+    // Start balance update interval if not already running
+    if (!this.balanceUpdateInterval) {
+      this.balanceUpdateInterval = setInterval(() => {
+        this.updateAllBalances();
+      }, 5000); // Update every 5 seconds
+      console.log('[BALANCE] Started balance update interval');
+    }
+    
+    // Send immediate balance update
+    await this.updateBalanceForSubscription(balanceSubscription);
+    
+    ws.send(JSON.stringify({
+      type: 'balance_subscribed',
+      userId,
+      exchangeId,
+      symbol,
+      message: 'Successfully subscribed to balance updates'
+    }));
+  }
+
+  public unsubscribeFromBalance(ws: WebSocket, userId: number, exchangeId: number, symbol: string) {
+    console.log(`[BALANCE] Unsubscribing from balance updates for user ${userId}, exchange ${exchangeId}, symbol ${symbol}`);
+    
+    const subscriptionToRemove = Array.from(this.balanceSubscriptions).find(sub => 
+      sub.ws === ws && sub.userId === userId && sub.exchangeId === exchangeId && sub.symbol === symbol.toUpperCase()
+    );
+    
+    if (subscriptionToRemove) {
+      this.balanceSubscriptions.delete(subscriptionToRemove);
+      console.log(`[BALANCE] Removed balance subscription for ${symbol}`);
+    }
+    
+    // Stop balance updates if no more subscriptions
+    if (this.balanceSubscriptions.size === 0 && this.balanceUpdateInterval) {
+      clearInterval(this.balanceUpdateInterval);
+      this.balanceUpdateInterval = null;
+      console.log('[BALANCE] Stopped balance update interval');
+    }
+  }
+
+  private async updateAllBalances() {
+    const uniqueSubscriptions = new Map<string, BalanceSubscription>();
+    
+    // Get unique subscriptions by userId:exchangeId:symbol
+    this.balanceSubscriptions.forEach(sub => {
+      const key = `${sub.userId}:${sub.exchangeId}:${sub.symbol}`;
+      if (!uniqueSubscriptions.has(key)) {
+        uniqueSubscriptions.set(key, sub);
+      }
+    });
+    
+    // Update balance for each unique subscription
+    const subscriptionsArray = Array.from(uniqueSubscriptions.values());
+    for (const subscription of subscriptionsArray) {
+      await this.updateBalanceForSubscription(subscription);
+    }
+  }
+
+  private async updateBalanceForSubscription(subscription: BalanceSubscription) {
+    try {
+      const { userId, exchangeId, symbol } = subscription;
+      const balanceKey = `${userId}:${exchangeId}:${symbol}`;
+      
+      // Get exchange configuration
+      const exchanges = await storage.getExchangesByUserId(userId);
+      const exchange = exchanges.find(ex => ex.id === exchangeId);
+      
+      if (!exchange) {
+        console.error(`[BALANCE] Exchange ${exchangeId} not found for user ${userId}`);
+        return;
+      }
+      
+      // Extract quote asset from trading pair (e.g., USDT from BTCUSDT)
+      const quoteAsset = this.extractQuoteAsset(symbol);
+      
+      // Fetch balance from exchange
+      const balance = await this.fetchBalanceFromExchange(exchange, quoteAsset);
+      
+      if (balance) {
+        // Store balance data
+        this.balanceData.set(balanceKey, {
+          userId,
+          exchangeId,
+          symbol,
+          asset: quoteAsset,
+          balance: balance.free,
+          timestamp: Date.now()
+        });
+        
+        // Broadcast to all subscribed clients
+        this.broadcastBalanceUpdate(balanceKey, {
+          userId,
+          exchangeId,
+          symbol,
+          asset: quoteAsset,
+          balance: balance.free,
+          timestamp: Date.now()
+        });
+      }
+    } catch (error) {
+      console.error('[BALANCE] Error updating balance:', error);
+    }
+  }
+
+  private extractQuoteAsset(symbol: string): string {
+    // Extract quote asset from trading pair
+    // Common patterns: BTCUSDT -> USDT, ETHBUSD -> BUSD, etc.
+    const commonQuotes = ['USDT', 'BUSD', 'USDC', 'BTC', 'ETH', 'BNB'];
+    
+    for (const quote of commonQuotes) {
+      if (symbol.endsWith(quote)) {
+        return quote;
+      }
+    }
+    
+    // Default to USDT if pattern not recognized
+    return 'USDT';
+  }
+
+  private async fetchBalanceFromExchange(exchange: any, asset: string) {
+    try {
+      const crypto = await import('crypto');
+      const { decrypt } = await import('./encryption');
+      
+      // Decrypt API credentials
+      const decryptedApiKey = decrypt(exchange.apiKey, exchange.encryptionIv);
+      const decryptedApiSecret = decrypt(exchange.apiSecret, exchange.encryptionIv);
+      
+      // Create signed request for account information
+      const timestamp = Date.now();
+      const queryString = `timestamp=${timestamp}`;
+      const signature = crypto.createHmac('sha256', decryptedApiSecret)
+        .update(queryString)
+        .digest('hex');
+      
+      const url = `${exchange.restApiEndpoint}/api/v3/account?${queryString}&signature=${signature}`;
+      
+      // Make REST API call
+      const response = await fetch(url, {
+        headers: {
+          'X-MBX-APIKEY': decryptedApiKey
+        }
+      });
+      
+      if (response.ok) {
+        const accountData = await response.json();
+        
+        // Find the specific asset balance
+        const assetBalance = accountData.balances?.find((bal: any) => 
+          bal.asset === asset.toUpperCase()
+        );
+        
+        return assetBalance || { asset, free: '0.00000000', locked: '0.00000000' };
+      } else {
+        console.error(`[BALANCE] API error: ${response.status} ${response.statusText}`);
+        return null;
+      }
+    } catch (error) {
+      console.error('[BALANCE] Error fetching balance:', error);
+      return null;
+    }
+  }
+
+  private broadcastBalanceUpdate(balanceKey: string, balanceData: any) {
+    let sentCount = 0;
+    
+    this.balanceSubscriptions.forEach(subscription => {
+      const subKey = `${subscription.userId}:${subscription.exchangeId}:${subscription.symbol}`;
+      
+      if (subKey === balanceKey && subscription.ws.readyState === WebSocket.OPEN) {
+        subscription.ws.send(JSON.stringify({
+          type: 'balance_update',
+          data: balanceData
+        }));
+        sentCount++;
+        console.log(`[BALANCE] ✓ Sent balance update to client ${subscription.clientId}: ${balanceData.asset} ${balanceData.balance}`);
+      }
+    });
+    
+    console.log(`[BALANCE] Broadcast complete: ${sentCount} clients updated for ${balanceKey}`);
   }
 
   private async handleTestnetBalanceRequest(userId: number, exchange: any) {
