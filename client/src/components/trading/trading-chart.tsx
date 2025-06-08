@@ -348,9 +348,9 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
   };
 
   return (
-    <div className={cn("bg-card border rounded-lg", className)}>
+    <div className={cn("bg-card border-gray-600 rounded-lg", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between p-4 border-b border-gray-600">
         <div className="flex items-center space-x-4">
           <h3 className="text-lg font-semibold">{symbol} Chart</h3>
           <div className={cn(
