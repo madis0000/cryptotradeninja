@@ -25,6 +25,16 @@ interface MarketsResponse {
   markets: Market[];
 }
 
+interface PriceData {
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  high: number;
+  low: number;
+  timestamp: number;
+}
+
 interface MarketsPanelProps {
   className?: string;
 }
@@ -32,9 +42,11 @@ interface MarketsPanelProps {
 export function MarketsPanel({ className }: MarketsPanelProps) {
   const [selectedQuote, setSelectedQuote] = useState("USDT");
   const [searchTerm, setSearchTerm] = useState("");
+  const [marketPrices, setMarketPrices] = useState<Record<string, PriceData>>({});
 
   const quotes = ["USDT", "USDC", "BTC"];
 
+  // Get initial market list (static data - doesn't change often)
   const { data: marketsData, isLoading, error } = useQuery<MarketsResponse>({
     queryKey: ['/api/markets', { quote: selectedQuote }],
     queryFn: async () => {
@@ -44,7 +56,27 @@ export function MarketsPanel({ className }: MarketsPanelProps) {
       }
       return response.json();
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes since market list doesn't change often
+  });
+
+  // Real-time market data via WebSocket
+  useWebSocket({
+    onMarketUpdate: (data: any) => {
+      if (data && data.symbol) {
+        setMarketPrices(prev => ({
+          ...prev,
+          [data.symbol]: {
+            price: parseFloat(data.price || data.c || 0),
+            change: parseFloat(data.change || data.p || 0),
+            changePercent: parseFloat(data.changePercent || data.P || 0),
+            volume: parseFloat(data.volume || data.v || 0),
+            high: parseFloat(data.high || data.h || 0),
+            low: parseFloat(data.low || data.l || 0),
+            timestamp: data.timestamp || Date.now()
+          }
+        }));
+      }
+    }
   });
 
   const markets = marketsData?.markets || [];
@@ -111,18 +143,30 @@ export function MarketsPanel({ className }: MarketsPanelProps) {
                 <span className="text-right">24h Change</span>
                 <span className="text-right">Price</span>
               </div>
-              {filteredMarkets.map((market: Market) => (
-                <div 
-                  key={market.symbol}
-                  className="grid grid-cols-3 gap-1 py-2 px-2 text-xs hover:bg-gray-800/50 cursor-pointer border-b border-gray-800/30"
-                >
-                  <div className="text-white">
-                    <div className="font-medium">{market.baseAsset}/{market.quoteAsset}</div>
+              {filteredMarkets.map((market: Market) => {
+                const priceData = marketPrices[market.symbol];
+                const isPositive = priceData?.changePercent > 0;
+                const isNegative = priceData?.changePercent < 0;
+                
+                return (
+                  <div 
+                    key={market.symbol}
+                    className="grid grid-cols-3 gap-1 py-2 px-2 text-xs hover:bg-gray-800/50 cursor-pointer border-b border-gray-800/30"
+                  >
+                    <div className="text-white">
+                      <div className="font-medium">{market.baseAsset}/{market.quoteAsset}</div>
+                    </div>
+                    <div className={`text-right text-xs ${
+                      priceData ? (isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-gray-400') : 'text-gray-400'
+                    }`}>
+                      {priceData ? `${priceData.changePercent > 0 ? '+' : ''}${priceData.changePercent.toFixed(2)}%` : '--'}
+                    </div>
+                    <div className="text-right text-white font-mono">
+                      {priceData ? priceData.price.toFixed(market.quotePrecision || 2) : '--'}
+                    </div>
                   </div>
-                  <div className="text-right text-gray-400">--</div>
-                  <div className="text-right text-gray-400">--</div>
-                </div>
-              ))}
+                );
+              })}
               {filteredMarkets.length === 0 && !isLoading && (
                 <div className="flex items-center justify-center py-8">
                   <p className="text-gray-500 text-sm">No markets found</p>
