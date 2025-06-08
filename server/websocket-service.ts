@@ -536,10 +536,14 @@ export class WebSocketService {
           }
         }
         
+        console.log(`[BINANCE STREAM] Stream name: "${streamName}", processedData exists: ${!!processedData}`);
+        
         if (processedData) {
+          console.log(`[BINANCE STREAM] Processing stream: ${streamName}, data type: ${processedData.e}`);
           
           // Handle ticker data
           if (streamName.includes('@ticker')) {
+            console.log(`[BINANCE STREAM] Processing ticker data for stream: ${streamName}`);
             const symbol = processedData.s;
             
             if (symbol) {
@@ -792,11 +796,13 @@ export class WebSocketService {
 
     // Filter market data to only include subscribed symbols
     const subscribedSymbols = Array.from(subscription.symbols);
+    const availableSymbols = Array.from(this.marketData.keys());
     const filteredData = Array.from(this.marketData.values()).filter(data => 
       subscribedSymbols.length === 0 || subscribedSymbols.includes(data.symbol.toUpperCase())
     );
     
     console.log(`[PUBLIC WS] Client subscribed to: ${subscribedSymbols.join(', ')}`);
+    console.log(`[PUBLIC WS] Available market data symbols: ${availableSymbols.join(', ')}`);
     console.log(`[PUBLIC WS] Filtered market data entries: ${filteredData.length}`);
     
     if (filteredData.length > 0) {
