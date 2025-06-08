@@ -1,17 +1,28 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, LineStyle } from 'lightweight-charts';
 import { cn } from '@/lib/utils';
 import { useChartWebSocket } from '@/hooks/useChartWebSocket';
+
+interface TradingStrategy {
+  baseOrderPrice: number;
+  takeProfitDeviation: number;
+  safetyOrderDeviation: number;
+  maxSafetyOrders: number;
+  priceDeviationMultiplier: number;
+}
 
 interface TradingChartProps {
   className?: string;
   symbol?: string;
+  strategy?: TradingStrategy;
 }
 
-export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProps) {
+export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
+  const takeProfitLineRef = useRef<any>(null);
+  const safetyOrderLinesRef = useRef<any[]>([]);
   const [currentInterval, setCurrentInterval] = useState('1m');
   const [priceData, setPriceData] = useState<any[]>([]);
 
@@ -67,6 +78,75 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       
       return sortedData;
     });
+  };
+
+  // Function to clear strategy lines
+  const clearStrategyLines = () => {
+    if (takeProfitLineRef.current) {
+      chartRef.current?.removeSeries(takeProfitLineRef.current);
+      takeProfitLineRef.current = null;
+    }
+
+    safetyOrderLinesRef.current.forEach(line => {
+      if (line) {
+        chartRef.current?.removeSeries(line);
+      }
+    });
+    safetyOrderLinesRef.current = [];
+  };
+
+  // Function to draw strategy lines
+  const drawStrategyLines = (chart: any, strategy: TradingStrategy) => {
+    // Clear existing lines
+    clearStrategyLines();
+
+    const { baseOrderPrice, takeProfitDeviation, safetyOrderDeviation, maxSafetyOrders, priceDeviationMultiplier } = strategy;
+
+    // Calculate Take Profit price (above base order)
+    const takeProfitPrice = baseOrderPrice + (baseOrderPrice * takeProfitDeviation / 100);
+
+    // Draw Take Profit line (solid red)
+    const takeProfitLine = chart.addLineSeries({
+      color: '#ef4444',
+      lineWidth: 2,
+      lineStyle: LineStyle.Solid,
+      title: 'Take Profit',
+    });
+
+    // Create line data spanning current chart time range
+    const currentTime = Math.floor(Date.now() / 1000);
+    const takeProfitData = [
+      { time: currentTime - 86400, value: takeProfitPrice }, // 24 hours ago
+      { time: currentTime + 86400, value: takeProfitPrice }, // 24 hours ahead
+    ];
+
+    takeProfitLine.setData(takeProfitData);
+    takeProfitLineRef.current = takeProfitLine;
+
+    // Calculate and draw Safety Order lines (dashed yellow)
+    const safetyLines: any[] = [];
+    for (let i = 0; i < maxSafetyOrders; i++) {
+      // Calculate safety order price using deviation multiplier
+      const deviation = safetyOrderDeviation * Math.pow(priceDeviationMultiplier, i);
+      const safetyOrderPrice = baseOrderPrice - (baseOrderPrice * deviation / 100);
+
+      const safetyLine = chart.addLineSeries({
+        color: '#eab308',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        title: `Safety Order ${i + 1}`,
+      });
+
+      const safetyData = [
+        { time: currentTime - 86400, value: safetyOrderPrice },
+        { time: currentTime + 86400, value: safetyOrderPrice },
+      ];
+
+      safetyLine.setData(safetyData);
+      safetyLines.push(safetyLine);
+    }
+
+    safetyOrderLinesRef.current = safetyLines;
   };
 
   // Use dedicated chart WebSocket hook
@@ -128,6 +208,11 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
 
     chartRef.current = chart;
     seriesRef.current = candlestickSeries;
+
+    // Draw strategy lines if strategy is provided
+    if (strategy) {
+      drawStrategyLines(chart, strategy);
+    }
 
     // Handle resize
     const handleResize = () => {
@@ -200,6 +285,15 @@ export function TradingChart({ className, symbol = 'BTCUSDT' }: TradingChartProp
       }
     }
   }, [currentInterval, chartWs]);
+
+  // Update strategy lines when strategy prop changes
+  useEffect(() => {
+    if (chartRef.current && strategy) {
+      drawStrategyLines(chartRef.current, strategy);
+    } else if (chartRef.current && !strategy) {
+      clearStrategyLines();
+    }
+  }, [strategy]);
 
   const intervals = [
     { label: '1m', value: '1m' },

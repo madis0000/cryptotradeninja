@@ -27,6 +27,15 @@ export default function TradingBots() {
   const [tickerData, setTickerData] = useState<TickerData | null>(null);
   const [selectedExchangeId, setSelectedExchangeId] = useState<number | undefined>();
 
+  // Demo trading strategy for chart visualization
+  const demoStrategy = {
+    baseOrderPrice: 5.65, // Current ICP price
+    takeProfitDeviation: 3.0, // 3% above base order
+    safetyOrderDeviation: 2.5, // 2.5% below base order for first safety order
+    maxSafetyOrders: 5,
+    priceDeviationMultiplier: 1.5, // Each safety order 1.5x further down
+  };
+
   // Fetch exchanges for balance data
   const { data: exchanges } = useQuery({
     queryKey: ['/api/exchanges']
