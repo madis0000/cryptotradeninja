@@ -1984,9 +1984,9 @@ export class WebSocketService {
   }
 
   private startMarketRefreshInterval() {
-    // Refresh market streams every 60 seconds to reduce API request overhead
+    // Request market data every 60 seconds via WebSocket API to reduce overhead
     this.marketRefreshInterval = setInterval(() => {
-      console.log('[WEBSOCKET] 🔄 Market stream refresh - optimizing connection health');
+      console.log('[WEBSOCKET] 🔄 Requesting market data via WebSocket API (60s interval)');
       
       // Get all unique symbols currently subscribed across all clients
       const allSymbols = new Set<string>();
@@ -1995,18 +1995,92 @@ export class WebSocketService {
       });
 
       if (allSymbols.size > 0) {
-        console.log(`[WEBSOCKET] Refreshing streams for ${allSymbols.size} symbols: ${Array.from(allSymbols).join(', ')}`);
+        console.log(`[WEBSOCKET] Requesting data for ${allSymbols.size} symbols: ${Array.from(allSymbols).join(', ')}`);
         
-        // Refresh the connection by recreating it with current symbols
-        this.updateBinanceSubscription(Array.from(allSymbols)).catch(error => {
-          console.error('[WEBSOCKET] Market refresh failed:', error);
+        // Stop continuous streams and request data via WebSocket API
+        this.stopBinanceStreams(false);
+        this.requestMarketDataViaAPI(Array.from(allSymbols)).catch(error => {
+          console.error('[WEBSOCKET] Market data request failed:', error);
         });
       } else {
-        console.log('[WEBSOCKET] No active subscriptions - skipping refresh');
+        console.log('[WEBSOCKET] No active subscriptions - skipping data request');
       }
     }, 60000); // 60 seconds
     
-    console.log('[WEBSOCKET] Market refresh interval started (60s cycles)');
+    console.log('[WEBSOCKET] Market data request interval started (60s cycles)');
+  }
+
+  private async requestMarketDataViaAPI(symbols: string[]) {
+    try {
+      // Create WebSocket connection to Binance API for data requests
+      const wsUrl = 'wss://testnet.binance.vision/ws-api/v3';
+      const ws = new WebSocket(wsUrl);
+      
+      console.log('[WEBSOCKET] Connecting to Binance WebSocket API for data request');
+
+      ws.on('open', () => {
+        console.log('[WEBSOCKET] Connected to Binance WebSocket API');
+        
+        // Request 24hr ticker statistics for all symbols at once
+        const requestMessage = {
+          id: Date.now(),
+          method: 'ticker.24hr',
+          params: symbols.length > 0 ? { symbols: symbols } : {}
+        };
+
+        console.log(`[WEBSOCKET] Requesting ticker data for ${symbols.length} symbols via API`);
+        ws.send(JSON.stringify(requestMessage));
+      });
+
+      ws.on('message', (data) => {
+        try {
+          const response = JSON.parse(data.toString());
+          
+          if (response.result && Array.isArray(response.result)) {
+            console.log(`[WEBSOCKET] Received ticker data for ${response.result.length} symbols via API`);
+            
+            // Process each ticker update
+            response.result.forEach((ticker: any) => {
+              const marketUpdate = {
+                symbol: ticker.symbol,
+                price: ticker.lastPrice,
+                priceChange: ticker.priceChange,
+                priceChangePercent: ticker.priceChangePercent,
+                highPrice: ticker.highPrice,
+                lowPrice: ticker.lowPrice,
+                volume: ticker.volume,
+                quoteVolume: ticker.quoteVolume,
+                timestamp: Date.now()
+              };
+
+              // Store and broadcast the update
+              this.marketData.set(ticker.symbol, marketUpdate);
+              this.broadcastMarketUpdate(marketUpdate);
+            });
+          }
+        } catch (error) {
+          console.error('[WEBSOCKET] Error processing API response:', error);
+        }
+      });
+
+      ws.on('error', (error) => {
+        console.error('[WEBSOCKET] WebSocket API error:', error);
+      });
+
+      ws.on('close', () => {
+        console.log('[WEBSOCKET] WebSocket API connection closed');
+      });
+
+      // Close connection after 10 seconds to avoid keeping it open
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+      }, 10000);
+
+    } catch (error) {
+      console.error('[WEBSOCKET] Failed to request market data via API:', error);
+    }
   }
 
   private stopMarketRefreshInterval() {
