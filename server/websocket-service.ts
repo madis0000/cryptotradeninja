@@ -43,6 +43,7 @@ export class WebSocketService {
   private currentSubscriptions: string[] = [];
   private currentKlineSubscriptions: string[] = [];
   private binanceKlineWs: WebSocket | null = null;
+  private marketRefreshInterval: NodeJS.Timeout | null = null;
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -56,6 +57,9 @@ export class WebSocketService {
     
     // Stop any automatic streaming on initialization
     this.stopBinanceStreams();
+    
+    // Start market refresh interval (every 60 seconds)
+    this.startMarketRefreshInterval();
     
     console.log(`[WEBSOCKET] Unified service initialized on port ${wsPort} with 0.0.0.0 binding. Automatic streaming disabled.`);
   }
@@ -1979,8 +1983,43 @@ export class WebSocketService {
     }
   }
 
+  private startMarketRefreshInterval() {
+    // Refresh market streams every 60 seconds to reduce API request overhead
+    this.marketRefreshInterval = setInterval(() => {
+      console.log('[WEBSOCKET] 🔄 Market stream refresh - optimizing connection health');
+      
+      // Get all unique symbols currently subscribed across all clients
+      const allSymbols = new Set<string>();
+      this.marketSubscriptions.forEach(sub => {
+        sub.symbols.forEach(symbol => allSymbols.add(symbol));
+      });
+
+      if (allSymbols.size > 0) {
+        console.log(`[WEBSOCKET] Refreshing streams for ${allSymbols.size} symbols: ${Array.from(allSymbols).join(', ')}`);
+        
+        // Refresh the connection by recreating it with current symbols
+        this.updateBinanceSubscription(Array.from(allSymbols)).catch(error => {
+          console.error('[WEBSOCKET] Market refresh failed:', error);
+        });
+      } else {
+        console.log('[WEBSOCKET] No active subscriptions - skipping refresh');
+      }
+    }, 60000); // 60 seconds
+    
+    console.log('[WEBSOCKET] Market refresh interval started (60s cycles)');
+  }
+
+  private stopMarketRefreshInterval() {
+    if (this.marketRefreshInterval) {
+      clearInterval(this.marketRefreshInterval);
+      this.marketRefreshInterval = null;
+      console.log('[WEBSOCKET] Market refresh interval stopped');
+    }
+  }
+
   public close() {
     this.wss.close();
     this.stopBinanceStreams();
+    this.stopMarketRefreshInterval();
   }
 }
