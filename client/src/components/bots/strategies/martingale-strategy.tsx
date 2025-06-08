@@ -463,10 +463,6 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
                   </div>
                   <div className="flex items-center space-x-1">
                     <span className="text-xs text-gray-500">/ {Math.max(1, parseInt(config.maxSafetyOrders) - 1)}</span>
-                    <span className="text-xs text-gray-500">
-                      ({parseInt(config.maxSafetyOrders) - parseInt(config.activeSafetyOrders)} 
-                      <span className="text-gray-600 ml-1">remaining</span>)
-                    </span>
                   </div>
                 </div>
               )}

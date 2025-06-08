@@ -228,6 +228,7 @@ export default function TradingBots() {
                       safetyOrderDeviation: parseFloat(config.priceDeviation || "1.0"),
                       maxSafetyOrders: parseInt(config.maxSafetyOrders || "8"),
                       priceDeviationMultiplier: config.priceDeviationMultiplier?.[0] || 1.5,
+                      activeSafetyOrders: config.activeSafetyOrdersEnabled ? parseInt(config.activeSafetyOrders || "1") : undefined,
                     });
                   }}
                 />

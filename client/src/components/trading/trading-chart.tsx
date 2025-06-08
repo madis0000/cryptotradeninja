@@ -9,6 +9,7 @@ interface TradingStrategy {
   safetyOrderDeviation: number;
   maxSafetyOrders: number;
   priceDeviationMultiplier: number;
+  activeSafetyOrders?: number;
 }
 
 interface TradingChartProps {
@@ -118,7 +119,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
     // Clear existing lines
     clearStrategyLines();
 
-    const { baseOrderPrice, takeProfitDeviation, safetyOrderDeviation, maxSafetyOrders, priceDeviationMultiplier } = strategy;
+    const { baseOrderPrice, takeProfitDeviation, safetyOrderDeviation, maxSafetyOrders, priceDeviationMultiplier, activeSafetyOrders } = strategy;
 
     // Calculate Take Profit price (above base order)
     const takeProfitPrice = baseOrderPrice + (baseOrderPrice * takeProfitDeviation / 100);
@@ -141,15 +142,19 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
     takeProfitLine.setData(takeProfitData);
     takeProfitLineRef.current = takeProfitLine;
 
-    // Calculate and draw Safety Order lines (dashed yellow)
+    // Calculate and draw Safety Order lines
     const safetyLines: any[] = [];
+    const activeCount = activeSafetyOrders || maxSafetyOrders; // Default to all if not specified
+    
     for (let i = 0; i < maxSafetyOrders; i++) {
       // Calculate safety order price using deviation multiplier
       const deviation = safetyOrderDeviation * Math.pow(priceDeviationMultiplier, i);
       const safetyOrderPrice = baseOrderPrice - (baseOrderPrice * deviation / 100);
 
+      // Color active safety orders in yellow, inactive ones in gray
+      const isActive = i < activeCount;
       const safetyLine = chart.addSeries(LineSeries, {
-        color: '#eab308',
+        color: isActive ? '#eab308' : '#6b7280', // Yellow for active, gray for inactive
         lineWidth: 1,
         lineStyle: 1, // Dashed line
         title: `Safety Order ${i + 1}`,
