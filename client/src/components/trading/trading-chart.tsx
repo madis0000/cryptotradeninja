@@ -23,7 +23,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
   const seriesRef = useRef<any>(null);
   const takeProfitLineRef = useRef<any>(null);
   const safetyOrderLinesRef = useRef<any[]>([]);
-  const [currentInterval, setCurrentInterval] = useState('1m');
+  const [currentInterval, setCurrentInterval] = useState('4h');
   const [priceData, setPriceData] = useState<any[]>([]);
 
   // Handle kline updates from WebSocket
