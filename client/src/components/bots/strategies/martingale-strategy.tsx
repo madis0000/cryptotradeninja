@@ -9,9 +9,10 @@ import { ChevronUp, ChevronDown, Info } from "lucide-react";
 interface MartingaleStrategyProps {
   className?: string;
   selectedSymbol: string;
+  direction: "long" | "short";
 }
 
-export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStrategyProps) {
+export function MartingaleStrategy({ className, selectedSymbol, direction }: MartingaleStrategyProps) {
   const [config, setConfig] = useState({
     // Price Settings
     priceDeviation: "1",
@@ -48,11 +49,6 @@ export function MartingaleStrategy({ className, selectedSymbol }: MartingaleStra
 
   return (
     <div className={`space-y-4 ${className}`}>
-      {/* Info Message */}
-      <div className="text-xs text-gray-500 leading-relaxed">
-        The default parameters proposed herein shall not be c... 
-        <button className="text-orange-400 hover:text-orange-300 ml-1">More</button>
-      </div>
 
       {/* Price Settings */}
       <div className="space-y-3">
