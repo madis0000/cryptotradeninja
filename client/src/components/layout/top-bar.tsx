@@ -47,23 +47,22 @@ export function TopBar({ onLogout }: TopBarProps) {
 
           {/* Navigation Menu */}
           <nav className="hidden md:flex items-center space-x-6">
-            {navigationItems.map((item) => (
-              <Link key={item.path} href={item.path}>
-                <Button 
-                  variant="ghost" 
-                  className={`flex items-center space-x-2 text-sm ${
-                    location === item.path 
-                      ? 'text-crypto-accent bg-crypto-accent/10' 
-                      : 'text-crypto-light hover:text-white hover:bg-gray-800'
-                  }`}
-                >
-                  <i className={item.icon}></i>
-                  <span>{item.label}</span>
-                </Button>
-              </Link>
-            ))}
-            
-            {/* Trading Dropdown */}
+            {/* Dashboard - First */}
+            <Link href="/">
+              <Button 
+                variant="ghost" 
+                className={`flex items-center space-x-2 text-sm ${
+                  location === '/' 
+                    ? 'text-crypto-accent bg-crypto-accent/10' 
+                    : 'text-crypto-light hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                <i className="fas fa-chart-line"></i>
+                <span>Dashboard</span>
+              </Button>
+            </Link>
+
+            {/* Trading Dropdown - Second */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button 
@@ -74,7 +73,7 @@ export function TopBar({ onLogout }: TopBarProps) {
                       : 'text-crypto-light hover:text-white hover:bg-gray-800'
                   }`}
                 >
-                  <i className="fas fa-chart-line"></i>
+                  <i className="fas fa-chart-bar"></i>
                   <span>Trading</span>
                   <i className="fas fa-chevron-down text-xs ml-1"></i>
                 </Button>
@@ -94,6 +93,23 @@ export function TopBar({ onLogout }: TopBarProps) {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Other Navigation Items */}
+            {navigationItems.slice(1).map((item) => (
+              <Link key={item.path} href={item.path}>
+                <Button 
+                  variant="ghost" 
+                  className={`flex items-center space-x-2 text-sm ${
+                    location === item.path 
+                      ? 'text-crypto-accent bg-crypto-accent/10' 
+                      : 'text-crypto-light hover:text-white hover:bg-gray-800'
+                  }`}
+                >
+                  <i className={item.icon}></i>
+                  <span>{item.label}</span>
+                </Button>
+              </Link>
+            ))}
           </nav>
         </div>
         
