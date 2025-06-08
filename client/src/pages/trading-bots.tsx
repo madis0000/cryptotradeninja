@@ -8,6 +8,7 @@ import { TradingChart } from "@/components/trading/trading-chart";
 import { GridStrategy } from "@/components/bots/strategies/grid-strategy";
 import { MartingaleStrategy } from "@/components/bots/strategies/martingale-strategy";
 import { usePublicWebSocket } from "@/hooks/useWebSocketService";
+import { useQuery } from "@tanstack/react-query";
 
 interface TickerData {
   symbol: string;
@@ -24,6 +25,24 @@ export default function TradingBots() {
   const [selectedSymbol, setSelectedSymbol] = useState("ICPUSDT");
   const [selectedStrategy, setSelectedStrategy] = useState("grid");
   const [tickerData, setTickerData] = useState<TickerData | null>(null);
+  const [selectedExchangeId, setSelectedExchangeId] = useState<number | undefined>();
+
+  // Fetch exchanges for balance data
+  const { data: exchanges } = useQuery({
+    queryKey: ['/api/exchanges'],
+    queryFn: async () => {
+      const response = await fetch('/api/exchanges');
+      if (!response.ok) throw new Error('Failed to fetch exchanges');
+      return response.json();
+    }
+  });
+
+  // Auto-select first exchange if available
+  useEffect(() => {
+    if (exchanges && exchanges.length > 0 && !selectedExchangeId) {
+      setSelectedExchangeId(exchanges[0].id);
+    }
+  }, [exchanges, selectedExchangeId]);
 
   const strategies = [
     { id: "grid", name: "Grid", active: true },
@@ -190,6 +209,7 @@ export default function TradingBots() {
                 <MartingaleStrategy 
                   className="flex-1" 
                   selectedSymbol={selectedSymbol}
+                  selectedExchangeId={selectedExchangeId}
                 />
               )}
 

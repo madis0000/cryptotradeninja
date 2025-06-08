@@ -7,15 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ChevronUp, ChevronDown, Info } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 interface MartingaleStrategyProps {
   className?: string;
   selectedSymbol: string;
   selectedExchangeId?: number;
+  onBotCreated?: () => void;
 }
 
-export function MartingaleStrategy({ className, selectedSymbol, selectedExchangeId }: MartingaleStrategyProps) {
+export function MartingaleStrategy({ className, selectedSymbol, selectedExchangeId, onBotCreated }: MartingaleStrategyProps) {
   const [localDirection, setLocalDirection] = useState<"long" | "short">("long");
   const [config, setConfig] = useState({
     // Price Settings
@@ -44,6 +46,9 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     upperPrice: ""
   });
 
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   // Fetch available balance from exchange
   const { data: balanceData, isLoading: balanceLoading } = useQuery({
     queryKey: ['balance', selectedExchangeId, selectedSymbol],
@@ -55,6 +60,34 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     },
     enabled: !!(selectedExchangeId && selectedSymbol),
     refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  // Create bot mutation
+  const createBotMutation = useMutation({
+    mutationFn: async (botData: any) => {
+      const response = await fetch('/api/bots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(botData)
+      });
+      if (!response.ok) throw new Error('Failed to create bot');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      toast({
+        title: "Bot Created",
+        description: "Your Martingale bot has been created successfully"
+      });
+      onBotCreated?.();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create bot",
+        variant: "destructive"
+      });
+    }
   });
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
