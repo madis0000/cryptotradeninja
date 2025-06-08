@@ -1085,28 +1085,29 @@ export class WebSocketService {
       data: klineUpdate
     });
 
-    console.log(`[WEBSOCKET] Broadcasting kline update for ${klineUpdate.symbol} to kline clients`);
+    console.log(`[WEBSOCKET] Broadcasting kline update for ${klineUpdate.symbol} to kline clients only`);
     
     let sentCount = 0;
+    let skippedCount = 0;
     this.marketSubscriptions.forEach((subscription) => {
       // Only send kline updates to clients that requested kline data
       if (subscription.ws.readyState === WebSocket.OPEN && subscription.dataType === 'kline') {
         const subscribedSymbols = Array.from(subscription.symbols).map(s => s.toUpperCase());
         const isMatched = subscription.symbols.size === 0 || subscribedSymbols.includes(klineUpdate.symbol.toUpperCase());
-        console.log(`[WEBSOCKET] Kline client ${subscription.clientId}: symbol ${klineUpdate.symbol}, subscribed: [${Array.from(subscription.symbols).join(', ')}], matched: ${isMatched}`);
+        console.log(`[WEBSOCKET] KLINE CLIENT ${subscription.clientId}: subscribed to [${Array.from(subscription.symbols).join(', ')}], match: ${isMatched}`);
         
         if (isMatched) {
-          console.log(`[WEBSOCKET] Sending kline to client ${subscription.clientId}, readyState: ${subscription.ws.readyState}`);
+          console.log(`[WEBSOCKET] ✓ Sending kline to ${subscription.clientId}: ${klineUpdate.symbol} ${klineUpdate.close} (${klineUpdate.interval})`);
           subscription.ws.send(message);
           sentCount++;
-          console.log(`[WEBSOCKET] Successfully sent kline update to client ${subscription.clientId} for ${klineUpdate.symbol}`);
         }
-      } else if (subscription.dataType !== 'kline') {
-        console.log(`[WEBSOCKET] Skipping client ${subscription.clientId} - wants ${subscription.dataType}, not kline`);
+      } else if (subscription.dataType === 'ticker') {
+        skippedCount++;
+        console.log(`[WEBSOCKET] ⏭ Skipped TICKER client ${subscription.clientId} - needs ticker data, not kline`);
       }
     });
     
-    console.log(`[WEBSOCKET] Successfully sent kline update to ${sentCount} kline clients`);
+    console.log(`[WEBSOCKET] Kline broadcast complete: ${sentCount} sent, ${skippedCount} skipped (ticker clients)`);
   }
 
   private storeHistoricalKlineData(klineUpdate: any) {
@@ -1180,9 +1181,10 @@ export class WebSocketService {
       data: marketUpdate
     });
 
-    console.log(`[WEBSOCKET] Broadcasting ticker update for ${marketUpdate.symbol} to ticker clients`);
+    console.log(`[WEBSOCKET] Broadcasting ticker update for ${marketUpdate.symbol} to ticker clients only`);
     
     let sentCount = 0;
+    let skippedCount = 0;
     Array.from(this.marketSubscriptions).forEach((subscription, index) => {
       const clientIndex = index + 1;
       
@@ -1191,23 +1193,24 @@ export class WebSocketService {
         const isSubscribed = subscription.symbols.size === 0 || 
                            subscription.symbols.has(marketUpdate.symbol.toUpperCase());
         
-        console.log(`[WEBSOCKET] Checking ticker client ${clientIndex} (${subscription.clientId}), subscribed: [${Array.from(subscription.symbols).join(', ')}]`);
+        console.log(`[WEBSOCKET] TICKER CLIENT ${subscription.clientId}: subscribed to [${Array.from(subscription.symbols).join(', ')}], match: ${isSubscribed}`);
         
         if (isSubscribed) {
           try {
             subscription.ws.send(message);
             sentCount++;
-            console.log(`[WEBSOCKET] Successfully sent ticker to client ${clientIndex} (${subscription.clientId}) for ${marketUpdate.symbol}`);
+            console.log(`[WEBSOCKET] ✓ Sent ticker to ${subscription.clientId} for ${marketUpdate.symbol}`);
           } catch (error) {
-            console.error(`[WEBSOCKET] Failed to send to client ${clientIndex}:`, error);
+            console.error(`[WEBSOCKET] Failed to send to client ${subscription.clientId}:`, error);
           }
         }
-      } else if (subscription.dataType !== 'ticker') {
-        console.log(`[WEBSOCKET] Skipping client ${clientIndex} (${subscription.clientId}) - wants ${subscription.dataType}, not ticker`);
+      } else if (subscription.dataType === 'kline') {
+        skippedCount++;
+        console.log(`[WEBSOCKET] ⏭ Skipped KLINE client ${subscription.clientId} - needs kline data, not ticker`);
       }
     });
     
-    console.log(`[WEBSOCKET] Successfully sent ticker to ${sentCount} ticker clients`);
+    console.log(`[WEBSOCKET] Ticker broadcast complete: ${sentCount} sent, ${skippedCount} skipped (kline clients)`);
   }
 
   private broadcastUserUpdate(userId: number, userData: any) {
