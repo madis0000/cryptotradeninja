@@ -241,6 +241,87 @@ export class DatabaseStorage implements IStorage {
       winRate: winRate.toFixed(2),
     };
   }
+
+  // Bot Cycle Management
+  async createBotCycle(cycle: InsertBotCycle): Promise<BotCycle> {
+    const [newCycle] = await db
+      .insert(botCycles)
+      .values(cycle)
+      .returning();
+    return newCycle;
+  }
+
+  async getActiveBotCycle(botId: number): Promise<BotCycle | undefined> {
+    const [cycle] = await db
+      .select()
+      .from(botCycles)
+      .where(and(eq(botCycles.botId, botId), eq(botCycles.status, 'active')));
+    return cycle || undefined;
+  }
+
+  async updateBotCycle(cycleId: number, updates: Partial<InsertBotCycle>): Promise<BotCycle> {
+    const [updatedCycle] = await db
+      .update(botCycles)
+      .set(updates)
+      .where(eq(botCycles.id, cycleId))
+      .returning();
+    return updatedCycle;
+  }
+
+  async completeBotCycle(cycleId: number): Promise<void> {
+    await db
+      .update(botCycles)
+      .set({ 
+        status: 'completed',
+        completedAt: new Date()
+      })
+      .where(eq(botCycles.id, cycleId));
+  }
+
+  // Cycle Order Management
+  async createCycleOrder(order: InsertCycleOrder): Promise<CycleOrder> {
+    const [newOrder] = await db
+      .insert(cycleOrders)
+      .values(order)
+      .returning();
+    return newOrder;
+  }
+
+  async getCycleOrders(cycleId: number): Promise<CycleOrder[]> {
+    return await db
+      .select()
+      .from(cycleOrders)
+      .where(eq(cycleOrders.cycleId, cycleId))
+      .orderBy(desc(cycleOrders.createdAt));
+  }
+
+  async updateCycleOrder(orderId: number, updates: Partial<InsertCycleOrder>): Promise<CycleOrder> {
+    const [updatedOrder] = await db
+      .update(cycleOrders)
+      .set(updates)
+      .where(eq(cycleOrders.id, orderId))
+      .returning();
+    return updatedOrder;
+  }
+
+  async getCycleOrderByExchangeId(exchangeOrderId: string): Promise<CycleOrder | undefined> {
+    const [order] = await db
+      .select()
+      .from(cycleOrders)
+      .where(eq(cycleOrders.exchangeOrderId, exchangeOrderId));
+    return order || undefined;
+  }
+
+  async getPendingCycleOrders(botId: number): Promise<CycleOrder[]> {
+    return await db
+      .select()
+      .from(cycleOrders)
+      .where(and(
+        eq(cycleOrders.botId, botId),
+        eq(cycleOrders.status, 'pending')
+      ))
+      .orderBy(desc(cycleOrders.createdAt));
+  }
 }
 
 export const storage = new DatabaseStorage();

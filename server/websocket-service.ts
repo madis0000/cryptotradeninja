@@ -2,6 +2,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { Server } from 'http';
 import { storage } from './storage';
 import { decryptApiCredentials } from './encryption';
+import { BotCycle, CycleOrder } from '@shared/schema';
 
 interface UserConnection {
   ws: WebSocket;
@@ -86,6 +87,9 @@ export class WebSocketService {
     
     // Start market refresh interval (every 60 seconds)
     this.startMarketRefreshInterval();
+    
+    // Start order monitoring for Martingale bots
+    this.startOrderMonitoring();
     
     console.log(`[WEBSOCKET] Unified service initialized on port ${wsPort} with 0.0.0.0 binding. Automatic streaming disabled.`);
   }
@@ -1834,8 +1838,8 @@ export class WebSocketService {
 
       // Decrypt API credentials
       const { apiKey, apiSecret } = decryptApiCredentials(
-        exchange.encryptedApiKey,
-        exchange.encryptedApiSecret,
+        exchange.apiKey,
+        exchange.apiSecret,
         exchange.encryptionIv
       );
 
@@ -2181,9 +2185,215 @@ export class WebSocketService {
     }
   }
 
+  // Order monitoring system for Martingale cycle management
+  private orderMonitoringInterval: NodeJS.Timeout | null = null;
+
+  private startOrderMonitoring() {
+    // Check order status every 10 seconds
+    this.orderMonitoringInterval = setInterval(async () => {
+      await this.checkOrderFills();
+    }, 10000);
+    
+    console.log('[ORDER MONITOR] Started order monitoring for Martingale cycles');
+  }
+
+  private async checkOrderFills() {
+    try {
+      // Get all active bot cycles
+      const activeBots = await storage.getTradingBotsByUserId(0); // We'll iterate through all users
+      
+      for (const bot of activeBots) {
+        if (bot.strategyType === 'martingale' && bot.isActive) {
+          await this.monitorBotCycle(bot.id);
+        }
+      }
+    } catch (error) {
+      console.error('[ORDER MONITOR] Error checking order fills:', error);
+    }
+  }
+
+  private async monitorBotCycle(botId: number) {
+    try {
+      const activeCycle = await storage.getActiveBotCycle(botId);
+      if (!activeCycle) return;
+
+      const pendingOrders = await storage.getPendingCycleOrders(botId);
+      
+      for (const order of pendingOrders) {
+        // Simulate order fill detection (in production, this would check exchange API)
+        const isFilled = this.simulateOrderFill(order);
+        
+        if (isFilled) {
+          await this.handleOrderFill(order, activeCycle);
+        }
+      }
+    } catch (error) {
+      console.error(`[ORDER MONITOR] Error monitoring bot cycle ${botId}:`, error);
+    }
+  }
+
+  private simulateOrderFill(order: CycleOrder): boolean {
+    // Simulate random order fills for demonstration (5% chance per check)
+    // In production, this would query the exchange API for actual order status
+    return Math.random() < 0.05;
+  }
+
+  private async handleOrderFill(order: CycleOrder, cycle: BotCycle) {
+    try {
+      console.log(`[ORDER MONITOR] Order filled: ${order.orderType} for bot ${order.botId}`);
+      
+      // Update order status to filled
+      await storage.updateCycleOrder(order.id, {
+        status: 'filled',
+        filledQuantity: order.quantity,
+        filledPrice: order.price,
+        filledAt: new Date()
+      });
+
+      if (order.orderType === 'safety_order') {
+        await this.handleSafetyOrderFill(order, cycle);
+      } else if (order.orderType === 'take_profit') {
+        await this.handleTakeProfitFill(order, cycle);
+      }
+
+      // Broadcast order fill to connected clients
+      this.broadcastOrderFill(order);
+
+    } catch (error) {
+      console.error(`[ORDER MONITOR] Error handling order fill:`, error);
+    }
+  }
+
+  private async handleSafetyOrderFill(order: CycleOrder, cycle: BotCycle) {
+    try {
+      // Recalculate average entry price
+      const totalInvested = parseFloat(cycle.totalInvested) + (parseFloat(order.quantity) * parseFloat(order.price || '0'));
+      const totalQuantity = parseFloat(cycle.totalQuantity) + parseFloat(order.quantity);
+      const newAveragePrice = totalInvested / totalQuantity;
+
+      // Update cycle metrics
+      await storage.updateBotCycle(cycle.id, {
+        currentAveragePrice: newAveragePrice.toString(),
+        totalInvested: totalInvested.toString(),
+        totalQuantity: totalQuantity.toString(),
+        filledSafetyOrders: cycle.filledSafetyOrders + 1
+      });
+
+      // Cancel existing take profit order and place new one with updated price
+      await this.updateTakeProfitOrder(cycle, newAveragePrice);
+
+      console.log(`[MARTINGALE] Safety order filled - New average price: ${newAveragePrice.toFixed(8)}`);
+
+    } catch (error) {
+      console.error('[MARTINGALE] Error handling safety order fill:', error);
+    }
+  }
+
+  private async handleTakeProfitFill(order: CycleOrder, cycle: BotCycle) {
+    try {
+      // Calculate profit
+      const totalInvested = parseFloat(cycle.totalInvested);
+      const totalReceived = parseFloat(order.quantity) * parseFloat(order.price || '0');
+      const profit = totalReceived - totalInvested;
+
+      // Complete current cycle
+      await storage.completeBotCycle(cycle.id);
+
+      // Start new cycle automatically
+      await this.startNewMartingaleCycle(cycle.botId, cycle.cycleNumber + 1);
+
+      console.log(`[MARTINGALE] Take profit filled - Profit: ${profit.toFixed(8)} - Starting new cycle`);
+
+    } catch (error) {
+      console.error('[MARTINGALE] Error handling take profit fill:', error);
+    }
+  }
+
+  private async updateTakeProfitOrder(cycle: BotCycle, newAveragePrice: number) {
+    try {
+      // Get bot configuration
+      const bot = await storage.getTradingBot(cycle.botId);
+      if (!bot) return;
+
+      const takeProfitPrice = newAveragePrice * (1 + parseFloat(bot.takeProfitPercentage) / 100);
+
+      // Create new take profit order
+      const newTakeProfitOrder = await storage.createCycleOrder({
+        cycleId: cycle.id,
+        botId: cycle.botId,
+        userId: cycle.userId,
+        orderType: 'take_profit',
+        side: 'SELL',
+        orderCategory: 'LIMIT',
+        symbol: bot.tradingPair,
+        quantity: cycle.totalQuantity,
+        price: takeProfitPrice.toString(),
+        clientOrderId: `TP_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      });
+
+      console.log(`[MARTINGALE] Updated take profit order at ${takeProfitPrice.toFixed(8)}`);
+
+    } catch (error) {
+      console.error('[MARTINGALE] Error updating take profit order:', error);
+    }
+  }
+
+  private async startNewMartingaleCycle(botId: number, cycleNumber: number) {
+    try {
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) return;
+
+      // Create new cycle
+      const newCycle = await storage.createBotCycle({
+        botId: botId,
+        userId: bot.userId,
+        cycleNumber: cycleNumber,
+        maxSafetyOrders: bot.maxSafetyOrders,
+        baseOrderPrice: '0', // Will be set when base order is placed
+        currentAveragePrice: '0',
+        totalInvested: '0',
+        totalQuantity: '0'
+      });
+
+      console.log(`[MARTINGALE] Started new cycle ${cycleNumber} for bot ${botId}`);
+
+    } catch (error) {
+      console.error('[MARTINGALE] Error starting new cycle:', error);
+    }
+  }
+
+  private broadcastOrderFill(order: CycleOrder) {
+    const message = JSON.stringify({
+      type: 'order_fill',
+      data: {
+        orderId: order.id,
+        botId: order.botId,
+        orderType: order.orderType,
+        symbol: order.symbol,
+        quantity: order.quantity,
+        price: order.price,
+        filledAt: order.filledAt
+      }
+    });
+
+    // Broadcast to all connected clients
+    this.userConnections.forEach((connection) => {
+      if (connection.ws.readyState === WebSocket.OPEN) {
+        connection.ws.send(message);
+      }
+    });
+  }
+
   public close() {
     this.wss.close();
     this.stopBinanceStreams();
     this.stopMarketRefreshInterval();
+    
+    // Stop order monitoring
+    if (this.orderMonitoringInterval) {
+      clearInterval(this.orderMonitoringInterval);
+      this.orderMonitoringInterval = null;
+      console.log('[ORDER MONITOR] Order monitoring stopped');
+    }
   }
 }
