@@ -365,18 +365,21 @@ export class WebSocketService {
               this.storeHistoricalKlineData(klineUpdate);
               this.broadcastKlineUpdate(klineUpdate);
               
-              const marketUpdate = {
-                symbol: symbol,
-                price: parseFloat(kline.c),
-                change: 0,
-                volume: parseFloat(kline.v),
-                high: parseFloat(kline.h),
-                low: parseFloat(kline.l),
-                timestamp: Date.now()
-              };
-              
-              this.marketData.set(symbol, marketUpdate);
-              this.broadcastMarketUpdate(marketUpdate);
+              // Only send market updates for ticker streams, not kline streams
+              if (this.currentStreamType === 'ticker') {
+                const marketUpdate = {
+                  symbol: symbol,
+                  price: parseFloat(kline.c),
+                  change: 0,
+                  volume: parseFloat(kline.v),
+                  high: parseFloat(kline.h),
+                  low: parseFloat(kline.l),
+                  timestamp: Date.now()
+                };
+                
+                this.marketData.set(symbol, marketUpdate);
+                this.broadcastMarketUpdate(marketUpdate);
+              }
             } else {
               console.log(`[BINANCE STREAM] Ignoring ${receivedInterval} data (expecting ${expectedInterval})`);
             }

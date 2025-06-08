@@ -49,7 +49,7 @@ export default function Settings() {
   const [activeSection, setActiveSection] = useState('general');
   const [selectedExchangeId, setSelectedExchangeId] = useState<string>('');
   const [streamConfig, setStreamConfig] = useState<StreamConfig>({
-    dataType: 'ticker',
+    dataType: 'kline',
     symbol: 'BTCUSDT', // Single symbol for clean subscription
     interval: '1m',
     depth: '5'
