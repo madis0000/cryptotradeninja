@@ -39,9 +39,14 @@ export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChang
     ws.current.onmessage = (event) => {
       try {
         const message: WebSocketMessage = JSON.parse(event.data);
+        console.log('CLIENT WS: Received message:', message.type, message.data);
         
         switch (message.type) {
+          case 'connected':
+            console.log('CLIENT WS: Connection confirmed -', message);
+            break;
           case 'market_update':
+            console.log('CLIENT WS: Market update -', message.data?.symbol, message.data?.price);
             onMarketUpdate?.(message.data);
             break;
           case 'trade_executed':

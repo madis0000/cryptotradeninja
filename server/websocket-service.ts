@@ -801,13 +801,15 @@ export class WebSocketService {
     
     if (filteredData.length > 0) {
       try {
-        const message = JSON.stringify({
-          type: 'market_data',
-          data: filteredData
+        // Send each market update individually as the frontend expects
+        filteredData.forEach(marketData => {
+          const message = JSON.stringify({
+            type: 'market_update',
+            data: marketData
+          });
+          ws.send(message);
         });
-        console.log(`[PUBLIC WS] Sending filtered market data (${message.length} chars)`);
-        ws.send(message);
-        console.log('[PUBLIC WS] Filtered market data sent successfully');
+        console.log(`[PUBLIC WS] Sent ${filteredData.length} market updates to client`);
       } catch (error) {
         console.error('[PUBLIC WS] Error sending market data:', error);
       }
