@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { MarketsPanel } from "@/components/shared/markets-panel";
 import { TradingHeader } from "@/components/shared/trading-header";
 import { TradingChart } from "@/components/trading/trading-chart";
+import { GridStrategy } from "@/components/trading/strategies/grid-strategy";
+import { MartingaleStrategy } from "@/components/trading/strategies/martingale-strategy";
 import { usePublicWebSocket } from "@/hooks/useWebSocketService";
 
 interface TickerData {
@@ -190,118 +192,19 @@ export default function TradingBots() {
                 </div>
               </div>
               
+              {/* Strategy Configuration Content */}
               {selectedStrategy === "grid" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm text-gray-400 mb-2 block">1. Price Settings</label>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-400">Price Deviation</span>
-                        <span className="text-white">1 %</span>
-                      </div>
-                      <Input
-                        placeholder="Grid number"
-                        className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-gray-400 mb-2 block">2. Investment</label>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-400">Quote Order Size</span>
-                        <span className="text-white flex items-center">
-                          77.5 <span className="text-gray-400 ml-1">USDT</span>
-                        </span>
-                      </div>
-                      <Input
-                        placeholder="5.000"
-                        className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
-                      />
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-400">DCA Order Size</span>
-                        <span className="text-white flex items-center">
-                          77.5 <span className="text-gray-400 ml-1">USDT</span>
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-400">Max DCA Orders</span>
-                        <span className="text-white">8</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-gray-400 mb-2 block">Available</label>
-                    <div className="text-sm space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-400">Spot Balance</span>
-                        <span className="text-white">0.00 USDT</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-400"></span>
-                        <span className="text-white">-- USDT</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-gray-400 mb-2 block">Advanced (Optional)</label>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="w-full justify-start text-gray-400 hover:text-white h-8"
-                    >
-                      <i className="fas fa-chevron-right mr-2"></i>
-                      Advanced Settings
-                    </Button>
-                  </div>
-                </div>
+                <GridStrategy className="flex-1" />
               )}
-
+              
               {selectedStrategy === "martingale" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm text-gray-400 mb-2 block">1. Martingale Settings</label>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-400">Multiplier</span>
-                        <span className="text-white">2.0x</span>
-                      </div>
-                      <Input
-                        placeholder="Initial order size"
-                        className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-gray-400 mb-2 block">2. Risk Management</label>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-400">Max Orders</span>
-                        <span className="text-white">5</span>
-                      </div>
-                      <Input
-                        placeholder="Stop Loss %"
-                        className="bg-crypto-darker border-gray-700 text-white text-sm h-8"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-gray-400 mb-2 block">Available</label>
-                    <div className="text-sm space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-400">Spot Balance</span>
-                        <span className="text-white">0.00 USDT</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <MartingaleStrategy 
+                  className="flex-1" 
+                  selectedSymbol={selectedSymbol}
+                />
               )}
 
+              {/* Create Bot Button */}
               <div className="mt-auto pt-6">
                 <div className="text-center">
                   <p className="text-xs text-gray-500 mb-3">Preview</p>
