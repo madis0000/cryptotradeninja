@@ -86,7 +86,6 @@ export default function Trading() {
           <TradingHeader 
             selectedSymbol={selectedSymbol}
             tickerData={tickerData}
-            showViewOptions={true}
           />
 
           {/* Main Content Row */}
