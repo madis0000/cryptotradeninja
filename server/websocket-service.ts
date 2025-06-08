@@ -358,6 +358,7 @@ export class WebSocketService {
       console.log(`[KLINE STREAM] Subscribing to kline streams:`, klineStreamPaths);
       if (this.binanceKlineWs && this.binanceKlineWs.readyState === WebSocket.OPEN) {
         this.binanceKlineWs.send(JSON.stringify(subscribeMessage));
+        this.currentKlineSubscriptions = klineStreamPaths;
       }
     });
     
