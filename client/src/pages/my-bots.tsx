@@ -184,7 +184,7 @@ export function MyBotsPage() {
   // Stop bot mutation
   const stopBotMutation = useMutation({
     mutationFn: async (botId: number) => {
-      await apiRequest(`/api/bots/${botId}/stop`, { method: 'POST' });
+      await apiRequest(`/api/bots/${botId}/stop`, 'POST');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
@@ -205,7 +205,7 @@ export function MyBotsPage() {
   // Delete bot mutation
   const deleteBotMutation = useMutation({
     mutationFn: async (botId: number) => {
-      await apiRequest(`/api/bots/${botId}`, { method: 'DELETE' });
+      await apiRequest(`/api/bots/${botId}`, 'DELETE');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
