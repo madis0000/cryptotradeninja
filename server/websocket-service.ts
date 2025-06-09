@@ -2553,6 +2553,61 @@ export class WebSocketService {
     }
   }
 
+  // Enhanced notification system for order status updates
+  private broadcastOrderNotification(order: CycleOrder, status: 'placed' | 'filled' | 'cancelled' | 'failed') {
+    const message = {
+      type: 'order_notification',
+      data: {
+        orderId: order.id,
+        exchangeOrderId: order.exchangeOrderId,
+        botId: order.botId,
+        symbol: order.symbol,
+        side: order.side,
+        quantity: parseFloat(order.quantity || '0').toFixed(6),
+        price: parseFloat(order.price || '0').toFixed(4),
+        orderType: order.orderType,
+        status: status,
+        timestamp: new Date().toISOString(),
+        notification: this.generateOrderNotificationMessage(order, status)
+      }
+    };
+
+    // Send to all connected clients
+    this.connections.forEach(connection => {
+      if (connection.ws.readyState === WebSocket.OPEN) {
+        connection.ws.send(JSON.stringify(message));
+      }
+    });
+
+    // Also send to user-specific connections
+    this.userConnections.forEach((connection, userId) => {
+      if (connection.ws.readyState === WebSocket.OPEN) {
+        connection.ws.send(JSON.stringify(message));
+      }
+    });
+  }
+
+  private generateOrderNotificationMessage(order: CycleOrder, status: 'placed' | 'filled' | 'cancelled' | 'failed'): string {
+    const orderTypeDisplay = order.orderType?.replace('_', ' ').toUpperCase() || 'ORDER';
+    const sideDisplay = order.side?.toUpperCase() || 'BUY';
+    const amount = parseFloat(order.quantity || '0').toFixed(6);
+    const price = parseFloat(order.price || '0').toFixed(4);
+    const symbol = order.symbol || 'UNKNOWN';
+
+    switch (status) {
+      case 'placed':
+        return `${orderTypeDisplay} order placed: ${sideDisplay} ${amount} ${symbol} at $${price}`;
+      case 'filled':
+        return `${orderTypeDisplay} order filled: ${sideDisplay} ${amount} ${symbol} at $${price}`;
+      case 'cancelled':
+        return `${orderTypeDisplay} order cancelled: ${sideDisplay} ${amount} ${symbol}`;
+      case 'failed':
+        return `${orderTypeDisplay} order failed: ${sideDisplay} ${amount} ${symbol}`;
+      default:
+        return `${orderTypeDisplay} order status updated: ${status}`;
+    }
+  }
+
   // Order monitoring system for Martingale cycle management
   private orderMonitoringInterval: NodeJS.Timeout | null = null;
 
@@ -2799,9 +2854,9 @@ export class WebSocketService {
         await this.handleTakeProfitFill(order, cycle);
       }
 
-      // Broadcast order fill to connected clients
-      this.broadcastOrderFill(order);
-      console.log(`[MARTINGALE STRATEGY] ✓ Broadcasted order fill to clients`);
+      // Broadcast order fill notification to connected clients
+      this.broadcastOrderNotification(order, 'filled');
+      console.log(`[MARTINGALE STRATEGY] ✓ Broadcasted order fill notification to clients`);
 
     } catch (error) {
       console.error(`[MARTINGALE STRATEGY] ❌ Error handling order fill:`, error);

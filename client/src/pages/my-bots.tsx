@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trash2, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 
 export function MyBotsPage() {
   const [activeSection, setActiveSection] = useState('active-bots');
