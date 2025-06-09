@@ -18,6 +18,7 @@ interface OrderStep {
 interface MartingaleProgressDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  botId?: string; // Accept existing bot ID instead of creating new one
   botConfig: {
     symbol: string;
     baseOrderSize: string;
@@ -35,6 +36,7 @@ interface MartingaleProgressDialogProps {
 export function MartingaleProgressDialog({
   open,
   onOpenChange,
+  botId,
   botConfig,
   onComplete,
   onError
@@ -234,13 +236,13 @@ export function MartingaleProgressDialog({
       }
 
       const bot = await response.json();
+      console.log('[PROGRESS DIALOG] Bot created successfully:', bot);
       
-      updateStepStatus('base_order', 'completed', 'BO-PENDING', 'Market Price', botConfig.baseOrderSize);
-      setCurrentStep(1);
-      setOverallProgress(50);
+      // Don't prematurely mark base order as completed - let monitoring detect it
+      updateStepStatus('base_order', 'processing');
       
-      // Monitor order placement progress
-      await monitorOrderPlacementProgress(bot.id);
+      // Monitor order placement progress with correct bot ID
+      await monitorOrderPlacementProgress(bot.id.toString());
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create bot and place orders';
