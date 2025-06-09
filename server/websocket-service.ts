@@ -3182,6 +3182,15 @@ export class WebSocketService {
 
       console.log(`[MARTINGALE STRATEGY] ✓ Trade recorded for analytics`);
 
+      // Get exchange information for cancellations
+      const exchanges = await storage.getExchangesByUserId(bot.userId);
+      const exchange = exchanges.find(ex => ex.id === bot.exchangeId);
+      
+      if (!exchange) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Exchange not found for bot ${bot.id}`);
+        return;
+      }
+
       // CRITICAL: Cancel all pending safety orders before completing cycle
       console.log(`[MARTINGALE STRATEGY] 🚫 CANCELLING PENDING SAFETY ORDERS...`);
       const pendingSafetyOrders = await storage.getCycleOrders(cycle.id);
@@ -3198,7 +3207,7 @@ export class WebSocketService {
           
           if (safetyOrder.exchangeOrderId) {
             // Cancel order on exchange
-            const cancelled = await this.cancelOrderOnExchange(safetyOrder.exchangeOrderId, order.symbol, bot.exchangeId);
+            const cancelled = await this.cancelOrderOnExchange(safetyOrder.exchangeOrderId, order.symbol, exchange);
             if (cancelled) {
               console.log(`[MARTINGALE STRATEGY] ✅ Successfully cancelled safety order ${safetyOrder.exchangeOrderId} on exchange`);
             } else {
@@ -4116,6 +4125,49 @@ export class WebSocketService {
     });
 
     console.log(`[MARTINGALE STRATEGY] ✓ Broadcasted to ${broadcastCount} connected clients`);
+  }
+
+  private async cancelOrderOnExchange(exchangeOrderId: string, symbol: string, exchange: any): Promise<boolean> {
+    try {
+      // Decrypt API credentials
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.apiKey, 
+        exchange.apiSecret, 
+        exchange.encryptionIv
+      );
+
+      // Cancel order via REST API
+      const cancelParams = new URLSearchParams({
+        symbol: symbol,
+        orderId: exchangeOrderId,
+        timestamp: Date.now().toString()
+      });
+
+      const signature = this.createSignature(cancelParams.toString(), apiSecret);
+      cancelParams.append('signature', signature);
+
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-MBX-APIKEY': apiKey
+        },
+        body: cancelParams
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`[CANCEL ORDER] ✅ Successfully cancelled order ${exchangeOrderId}:`, result);
+        return true;
+      } else {
+        const errorData = await response.json();
+        console.log(`[CANCEL ORDER] ⚠️ Failed to cancel order ${exchangeOrderId}:`, errorData.msg);
+        return false;
+      }
+    } catch (error) {
+      console.error(`[CANCEL ORDER] ❌ Error cancelling order ${exchangeOrderId}:`, error);
+      return false;
+    }
   }
 
   public close() {
