@@ -420,6 +420,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get available balance for trading pair
+  // Order placement endpoint
+  app.post("/api/orders", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { exchangeId, symbol, side, orderType, quantity, price, timeInForce } = req.body;
+      const userId = req.user!.id;
+
+      // Validate required fields
+      if (!exchangeId || !symbol || !side || !orderType || !quantity) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Missing required fields" 
+        });
+      }
+
+      if (orderType === 'LIMIT' && !price) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Price required for limit orders" 
+        });
+      }
+
+      // Get exchange configuration
+      const exchanges = await storage.getExchangesByUserId(userId);
+      const exchange = exchanges.find(ex => ex.id === parseInt(exchangeId));
+      
+      if (!exchange) {
+        return res.status(404).json({ 
+          success: false, 
+          error: "Exchange not found" 
+        });
+      }
+
+      // For development, simulate order placement
+      const orderId = `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const currentPrice = price || "106870.03"; // Use provided price or mock market price
+      
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+      
+      // Simulate occasional failures (5% chance)
+      if (Math.random() < 0.05) {
+        return res.status(400).json({
+          success: false,
+          error: 'Insufficient balance or market conditions'
+        });
+      }
+
+      // Store trade record in database
+      await storage.createTrade({
+        userId: userId,
+        botId: null,
+        tradingPair: symbol,
+        side: side.toLowerCase(),
+        orderType: orderType.toLowerCase(),
+        orderCategory: "manual",
+        amount: quantity,
+        quoteAmount: orderType === 'MARKET' ? 
+          (parseFloat(quantity) * parseFloat(currentPrice)).toFixed(8) : 
+          (parseFloat(quantity) * parseFloat(price || currentPrice)).toFixed(8),
+        price: currentPrice,
+        status: orderType === 'MARKET' ? 'filled' : 'filled', // Simulate immediate fill for demo
+        pnl: "0",
+        fee: (parseFloat(quantity) * 0.001).toFixed(8), // 0.1% fee
+        feeAsset: "USDT",
+        exchangeOrderId: orderId
+      });
+
+      // Return successful response
+      res.json({
+        success: true,
+        orderId: orderId,
+        symbol: symbol,
+        side: side,
+        quantity: quantity,
+        price: currentPrice,
+        status: orderType === 'MARKET' ? 'FILLED' : 'FILLED',
+        fee: (parseFloat(quantity) * 0.001).toFixed(8),
+        feeAsset: "USDT"
+      });
+
+    } catch (error) {
+      console.error('Error placing order:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error occurred' 
+      });
+    }
+  });
+
   app.get("/api/exchanges/:exchangeId/balance/:symbol", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { exchangeId, symbol } = req.params;

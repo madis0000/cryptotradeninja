@@ -101,22 +101,49 @@ export function OrderForm({ className, symbol = "ICPUSDT" }: OrderFormProps) {
     }
   };
 
-  // Handle order placement
-  const handlePlaceOrder = () => {
-    const orderData = {
-      type: 'place_order',
-      userId: 1, // Get from auth context
-      exchangeId: 1,
-      symbol: symbol,
-      side: side,
-      orderType: orderType.toUpperCase(),
-      quantity: amount,
-      ...(orderType === 'limit' && { price: price }),
-      timeInForce: 'GTC',
-      clientOrderId: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    };
+  // Handle order placement via API
+  const handlePlaceOrder = async () => {
+    if (!amount || (!price && orderType === 'limit')) {
+      setOrderStatus('Please fill in all required fields');
+      return;
+    }
 
-    sendMessage(orderData);
+    setIsPlacingOrder(true);
+    setOrderStatus('Placing order...');
+
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          exchangeId: 1,
+          symbol: symbol,
+          side: side,
+          orderType: orderType.toUpperCase(),
+          quantity: amount,
+          ...(orderType === 'limit' && { price: price }),
+          timeInForce: 'GTC'
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setOrderStatus(`Order placed successfully: ${result.orderId}`);
+        setAmount('');
+        setTotal('');
+        if (orderType === 'limit') setPrice('');
+      } else {
+        setOrderStatus(`Order failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      setOrderStatus(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsPlacingOrder(false);
+      setTimeout(() => setOrderStatus(''), 5000);
+    }
   };
 
   // Get available balance for the selected side
@@ -157,6 +184,19 @@ export function OrderForm({ className, symbol = "ICPUSDT" }: OrderFormProps) {
         </CardHeader>
         
         <CardContent className="p-4">
+          {/* Order Status Display */}
+          {orderStatus && (
+            <div className={`mb-4 p-3 rounded-lg text-sm ${
+              orderStatus.includes('successfully') 
+                ? 'bg-green-900/20 text-green-400 border border-green-700/50' 
+                : orderStatus.includes('failed') || orderStatus.includes('error')
+                ? 'bg-red-900/20 text-red-400 border border-red-700/50'
+                : 'bg-blue-900/20 text-blue-400 border border-blue-700/50'
+            }`}>
+              {orderStatus}
+            </div>
+          )}
+          
           <Tabs value={orderType} onValueChange={(value) => setOrderType(value as "market" | "limit")} className="w-full">
             <TabsList className="grid w-full grid-cols-2 bg-crypto-darker">
               <TabsTrigger value="market" className="data-[state=active]:bg-crypto-accent data-[state=active]:text-black">
@@ -216,9 +256,10 @@ export function OrderForm({ className, symbol = "ICPUSDT" }: OrderFormProps) {
 
                   <Button 
                     onClick={() => { setSide('BUY'); handlePlaceOrder(); }}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-medium"
+                    disabled={isPlacingOrder || !amount}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-medium disabled:opacity-50"
                   >
-                    Buy {baseAsset}
+                    {isPlacingOrder && side === 'BUY' ? 'Placing Order...' : `Buy ${baseAsset}`}
                   </Button>
                 </div>
 
@@ -265,9 +306,10 @@ export function OrderForm({ className, symbol = "ICPUSDT" }: OrderFormProps) {
 
                   <Button 
                     onClick={() => { setSide('SELL'); handlePlaceOrder(); }}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white font-medium"
+                    disabled={isPlacingOrder || !amount}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white font-medium disabled:opacity-50"
                   >
-                    Sell {baseAsset}
+                    {isPlacingOrder && side === 'SELL' ? 'Placing Order...' : `Sell ${baseAsset}`}
                   </Button>
                 </div>
               </div>
@@ -356,9 +398,10 @@ export function OrderForm({ className, symbol = "ICPUSDT" }: OrderFormProps) {
 
                   <Button 
                     onClick={() => { setSide('BUY'); handlePlaceOrder(); }}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-medium"
+                    disabled={isPlacingOrder || !amount || !price}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-medium disabled:opacity-50"
                   >
-                    Buy {baseAsset}
+                    {isPlacingOrder && side === 'BUY' ? 'Placing Order...' : `Buy ${baseAsset}`}
                   </Button>
                 </div>
 
@@ -442,9 +485,10 @@ export function OrderForm({ className, symbol = "ICPUSDT" }: OrderFormProps) {
 
                   <Button 
                     onClick={() => { setSide('SELL'); handlePlaceOrder(); }}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white font-medium"
+                    disabled={isPlacingOrder || !amount || !price}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white font-medium disabled:opacity-50"
                   >
-                    Sell {baseAsset}
+                    {isPlacingOrder && side === 'SELL' ? 'Placing Order...' : `Sell ${baseAsset}`}
                   </Button>
                 </div>
               </div>
