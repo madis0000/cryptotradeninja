@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,13 +19,17 @@ export function MyBotsPage() {
   // Initialize order notifications
   useOrderNotifications();
 
-  // WebSocket for live market data
-  const { connect, subscribeToMarket, unsubscribeFromMarket } = useWebSocket({
-    onMarketUpdate: (data) => {
-      if (selectedBot && data.symbol === selectedBot.tradingPair) {
-        setLiveMarketData(data);
-      }
-    }
+  // Fetch market data for live price display
+  const { data: marketData } = useQuery({
+    queryKey: ['market', selectedBot?.tradingPair],
+    queryFn: async () => {
+      if (!selectedBot?.tradingPair) return null;
+      const response = await fetch('/api/market');
+      const data = await response.json();
+      return data.find((item: any) => item.symbol === selectedBot.tradingPair);
+    },
+    enabled: !!selectedBot?.tradingPair,
+    refetchInterval: 5000, // Refresh every 5 seconds
   });
 
   // Fetch bots data
@@ -349,7 +353,17 @@ export function MyBotsPage() {
           {/* Strategy Orders */}
           <Card className="bg-crypto-darker border-gray-800 mb-6">
             <CardHeader>
-              <CardTitle className="text-white">Strategy Orders</CardTitle>
+              <CardTitle className="text-white flex items-center justify-between">
+                <span>Strategy Orders</span>
+                {marketData && (
+                  <div className="text-right">
+                    <div className="text-lg font-mono text-green-400">
+                      ${parseFloat(marketData.price || '0').toFixed(4)}
+                    </div>
+                    <div className="text-xs text-crypto-light">Live Price</div>
+                  </div>
+                )}
+              </CardTitle>
               <p className="text-sm text-crypto-light">All orders for this bot with their current status</p>
             </CardHeader>
             <CardContent>
@@ -369,10 +383,9 @@ export function MyBotsPage() {
                         <th className="text-left py-3 px-4 text-crypto-light">Order Type</th>
                         <th className="text-left py-3 px-4 text-crypto-light">Side</th>
                         <th className="text-left py-3 px-4 text-crypto-light">Price</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Distance</th>
                         <th className="text-left py-3 px-4 text-crypto-light">Quantity</th>
-                        <th className="text-left py-3 px-4 text-crypto-light">Filled</th>
                         <th className="text-left py-3 px-4 text-crypto-light">Status</th>
-                        <th className="text-left py-3 px-4 text-crypto-light">Exchange ID</th>
                         <th className="text-left py-3 px-4 text-crypto-light">Date</th>
                       </tr>
                     </thead>
