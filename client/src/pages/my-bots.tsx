@@ -122,6 +122,17 @@ export function MyBotsPage() {
   // Get current active cycle
   const currentCycle = botCycles.find((cycle: any) => cycle.status === 'active') || botCycles[0];
 
+  // Filter orders for current cycle and history
+  const currentCycleOrders = botOrders.filter((order: any) => {
+    if (!currentCycle) return false;
+    return order.cycleId === currentCycle.id;
+  });
+
+  const historyOrders = botOrders.filter((order: any) => {
+    if (!currentCycle) return order.status === 'filled';
+    return order.cycleId !== currentCycle.id && order.status === 'filled';
+  });
+
   // Fetch general stats for dashboard overview
   const { data: botData } = useQuery({
     queryKey: ['/api/stats'],
@@ -476,20 +487,22 @@ export function MyBotsPage() {
               </Card>
             </div>
 
-            {/* Strategy Orders */}
+            {/* Current Cycle Orders */}
             <Card className="bg-crypto-darker border-gray-800 mb-6">
               <CardHeader>
-                <CardTitle className="text-white">Strategy Orders</CardTitle>
-                <p className="text-sm text-crypto-light">All orders for this bot with their current status</p>
+                <CardTitle className="text-white">Current Cycle Orders</CardTitle>
+                <p className="text-sm text-crypto-light">
+                  Active orders for cycle #{currentCycle?.cycleNumber || 'N/A'}
+                </p>
               </CardHeader>
               <CardContent>
                 {ordersLoading ? (
                   <div className="text-center py-8">
                     <div className="text-crypto-light">Loading orders...</div>
                   </div>
-                ) : botOrders.length === 0 ? (
+                ) : currentCycleOrders.length === 0 ? (
                   <div className="text-center py-8">
-                    <div className="text-crypto-light">No orders found for this bot</div>
+                    <div className="text-crypto-light">No active orders for current cycle</div>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -506,7 +519,7 @@ export function MyBotsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {botOrders.map((order: any, index: number) => {
+                        {currentCycleOrders.map((order: any, index: number) => {
                           const currentPrice = parseFloat(marketData?.price || '0');
                           const orderPrice = parseFloat(order.price || '0');
                           const isUnfilled = order.status !== 'filled' && order.status !== 'cancelled';
@@ -571,6 +584,88 @@ export function MyBotsPage() {
                               </td>
                               <td className="py-3 px-4 text-crypto-light text-xs">
                                 {order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Bot Orders History */}
+            <Card className="bg-crypto-darker border-gray-800 mb-6">
+              <CardHeader>
+                <CardTitle className="text-white">Bot Orders History</CardTitle>
+                <p className="text-sm text-crypto-light">
+                  Completed orders from previous cycles ({historyOrders.length} orders)
+                </p>
+              </CardHeader>
+              <CardContent>
+                {historyOrders.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="text-crypto-light">No completed orders from previous cycles</div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-700">
+                          <th className="text-left py-3 px-4 text-crypto-light">Cycle</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Order Type</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Side</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Filled Price</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Filled Qty</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">P&L</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Filled Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {historyOrders.map((order: any, index: number) => {
+                          const filledPrice = parseFloat(order.filledPrice || order.price || '0');
+                          const filledQty = parseFloat(order.filledQuantity || order.quantity || '0');
+                          const orderValue = filledPrice * filledQty;
+                          
+                          return (
+                            <tr key={index} className="border-b border-gray-800 hover:bg-gray-800/50">
+                              <td className="py-3 px-4 text-white">
+                                <span className="text-sm font-medium">
+                                  #{order.cycleNumber || 'N/A'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-white">
+                                <div className="flex flex-col">
+                                  <span className="font-medium capitalize">
+                                    {order.orderType?.replace('_', ' ') || order.order_type?.replace('_', ' ')}
+                                  </span>
+                                  {order.safetyOrderLevel && (
+                                    <span className="text-xs text-crypto-light">Level {order.safetyOrderLevel || order.safety_order_level}</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  order.side === 'BUY' 
+                                    ? 'bg-green-500/20 text-green-400' 
+                                    : 'bg-red-500/20 text-red-400'
+                                }`}>
+                                  {order.side}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-white font-mono">
+                                ${filledPrice.toFixed(4)}
+                              </td>
+                              <td className="py-3 px-4 text-white font-mono">
+                                {filledQty.toFixed(1)}
+                              </td>
+                              <td className="py-3 px-4 text-white font-mono">
+                                ${orderValue.toFixed(4)}
+                              </td>
+                              <td className="py-3 px-4 text-crypto-light text-xs">
+                                {order.filledAt ? new Date(order.filledAt).toLocaleString() : 
+                                 order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
                               </td>
                             </tr>
                           );
