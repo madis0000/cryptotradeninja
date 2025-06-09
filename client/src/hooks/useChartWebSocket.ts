@@ -37,7 +37,7 @@ export function useChartWebSocket(
     setStatus('connecting');
     
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const wsUrl = `${protocol}//${window.location.host}:8080`;
     
     try {
       const ws = new WebSocket(wsUrl);
@@ -48,14 +48,23 @@ export function useChartWebSocket(
         setStatus('connected');
         onConnect?.();
         
-        // Subscribe to klines for the chart
+        // Send initial connection message
+        ws.send(JSON.stringify({
+          type: 'connected',
+          clientId: 'chart_klines',
+          message: 'Chart component requesting kline data'
+        }));
+        
+        // Configure stream with current symbol and interval
         setTimeout(() => {
-          const subscribeMessage = {
-            type: 'subscribe_klines',
-            symbol: currentSymbol,
+          const configMessage = {
+            type: 'configure_stream',
+            dataType: 'kline',
+            symbols: [currentSymbol],
             interval: currentInterval
           };
-          ws.send(JSON.stringify(subscribeMessage));
+          console.log('[CHART] Sending configure_stream message:', configMessage);
+          ws.send(JSON.stringify(configMessage));
         }, 100);
       };
 

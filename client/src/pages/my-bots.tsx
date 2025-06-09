@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
-import { TradingBot } from "@shared/schema";
 
 export function MyBotsPage() {
   const [activeSection, setActiveSection] = useState('active-bots');
@@ -21,9 +20,8 @@ export function MyBotsPage() {
     { id: 'bot-settings', label: 'Bot Settings', icon: 'fas fa-cog' },
   ];
 
-  const tradingBots = Array.isArray(bots) ? (bots as TradingBot[]) : [];
-  const activeBots = tradingBots.filter((bot: TradingBot) => bot.isActive);
-  const inactiveBots = tradingBots.filter((bot: TradingBot) => !bot.isActive);
+  const activeBots = bots.filter((bot: any) => bot.isActive);
+  const inactiveBots = bots.filter((bot: any) => !bot.isActive);
 
   const renderActiveBots = () => (
     <div className="space-y-6">
