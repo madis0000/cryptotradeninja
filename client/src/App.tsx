@@ -27,6 +27,8 @@ function AuthenticatedApp() {
           <Route path="/" component={Dashboard} />
           <Route path="/trading" component={Trading} />
           <Route path="/bots" component={TradingBots} />
+          <Route path="/bots/overview" component={TradingBots} />
+          <Route path="/create-bot" component={TradingBots} />
           <Route path="/api-keys" component={ApiKeys} />
           <Route path="/portfolio" component={Portfolio} />
           <Route path="/my-exchanges" component={MyExchanges} />
