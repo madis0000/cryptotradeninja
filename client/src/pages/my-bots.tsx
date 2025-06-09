@@ -439,8 +439,9 @@ export function MyBotsPage() {
                         {botOrders.map((order: any, index: number) => {
                           const currentPrice = parseFloat(marketData?.price || '0');
                           const orderPrice = parseFloat(order.price || '0');
-                          const distance = currentPrice > 0 ? ((orderPrice - currentPrice) / currentPrice) * 100 : 0;
-                          const isCloseToFill = Math.abs(distance) < 2; // Within 2% of current price
+                          const isUnfilled = order.status !== 'filled' && order.status !== 'cancelled';
+                          const distance = currentPrice > 0 && isUnfilled ? ((orderPrice - currentPrice) / currentPrice) * 100 : 0;
+                          const isCloseToFill = isUnfilled && Math.abs(distance) < 2; // Within 2% of current price
                           
                           return (
                             <tr key={index} className={`border-b border-gray-800 hover:bg-gray-800/50 ${
@@ -467,7 +468,7 @@ export function MyBotsPage() {
                                 ${parseFloat(order.price || '0').toFixed(4)}
                               </td>
                               <td className="py-3 px-4">
-                                {currentPrice > 0 ? (
+                                {isUnfilled && currentPrice > 0 ? (
                                   <div className="flex flex-col">
                                     <span className={`text-sm font-mono ${
                                       Math.abs(distance) < 1 ? 'text-red-400 font-bold' :
