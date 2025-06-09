@@ -94,24 +94,20 @@ export default function Trading() {
             <OrderBook className="w-80 border-r border-gray-800" />
 
             {/* Center Panel - Chart & Trading Interface */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col">
               {/* Chart Section */}
               <TradingChart 
-                className="flex-1 border-b border-gray-800 min-h-0" 
+                className="flex-1 border-b border-gray-800" 
                 symbol={selectedSymbol}
               />
 
-              {/* Order Form Section - Fixed Height */}
-              <div className="flex-shrink-0">
-                <OrderForm className="h-80 border-b border-gray-800" symbol={selectedSymbol} />
-              </div>
-
-              {/* Orders & History Section - Fixed Height */}
-              <div className="flex-shrink-0">
-                <OrdersHistory className="h-48 border-b border-gray-800" />
-              </div>
+              {/* Order Form Section - Full Width */}
+              <OrderForm className="h-64 border-b border-gray-800" symbol={selectedSymbol} />
             </div>
           </div>
+
+          {/* Orders & History Section - Full Screen Width */}
+          <OrdersHistory className="h-64 border-t border-gray-800" />
         </div>
 
         {/* Right Panel - Markets using shared component */}
