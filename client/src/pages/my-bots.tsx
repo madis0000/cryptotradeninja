@@ -467,7 +467,7 @@ export function MyBotsPage() {
                           <th className="text-left py-3 px-4 text-crypto-light">Distance</th>
                           <th className="text-left py-3 px-4 text-crypto-light">Quantity</th>
                           <th className="text-left py-3 px-4 text-crypto-light">Status</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Date</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Date Time</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -535,7 +535,7 @@ export function MyBotsPage() {
                                 </span>
                               </td>
                               <td className="py-3 px-4 text-crypto-light text-xs">
-                                {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
+                                {order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
                               </td>
                             </tr>
                           );
