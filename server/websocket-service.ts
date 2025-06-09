@@ -2448,7 +2448,7 @@ export class WebSocketService {
     }
   }
 
-  private async startNewMartingaleCycle(botId: number, cycleNumber: number) {
+  public async startNewMartingaleCycle(botId: number, cycleNumber: number) {
     try {
       const bot = await storage.getTradingBot(botId);
       if (!bot) return;
@@ -2469,6 +2469,102 @@ export class WebSocketService {
 
     } catch (error) {
       console.error('[MARTINGALE] Error starting new cycle:', error);
+    }
+  }
+
+  public async placeInitialBaseOrder(botId: number, cycleId: number) {
+    try {
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        console.error(`[MARTINGALE] Bot ${botId} not found`);
+        return;
+      }
+
+      const exchange = await storage.getExchangesByUserId(bot.userId);
+      const activeExchange = exchange.find(ex => ex.id === bot.exchangeId && ex.isActive);
+      
+      if (!activeExchange) {
+        console.error(`[MARTINGALE] No active exchange found for bot ${botId}`);
+        return;
+      }
+
+      // Get current market price
+      const symbol = bot.tradingPair;
+      const marketData = this.marketData.get(symbol);
+      
+      if (!marketData) {
+        console.error(`[MARTINGALE] No market data available for ${symbol}`);
+        return;
+      }
+
+      const currentPrice = marketData.price;
+      console.log(`[MARTINGALE] Placing base order for ${symbol} at market price ${currentPrice}`);
+
+      // Calculate base order quantity
+      const baseOrderAmount = parseFloat(bot.baseOrderAmount);
+      const quantity = baseOrderAmount / currentPrice;
+
+      // Create the base order record
+      const baseOrder = await storage.createCycleOrder({
+        cycleId: cycleId,
+        botId: botId,
+        userId: bot.userId,
+        orderType: 'base_order',
+        side: bot.direction === 'long' ? 'BUY' : 'SELL',
+        orderCategory: 'MARKET',
+        symbol: symbol,
+        quantity: quantity.toFixed(8),
+        price: currentPrice.toFixed(8),
+        status: 'pending'
+      });
+
+      console.log(`[MARTINGALE] Created base order record ${baseOrder.id} for bot ${botId}`);
+
+      // Place order on exchange via API
+      try {
+        const orderResult = await this.placeOrderOnExchange(activeExchange, {
+          symbol: symbol,
+          side: bot.direction === 'long' ? 'BUY' : 'SELL',
+          type: 'MARKET',
+          quantity: quantity.toFixed(8)
+        });
+
+        if (orderResult && orderResult.orderId) {
+          // Update the order with exchange order ID
+          await storage.updateCycleOrder(baseOrder.id, {
+            exchangeOrderId: orderResult.orderId.toString(),
+            status: 'filled',
+            filledQuantity: quantity.toFixed(8),
+            filledPrice: currentPrice.toFixed(8),
+            filledAt: new Date()
+          });
+
+          // Update cycle with base order info
+          await storage.updateBotCycle(cycleId, {
+            baseOrderId: orderResult.orderId.toString(),
+            baseOrderPrice: currentPrice.toFixed(8),
+            currentAveragePrice: currentPrice.toFixed(8),
+            totalInvested: baseOrderAmount.toFixed(8),
+            totalQuantity: quantity.toFixed(8)
+          });
+
+          console.log(`[MARTINGALE] Base order ${orderResult.orderId} placed successfully for bot ${botId}`);
+          
+          // Broadcast order fill
+          this.broadcastOrderFill(await storage.updateCycleOrder(baseOrder.id, {}));
+
+        } else {
+          console.error(`[MARTINGALE] Failed to place base order for bot ${botId}`);
+          await storage.updateCycleOrder(baseOrder.id, { status: 'failed' });
+        }
+
+      } catch (orderError) {
+        console.error(`[MARTINGALE] Error placing base order for bot ${botId}:`, orderError);
+        await storage.updateCycleOrder(baseOrder.id, { status: 'failed' });
+      }
+
+    } catch (error) {
+      console.error(`[MARTINGALE] Error in placeInitialBaseOrder for bot ${botId}:`, error);
     }
   }
 

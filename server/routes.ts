@@ -292,17 +292,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Create initial bot cycle
           const cycle = await storage.createBotCycle({
             botId: bot.id,
+            userId: userId,
             cycleNumber: 1,
             status: 'active',
             totalInvested: '0',
-            currentPnl: '0',
-            averagePrice: '0'
+            maxSafetyOrders: bot.maxSafetyOrders
           });
           
           console.log(`[MARTINGALE] Created initial cycle ${cycle.id} for bot ${bot.id}`);
           
-          // Start monitoring this bot for order fills
-          websocketService?.startNewMartingaleCycle(bot.id, 1);
+          // Place the initial base order to start the cycle
+          await wsService.placeInitialBaseOrder(bot.id, cycle.id);
           
         } catch (cycleError) {
           console.error(`[MARTINGALE] Error creating initial cycle for bot ${bot.id}:`, cycleError);
