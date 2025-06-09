@@ -193,11 +193,24 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     },
     onError: (error: any) => {
       setIsCreatingBot(false);
-      toast({
-        title: "Bot Creation Failed",
-        description: error.message,
-        variant: "destructive"
-      });
+      
+      // Check if error response contains bot ID (bot was created but order placement failed)
+      const errorData = error.response?.data;
+      if (errorData?.botId) {
+        setCreatedBotId(errorData.botId.toString());
+        setProgressDialogOpen(true); // Still show progress dialog to track the failed bot
+        toast({
+          title: "Bot Created with Errors",
+          description: `Bot was saved but order placement failed: ${error.message}`,
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Bot Creation Failed",
+          description: error.message,
+          variant: "destructive"
+        });
+      }
     }
   });
 

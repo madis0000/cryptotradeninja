@@ -67,6 +67,8 @@ export const tradingBots = pgTable("trading_bots", {
   
   // Bot Status
   isActive: boolean("is_active").default(false).notNull(),
+  status: text("status").notNull().default("inactive"), // inactive, active, error, failed
+  errorMessage: text("error_message"), // Error details if status is error/failed
   currentBasePrice: decimal("current_base_price", { precision: 20, scale: 8 }), // Entry price for current round
   averageEntryPrice: decimal("average_entry_price", { precision: 20, scale: 8 }), // Weighted average of filled orders
   totalInvested: decimal("total_invested", { precision: 20, scale: 8 }).default("0").notNull(),

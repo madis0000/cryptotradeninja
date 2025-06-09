@@ -108,10 +108,34 @@ export function MyBotsPage() {
               <h1 className="text-2xl font-bold text-white">{selectedBot.name}</h1>
               <p className="text-crypto-light">{selectedBot.tradingPair || selectedBot.trading_pair}</p>
             </div>
-            <Badge className={`ml-auto ${(selectedBot.isActive || selectedBot.is_active) ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
-              {(selectedBot.isActive || selectedBot.is_active) ? 'Running' : 'Stopped'}
+            <Badge className={`ml-auto ${
+              selectedBot.status === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+              selectedBot.status === 'failed' || selectedBot.status === 'error' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+              'bg-gray-500/10 text-gray-400 border-gray-500/20'
+            }`}>
+              {selectedBot.status === 'active' ? 'Running' :
+               selectedBot.status === 'failed' ? 'Failed' :
+               selectedBot.status === 'error' ? 'Error' :
+               'Stopped'}
             </Badge>
           </div>
+
+          {/* Error Message for Failed Bots */}
+          {(selectedBot.status === 'failed' || selectedBot.status === 'error') && selectedBot.errorMessage && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="w-5 h-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-400">Bot Creation Failed</h3>
+                  <p className="mt-1 text-sm text-red-300">{selectedBot.errorMessage}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Bot Info Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

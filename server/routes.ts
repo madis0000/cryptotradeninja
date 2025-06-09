@@ -323,17 +323,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Place the initial base order to start the cycle
           await wsService.placeInitialBaseOrder(bot.id, cycle.id);
           
+          // Mark bot as active after successful order placement
+          await storage.updateTradingBot(bot.id, {
+            status: 'active',
+            isActive: true
+          });
+          console.log(`[MARTINGALE] Bot ${bot.id} marked as active after successful order placement`);
+          
         } catch (cycleError) {
           console.error(`[MARTINGALE] Error creating initial cycle for bot ${bot.id}:`, cycleError);
           
-          // Delete the bot since order placement failed
-          await storage.deleteTradingBot(bot.id);
-          console.log(`[MARTINGALE] Deleted bot ${bot.id} due to order placement failure`);
-          
+          // Mark bot as failed instead of deleting it
           const errorMessage = cycleError instanceof Error ? cycleError.message : 'Failed to place initial order';
+          await storage.updateTradingBot(bot.id, {
+            status: 'failed',
+            isActive: false,
+            errorMessage: errorMessage
+          });
+          console.log(`[MARTINGALE] Marked bot ${bot.id} as failed due to order placement failure`);
+          
           return res.status(500).json({ 
             error: `Bot creation failed: ${errorMessage}`,
-            details: errorMessage
+            details: errorMessage,
+            botId: bot.id // Return bot ID so UI can track it
           });
         }
       }
