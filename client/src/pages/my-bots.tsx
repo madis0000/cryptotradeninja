@@ -251,14 +251,6 @@ export function MyBotsPage() {
                 </div>
               </div>
               <div className="flex items-center space-x-4">
-                {marketData && (
-                  <div className="text-right">
-                    <div className="text-lg font-mono text-green-400">
-                      ${parseFloat(marketData.price || '0').toFixed(4)}
-                    </div>
-                    <div className="text-xs text-crypto-light">Live Price</div>
-                  </div>
-                )}
                 <Badge className={`${
                   selectedBot.status === 'active' 
                     ? 'bg-green-500/10 text-green-400 border-green-500/20'
@@ -269,8 +261,8 @@ export function MyBotsPage() {
               </div>
             </div>
 
-            {/* Bot Configuration */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {/* Bot Configuration and Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-8 gap-4">
               <Card className="bg-crypto-darker border-gray-800">
                 <CardHeader>
                   <CardTitle className="text-white text-sm">Base Order</CardTitle>
@@ -308,6 +300,49 @@ export function MyBotsPage() {
                 <CardContent>
                   <div className="text-xl font-bold text-purple-400">{selectedBot.priceDeviation}%</div>
                   <p className="text-xs text-crypto-light mt-1">DCA trigger</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-sm">Current Cycle</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xl font-bold text-cyan-400">#{selectedBot.currentCycle || 1}</div>
+                  <p className="text-xs text-crypto-light mt-1">Cycle number</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-sm">Cycle P&L</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {averageEntryPrice > 0 && marketData ? (
+                    <div className="text-xl font-bold">
+                      <span className={`${
+                        parseFloat(marketData.price || '0') > averageEntryPrice ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        {parseFloat(marketData.price || '0') > averageEntryPrice ? '+' : ''}
+                        ${((parseFloat(marketData.price || '0') - averageEntryPrice) * totalPositionSize).toFixed(2)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-xl font-bold text-crypto-light">$0.00</div>
+                  )}
+                  <p className="text-xs text-crypto-light mt-1">Unrealized P&L</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-sm">Total P&L</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xl font-bold text-emerald-400">
+                    ${parseFloat(selectedBot.totalPnl || '0').toFixed(2)}
+                  </div>
+                  <p className="text-xs text-crypto-light mt-1">All-time profit</p>
                 </CardContent>
               </Card>
 
@@ -399,17 +434,7 @@ export function MyBotsPage() {
             {/* Strategy Orders */}
             <Card className="bg-crypto-darker border-gray-800 mb-6">
               <CardHeader>
-                <CardTitle className="text-white flex items-center justify-between">
-                  <span>Strategy Orders</span>
-                  {marketData && (
-                    <div className="text-right">
-                      <div className="text-lg font-mono text-green-400">
-                        ${parseFloat(marketData.price || '0').toFixed(4)}
-                      </div>
-                      <div className="text-xs text-crypto-light">Live Price</div>
-                    </div>
-                  )}
-                </CardTitle>
+                <CardTitle className="text-white">Strategy Orders</CardTitle>
                 <p className="text-sm text-crypto-light">All orders for this bot with their current status</p>
               </CardHeader>
               <CardContent>
