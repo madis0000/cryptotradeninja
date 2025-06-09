@@ -713,7 +713,7 @@ export class WebSocketService {
   // Mock data generation removed - only real exchange data
 
   private connectWithSubscription(wsUrl: string, streamPaths: string[]) {
-    console.log('[BINANCE STREAM] Creating new subscription-based WebSocket connection to:', wsUrl);
+    // Creating new subscription-based WebSocket connection
     
     // Close existing connection if any
     if (this.binancePublicWs) {
@@ -726,13 +726,13 @@ export class WebSocketService {
       wsUrl = wsUrl.replace('/ws', '/stream');
     }
     
-    console.log('[BINANCE STREAM] Final WebSocket URL:', wsUrl);
+    // Connecting to final WebSocket URL
     
     // Store the WebSocket reference for proper cleanup
     this.binancePublicWs = new WebSocket(wsUrl);
 
     this.binancePublicWs.on('open', () => {
-      console.log('[BINANCE STREAM] Connected to Binance subscription stream successfully');
+      // Connected to Binance subscription stream
       
       // First unsubscribe from any existing streams
       if (this.currentSubscriptions.length > 0) {
@@ -768,14 +768,14 @@ export class WebSocketService {
         }
 
         const message = JSON.parse(rawData.toString());
-        console.log('[BINANCE STREAM] Received message:', JSON.stringify(message).substring(0, 200) + '...');
+        // Processing message data
         
         // Handle subscription/unsubscription responses
         if (message.result === null && (message.id === 1 || message.id === 2)) {
           if (message.id === 1) {
-            console.log('[BINANCE STREAM] Unsubscription confirmed successfully');
+            // Unsubscription confirmed
           } else {
-            console.log('[BINANCE STREAM] Subscription confirmed successfully');
+            // Subscription confirmed
           }
           return;
         }

@@ -65,7 +65,7 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
   // WebSocket for real-time balance updates
   const { connect, subscribeToBalance, unsubscribeFromBalance } = useWebSocket({
     onBalanceUpdate: (data) => {
-      console.log('[MARTINGALE] Received balance update:', data);
+      // Balance update processed silently
       if (data.userId === user?.id && data.exchangeId === selectedExchangeId && data.symbol === selectedSymbol) {
         setRealtimeBalance(data.balance);
       }
