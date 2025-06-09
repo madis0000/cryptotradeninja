@@ -105,6 +105,40 @@ export function MyBotsPage() {
 
   const { averageEntryPrice, totalPositionSize, totalInvested } = calculatePositionMetrics();
 
+  // Calculate next orders to be filled and their distances
+  const getNextOrdersInfo = () => {
+    if (!botOrders || !marketData) return { takeProfitDistance: null, nextSafetyDistance: null };
+
+    const currentPrice = parseFloat(marketData.price || '0');
+    if (currentPrice === 0) return { takeProfitDistance: null, nextSafetyDistance: null };
+
+    // Find take profit order
+    const takeProfitOrder = botOrders.find((order: any) => 
+      order.orderType === 'take_profit' && order.status !== 'filled'
+    );
+
+    // Find next unfilled safety order (lowest price for long strategy)
+    const unfilledSafetyOrders = botOrders.filter((order: any) => 
+      order.orderType === 'safety_order' && order.status !== 'filled'
+    ).sort((a: any, b: any) => parseFloat(a.price || '0') - parseFloat(b.price || '0'));
+
+    const nextSafetyOrder = unfilledSafetyOrders[0];
+
+    const calculateDistance = (orderPrice: string) => {
+      const price = parseFloat(orderPrice || '0');
+      return price > 0 ? ((price - currentPrice) / currentPrice) * 100 : 0;
+    };
+
+    return {
+      takeProfitDistance: takeProfitOrder ? calculateDistance(takeProfitOrder.price) : null,
+      nextSafetyDistance: nextSafetyOrder ? calculateDistance(nextSafetyOrder.price) : null,
+      takeProfitOrder,
+      nextSafetyOrder
+    };
+  };
+
+  const { takeProfitDistance, nextSafetyDistance, takeProfitOrder, nextSafetyOrder } = getNextOrdersInfo();
+
   // Stop bot mutation
   const stopBotMutation = useMutation({
     mutationFn: async (botId: number) => {
@@ -174,13 +208,23 @@ export function MyBotsPage() {
                   </p>
                 </div>
               </div>
-              <Badge className={`${
-                selectedBot.status === 'active' 
-                  ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                  : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
-              }`}>
-                {selectedBot.status || 'inactive'}
-              </Badge>
+              <div className="flex items-center space-x-4">
+                {marketData && (
+                  <div className="text-right">
+                    <div className="text-lg font-mono text-green-400">
+                      ${parseFloat(marketData.price || '0').toFixed(4)}
+                    </div>
+                    <div className="text-xs text-crypto-light">Live Price</div>
+                  </div>
+                )}
+                <Badge className={`${
+                  selectedBot.status === 'active' 
+                    ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                    : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                }`}>
+                  {selectedBot.status || 'inactive'}
+                </Badge>
+              </div>
             </div>
 
             {/* Bot Configuration */}
@@ -264,6 +308,45 @@ export function MyBotsPage() {
                           P&L: {parseFloat(marketData.price || '0') > averageEntryPrice ? '+' : ''}
                           {(((parseFloat(marketData.price || '0') - averageEntryPrice) / averageEntryPrice) * 100).toFixed(2)}%
                         </div>
+                      </div>
+                    )}
+
+                    {/* Next Orders to Fill */}
+                    {(takeProfitDistance !== null || nextSafetyDistance !== null) && (
+                      <div className="pt-2 border-t border-gray-700 space-y-1">
+                        <p className="text-xs text-crypto-light font-medium">Next Orders</p>
+                        
+                        {takeProfitDistance !== null && takeProfitOrder && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-green-400">Take Profit</span>
+                            <div className="text-right">
+                              <div className="text-xs font-mono text-white">
+                                ${parseFloat(takeProfitOrder.price || '0').toFixed(4)}
+                              </div>
+                              <div className={`text-xs font-medium ${
+                                takeProfitDistance > 0 ? 'text-green-400' : 'text-red-400'
+                              }`}>
+                                {takeProfitDistance > 0 ? '+' : ''}{takeProfitDistance.toFixed(2)}%
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {nextSafetyDistance !== null && nextSafetyOrder && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-yellow-400">Next Safety</span>
+                            <div className="text-right">
+                              <div className="text-xs font-mono text-white">
+                                ${parseFloat(nextSafetyOrder.price || '0').toFixed(4)}
+                              </div>
+                              <div className={`text-xs font-medium ${
+                                nextSafetyDistance > 0 ? 'text-green-400' : 'text-red-400'
+                              }`}>
+                                {nextSafetyDistance > 0 ? '+' : ''}{nextSafetyDistance.toFixed(2)}%
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
