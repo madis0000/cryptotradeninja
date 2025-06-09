@@ -76,12 +76,6 @@ export function MyBotsPage() {
     queryKey: ["/api/stats"],
   });
 
-  // Fetch bot orders when a bot is selected
-  const { data: botOrders = [], isLoading: ordersLoading } = useQuery({
-    queryKey: ["/api/bot-orders", selectedBot?.id],
-    enabled: !!selectedBot,
-  });
-
   // Delete bot mutation
   const deleteBotMutation = useMutation({
     mutationFn: async (botId: number) => {
@@ -107,29 +101,6 @@ export function MyBotsPage() {
       });
     },
   });
-
-  // Calculate position metrics for selected bot
-  const filledOrders = botOrders.filter((order: any) => order.status === 'filled');
-  const buyOrders = filledOrders.filter((order: any) => order.side === 'BUY');
-  const sellOrders = filledOrders.filter((order: any) => order.side === 'SELL');
-  
-  const totalBought = buyOrders.reduce((sum: number, order: any) => sum + parseFloat(order.quantity || '0'), 0);
-  const totalInvested = buyOrders.reduce((sum: number, order: any) => sum + (parseFloat(order.quantity || '0') * parseFloat(order.price || '0')), 0);
-  const totalSold = sellOrders.reduce((sum: number, order: any) => sum + parseFloat(order.quantity || '0'), 0);
-  
-  const totalPositionSize = totalBought - totalSold;
-  const averageEntryPrice = totalBought > 0 ? totalInvested / totalBought : 0;
-
-  // Calculate distances to next orders
-  const currentPrice = parseFloat(marketData?.price || '0');
-  const pendingOrders = botOrders.filter((order: any) => order.status === 'placed' || order.status === 'pending');
-  
-  const takeProfitOrder = pendingOrders.find((order: any) => order.orderType === 'take_profit' || order.order_type === 'take_profit');
-  const safetyOrders = pendingOrders.filter((order: any) => order.orderType === 'safety_order' || order.order_type === 'safety_order');
-  const nextSafetyOrder = safetyOrders.sort((a: any, b: any) => Math.abs(parseFloat(a.price || '0') - currentPrice) - Math.abs(parseFloat(b.price || '0') - currentPrice))[0];
-
-  const takeProfitDistance = takeProfitOrder && currentPrice > 0 ? ((parseFloat(takeProfitOrder.price || '0') - currentPrice) / currentPrice) * 100 : null;
-  const nextSafetyDistance = nextSafetyOrder && currentPrice > 0 ? ((parseFloat(nextSafetyOrder.price || '0') - currentPrice) / currentPrice) * 100 : null;
 
   return (
     <div className="min-h-screen bg-crypto-dark text-white">
@@ -173,72 +144,72 @@ export function MyBotsPage() {
               </div>
             </div>
 
-            {/* Bot Configuration and Live Metrics */}
+            {/* Bot Configuration - Single Wide Card */}
             <Card className="bg-crypto-darker border-gray-800 mb-6">
               <CardHeader>
                 <CardTitle className="text-white">Bot Configuration</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                  <Card className="bg-crypto-darker border-gray-800">
-                    <CardHeader>
+                  <Card className="bg-gray-800/50 border-gray-700">
+                    <CardHeader className="pb-2">
                       <CardTitle className="text-white text-sm">Base Order</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="text-xl font-bold text-green-400">${selectedBot.baseOrderAmount}</div>
-                      <p className="text-xs text-crypto-light mt-1">Initial order size</p>
+                    <CardContent className="pt-0">
+                      <div className="text-lg font-bold text-green-400">${selectedBot.baseOrderAmount}</div>
+                      <p className="text-xs text-crypto-light">Initial order size</p>
                     </CardContent>
                   </Card>
 
-                  <Card className="bg-crypto-darker border-gray-800">
-                    <CardHeader>
+                  <Card className="bg-gray-800/50 border-gray-700">
+                    <CardHeader className="pb-2">
                       <CardTitle className="text-white text-sm">Safety Order</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="text-xl font-bold text-blue-400">${selectedBot.safetyOrderAmount}</div>
-                      <p className="text-xs text-crypto-light mt-1">DCA order size</p>
+                    <CardContent className="pt-0">
+                      <div className="text-lg font-bold text-blue-400">${selectedBot.safetyOrderAmount}</div>
+                      <p className="text-xs text-crypto-light">DCA order size</p>
                     </CardContent>
                   </Card>
 
-                  <Card className="bg-crypto-darker border-gray-800">
-                    <CardHeader>
+                  <Card className="bg-gray-800/50 border-gray-700">
+                    <CardHeader className="pb-2">
                       <CardTitle className="text-white text-sm">Max Safety Orders</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="text-xl font-bold text-yellow-400">{selectedBot.maxSafetyOrders}</div>
-                      <p className="text-xs text-crypto-light mt-1">DCA limit</p>
+                    <CardContent className="pt-0">
+                      <div className="text-lg font-bold text-yellow-400">{selectedBot.maxSafetyOrders}</div>
+                      <p className="text-xs text-crypto-light">DCA limit</p>
                     </CardContent>
                   </Card>
 
-                  <Card className="bg-crypto-darker border-gray-800">
-                    <CardHeader>
+                  <Card className="bg-gray-800/50 border-gray-700">
+                    <CardHeader className="pb-2">
                       <CardTitle className="text-white text-sm">Price Deviation</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="text-xl font-bold text-purple-400">{selectedBot.priceDeviation}%</div>
-                      <p className="text-xs text-crypto-light mt-1">DCA trigger</p>
+                    <CardContent className="pt-0">
+                      <div className="text-lg font-bold text-purple-400">{selectedBot.priceDeviation}%</div>
+                      <p className="text-xs text-crypto-light">DCA trigger</p>
                     </CardContent>
                   </Card>
 
-                  <Card className="bg-crypto-darker border-gray-800">
-                    <CardHeader>
+                  <Card className="bg-gray-800/50 border-gray-700">
+                    <CardHeader className="pb-2">
                       <CardTitle className="text-white text-sm">Current Cycle</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="text-xl font-bold text-cyan-400">#{selectedBot.currentCycle || 1}</div>
-                      <p className="text-xs text-crypto-light mt-1">Cycle number</p>
+                    <CardContent className="pt-0">
+                      <div className="text-lg font-bold text-cyan-400">#{selectedBot.currentCycle || 1}</div>
+                      <p className="text-xs text-crypto-light">Cycle number</p>
                     </CardContent>
                   </Card>
 
-                  <Card className="bg-crypto-darker border-gray-800">
-                    <CardHeader>
+                  <Card className="bg-gray-800/50 border-gray-700">
+                    <CardHeader className="pb-2">
                       <CardTitle className="text-white text-sm">Total P&L</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="text-xl font-bold text-emerald-400">
+                    <CardContent className="pt-0">
+                      <div className="text-lg font-bold text-emerald-400">
                         ${parseFloat(selectedBot.totalPnl || '0').toFixed(2)}
                       </div>
-                      <p className="text-xs text-crypto-light mt-1">All-time profit</p>
+                      <p className="text-xs text-crypto-light">All-time profit</p>
                     </CardContent>
                   </Card>
                 </div>
@@ -322,7 +293,7 @@ export function MyBotsPage() {
                   <div className="text-center py-8">
                     <div className="text-crypto-light">No active bots found</div>
                   </div>
-                ) : (
+                ) : 
                   bots.map((bot: any) => (
                     <Card key={bot.id} className="bg-crypto-darker border-gray-800 hover:border-gray-700 transition-colors cursor-pointer"
                           onClick={() => setSelectedBot(bot)}>
@@ -377,7 +348,6 @@ export function MyBotsPage() {
                       </CardContent>
                     </Card>
                   ))
-                )}
               )}
             </div>
           </div>
