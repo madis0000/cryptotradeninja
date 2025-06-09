@@ -484,9 +484,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Trading bot not found" });
       }
       
+      // Get counts of related data before deletion
+      const cycles = await storage.getBotCyclesByBotId(id);
+      const orders = await storage.getCycleOrdersByBotId(id);
+      const trades = await storage.getTradesByBotId(id);
+      
+      console.log(`[DELETE BOT] Deleting bot ${id} with ${cycles.length} cycles, ${orders.length} orders, ${trades.length} trades`);
+      
       await storage.deleteTradingBot(id);
-      res.json({ success: true });
+      
+      res.json({ 
+        success: true,
+        deletedData: {
+          cycles: cycles.length,
+          orders: orders.length,
+          trades: trades.length
+        }
+      });
     } catch (error) {
+      console.error('Error deleting trading bot:', error);
       res.status(500).json({ error: "Failed to delete trading bot" });
     }
   });

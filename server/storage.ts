@@ -10,6 +10,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sum, count } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -149,6 +150,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTradingBot(id: number): Promise<void> {
+    // Delete all related data in proper order (foreign key constraints)
+    
+    // 1. Delete cycle orders first (references cycles)
+    await db.delete(cycleOrders).where(eq(cycleOrders.botId, id));
+    
+    // 2. Delete bot cycles (references bot)
+    await db.delete(botCycles).where(eq(botCycles.botId, id));
+    
+    // 3. Delete trades (references bot)
+    await db.delete(trades).where(eq(trades.botId, id));
+    
+    // 4. Finally delete the bot itself
     await db.delete(tradingBots).where(eq(tradingBots.id, id));
   }
 

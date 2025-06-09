@@ -20,13 +20,13 @@ export function MyBotsPage() {
 
   // Fetch bot cycles for selected bot
   const { data: botCycles = [], isLoading: cyclesLoading } = useQuery<any[]>({
-    queryKey: ['/api/bot-cycles', selectedBot?.id],
+    queryKey: [`/api/bot-cycles/${selectedBot?.id}`],
     enabled: !!selectedBot
   });
 
   // Fetch bot orders for selected bot
   const { data: botOrders = [], isLoading: ordersLoading } = useQuery<any[]>({
-    queryKey: ['/api/bot-orders', selectedBot?.id],
+    queryKey: [`/api/bot-orders/${selectedBot?.id}`],
     enabled: !!selectedBot,
     refetchInterval: 5000 // Refresh every 5 seconds for real-time data
   });
@@ -43,11 +43,12 @@ export function MyBotsPage() {
     mutationFn: async (botId: number) => {
       await apiRequest(`/api/bots/${botId}`, 'DELETE');
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      const { deletedData } = data || {};
       toast({
-        title: "Bot Deleted",
-        description: "Trading bot has been successfully deleted.",
+        title: "Bot Deleted Successfully",
+        description: `Bot and all related data deleted: ${deletedData?.cycles || 0} cycles, ${deletedData?.orders || 0} orders, ${deletedData?.trades || 0} trades.`,
       });
     },
     onError: (error: any) => {
@@ -626,11 +627,22 @@ export function MyBotsPage() {
                       </div>
                     </div>
                     <div className="flex gap-2 pt-2">
-                      <Button size="sm" variant="outline" className="flex-1 text-xs border-green-600 hover:border-green-500 text-green-400">
-                        Start Bot
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1 text-xs border-green-600 hover:border-green-500 text-green-400"
+                        onClick={() => setSelectedBot(bot)}
+                      >
+                        View Details
                       </Button>
-                      <Button size="sm" variant="outline" className="flex-1 text-xs border-gray-600 hover:border-crypto-accent text-white">
-                        Edit
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1 text-xs border-red-600 hover:border-red-500 text-red-400"
+                        onClick={() => deleteBotMutation.mutate(bot.id)}
+                        disabled={deleteBotMutation.isPending}
+                      >
+                        {deleteBotMutation.isPending ? 'Deleting...' : 'Delete'}
                       </Button>
                     </div>
                   </CardContent>
