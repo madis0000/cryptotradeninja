@@ -2915,6 +2915,9 @@ export class WebSocketService {
           // Now place take profit order
           await this.placeTakeProfitOrder(botId, cycleId, currentPrice, quantity);
           
+          // Place the first safety order
+          await this.placeNextSafetyOrder(bot, await storage.updateBotCycle(cycleId, {}), currentPrice, 0);
+          
           // Broadcast order fill
           this.broadcastOrderFill(await storage.updateCycleOrder(baseOrder.id, {}));
 
@@ -3033,18 +3036,29 @@ export class WebSocketService {
         botId: order.botId,
         orderType: order.orderType,
         symbol: order.symbol,
+        side: order.side,
         quantity: order.quantity,
         price: order.price,
+        status: order.status,
         filledAt: order.filledAt
       }
     });
 
+    console.log(`[MARTINGALE STRATEGY] 📡 Broadcasting order fill to clients:`);
+    console.log(`[MARTINGALE STRATEGY]    Order Type: ${order.orderType}`);
+    console.log(`[MARTINGALE STRATEGY]    Symbol: ${order.symbol}`);
+    console.log(`[MARTINGALE STRATEGY]    Status: ${order.status}`);
+
     // Broadcast to all connected clients
+    let broadcastCount = 0;
     this.userConnections.forEach((connection) => {
       if (connection.ws.readyState === WebSocket.OPEN) {
         connection.ws.send(message);
+        broadcastCount++;
       }
     });
+
+    console.log(`[MARTINGALE STRATEGY] ✓ Broadcasted to ${broadcastCount} connected clients`);
   }
 
   public close() {
