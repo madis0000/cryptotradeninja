@@ -14,6 +14,9 @@ export function MyBotsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Initialize order notifications
+  useOrderNotifications();
+
   // Fetch bots data
   const { data: bots = [], isLoading: botsLoading } = useQuery<any[]>({
     queryKey: ['/api/bots']

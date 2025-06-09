@@ -2572,10 +2572,10 @@ export class WebSocketService {
       }
     };
 
-    // Send to all connected clients
-    this.connections.forEach(connection => {
-      if (connection.ws.readyState === WebSocket.OPEN) {
-        connection.ws.send(JSON.stringify(message));
+    // Send to all market subscriptions
+    this.marketSubscriptions.forEach(subscription => {
+      if (subscription.ws.readyState === WebSocket.OPEN) {
+        subscription.ws.send(JSON.stringify(message));
       }
     });
 
@@ -3520,13 +3520,17 @@ export class WebSocketService {
 
         if (orderResult && orderResult.orderId) {
           // Update the order with exchange order ID
-          await storage.updateCycleOrder(baseOrder.id, {
+          const filledOrder = await storage.updateCycleOrder(baseOrder.id, {
             exchangeOrderId: orderResult.orderId.toString(),
             status: 'filled',
             filledQuantity: quantity.toFixed(1),
             filledPrice: currentPrice.toFixed(8),
             filledAt: new Date()
           });
+
+          // Broadcast order placement and fill notifications
+          this.broadcastOrderNotification(filledOrder, 'placed');
+          this.broadcastOrderNotification(filledOrder, 'filled');
 
           // Update cycle with base order info
           await storage.updateBotCycle(cycleId, {
@@ -3909,7 +3913,7 @@ export class WebSocketService {
         });
 
         if (orderResult && orderResult.orderId) {
-          await storage.updateCycleOrder(takeProfitOrder.id, {
+          const updatedOrder = await storage.updateCycleOrder(takeProfitOrder.id, {
             exchangeOrderId: orderResult.orderId.toString(),
             status: 'placed'
           });
@@ -3919,14 +3923,19 @@ export class WebSocketService {
           console.log(`[MARTINGALE STRATEGY]    Target Price: $${takeProfitPrice.toFixed(6)}`);
           console.log(`[MARTINGALE STRATEGY]    Expected Profit: ${takeProfitPercentage}%`);
 
+          // Broadcast order placement notification
+          this.broadcastOrderNotification(updatedOrder, 'placed');
+
         } else {
           console.error(`[MARTINGALE STRATEGY] ❌ Failed to place take profit order - No order ID returned`);
-          await storage.updateCycleOrder(takeProfitOrder.id, { status: 'failed' });
+          const failedOrder = await storage.updateCycleOrder(takeProfitOrder.id, { status: 'failed' });
+          this.broadcastOrderNotification(failedOrder, 'failed');
         }
 
       } catch (orderError) {
         console.error(`[MARTINGALE STRATEGY] ❌ Error placing take profit order:`, orderError);
-        await storage.updateCycleOrder(takeProfitOrder.id, { status: 'failed' });
+        const failedOrder = await storage.updateCycleOrder(takeProfitOrder.id, { status: 'failed' });
+        this.broadcastOrderNotification(failedOrder, 'failed');
       }
 
     } catch (error) {
