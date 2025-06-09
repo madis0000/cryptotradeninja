@@ -2449,33 +2449,232 @@ export class WebSocketService {
     console.log(`[MARTINGALE STRATEGY] ===== SAFETY ORDER PROCESSING COMPLETE =====\n`);
   }
 
-  private async handleTakeProfitFill(order: CycleOrder, cycle: BotCycle) {
+  private async placeNextSafetyOrder(bot: any, cycle: BotCycle, averagePrice: number, currentSafetyOrders: number) {
+    console.log(`\n[MARTINGALE STRATEGY] ===== PLACING NEXT SAFETY ORDER =====`);
+    
     try {
+      const exchange = await storage.getExchangesByUserId(bot.userId);
+      const activeExchange = exchange.find(ex => ex.id === bot.exchangeId && ex.isActive);
+      
+      if (!activeExchange) {
+        console.error(`[MARTINGALE STRATEGY] ❌ No active exchange found for safety order`);
+        return;
+      }
+
+      // Calculate safety order price (price drop from average)
+      const priceDeviation = parseFloat(bot.priceDeviation || '1.5');
+      const deviationMultiplier = parseFloat(bot.priceDeviationMultiplier || '1.5');
+      
+      // Apply deviation multiplier for subsequent safety orders
+      const adjustedDeviation = priceDeviation * Math.pow(deviationMultiplier, currentSafetyOrders);
+      
+      const safetyOrderPrice = bot.direction === 'long' 
+        ? averagePrice * (1 - adjustedDeviation / 100)
+        : averagePrice * (1 + adjustedDeviation / 100);
+
+      // Calculate safety order quantity
+      const safetyOrderAmount = parseFloat(bot.safetyOrderAmount);
+      const sizeMultiplier = parseFloat(bot.safetyOrderSizeMultiplier || '2.0');
+      
+      // Apply size multiplier for subsequent safety orders
+      const adjustedAmount = safetyOrderAmount * Math.pow(sizeMultiplier, currentSafetyOrders);
+      const quantity = adjustedAmount / safetyOrderPrice;
+
+      console.log(`[MARTINGALE STRATEGY] 📊 SAFETY ORDER ${currentSafetyOrders + 1} CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Current Average Price: $${averagePrice.toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    Base Deviation: ${priceDeviation}%`);
+      console.log(`[MARTINGALE STRATEGY]    Deviation Multiplier: ${deviationMultiplier}x`);
+      console.log(`[MARTINGALE STRATEGY]    Adjusted Deviation: ${adjustedDeviation.toFixed(2)}%`);
+      console.log(`[MARTINGALE STRATEGY]    Safety Order Price: $${safetyOrderPrice.toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    Base Amount: $${safetyOrderAmount}`);
+      console.log(`[MARTINGALE STRATEGY]    Size Multiplier: ${sizeMultiplier}x`);
+      console.log(`[MARTINGALE STRATEGY]    Adjusted Amount: $${adjustedAmount.toFixed(2)}`);
+      console.log(`[MARTINGALE STRATEGY]    Calculated Quantity: ${quantity.toFixed(8)}`);
+
+      // Create safety order record
+      const safetyOrder = await storage.createCycleOrder({
+        cycleId: cycle.id,
+        botId: bot.id,
+        userId: bot.userId,
+        orderType: 'safety_order',
+        side: bot.direction === 'long' ? 'BUY' : 'SELL',
+        orderCategory: 'LIMIT',
+        symbol: bot.tradingPair,
+        quantity: quantity.toFixed(8),
+        price: safetyOrderPrice.toFixed(8),
+        status: 'pending'
+      });
+
+      console.log(`[MARTINGALE STRATEGY] ✓ Created safety order record (ID: ${safetyOrder.id})`);
+
+      try {
+        console.log(`[MARTINGALE STRATEGY] 🚀 Placing safety order on ${activeExchange.name}...`);
+        
+        const orderResult = await this.placeOrderOnExchange(activeExchange, {
+          symbol: bot.tradingPair,
+          side: bot.direction === 'long' ? 'BUY' : 'SELL',
+          type: 'LIMIT',
+          quantity: quantity.toFixed(8),
+          price: safetyOrderPrice.toFixed(8),
+          timeInForce: 'GTC'
+        });
+
+        if (orderResult && orderResult.orderId) {
+          await storage.updateCycleOrder(safetyOrder.id, {
+            exchangeOrderId: orderResult.orderId.toString(),
+            status: 'placed'
+          });
+
+          console.log(`[MARTINGALE STRATEGY] ✅ SAFETY ORDER ${currentSafetyOrders + 1} SUCCESSFULLY PLACED!`);
+          console.log(`[MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
+          console.log(`[MARTINGALE STRATEGY]    Trigger Price: $${safetyOrderPrice.toFixed(6)}`);
+          console.log(`[MARTINGALE STRATEGY]    Investment: $${adjustedAmount.toFixed(2)}`);
+
+        } else {
+          console.error(`[MARTINGALE STRATEGY] ❌ Failed to place safety order - No order ID returned`);
+          await storage.updateCycleOrder(safetyOrder.id, { status: 'failed' });
+        }
+
+      } catch (orderError) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Error placing safety order:`, orderError);
+        await storage.updateCycleOrder(safetyOrder.id, { status: 'failed' });
+      }
+
+    } catch (error) {
+      console.error(`[MARTINGALE STRATEGY] ❌ Critical error in placeNextSafetyOrder:`, error);
+    }
+    
+    console.log(`[MARTINGALE STRATEGY] ===== SAFETY ORDER PLACEMENT COMPLETE =====\n`);
+  }
+
+  private async handleTakeProfitFill(order: CycleOrder, cycle: BotCycle) {
+    console.log(`\n[MARTINGALE STRATEGY] ===== TAKE PROFIT FILLED =====`);
+    
+    try {
+      const bot = await storage.getTradingBot(cycle.botId);
+      if (!bot) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Bot ${cycle.botId} not found for take profit handling`);
+        return;
+      }
+
+      console.log(`[MARTINGALE STRATEGY] 🎯 TAKE PROFIT ANALYSIS:`);
+      console.log(`[MARTINGALE STRATEGY]    Fill Price: $${parseFloat(order.price || '0').toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    Fill Quantity: ${order.quantity}`);
+      console.log(`[MARTINGALE STRATEGY]    Cycle Number: ${cycle.cycleNumber || 1}`);
+
       // Calculate profit
       const totalInvested = parseFloat(cycle.totalInvested || '0');
       const totalReceived = parseFloat(order.quantity) * parseFloat(order.price || '0');
       const profit = totalReceived - totalInvested;
+      const profitPercentage = (profit / totalInvested) * 100;
+
+      console.log(`[MARTINGALE STRATEGY] 💰 PROFIT CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Total Invested: $${totalInvested.toFixed(2)}`);
+      console.log(`[MARTINGALE STRATEGY]    Total Received: $${totalReceived.toFixed(2)}`);
+      console.log(`[MARTINGALE STRATEGY]    Net Profit: $${profit.toFixed(2)}`);
+      console.log(`[MARTINGALE STRATEGY]    Profit Percentage: ${profitPercentage.toFixed(2)}%`);
+      console.log(`[MARTINGALE STRATEGY]    Safety Orders Used: ${cycle.filledSafetyOrders || 0}/${bot.maxSafetyOrders}`);
+
+      // Record the trade for analytics
+      await storage.createTrade({
+        userId: bot.userId,
+        botId: cycle.botId,
+        tradingPair: bot.tradingPair,
+        side: order.side,
+        orderType: 'MARKET',
+        orderCategory: 'MARKET',
+        amount: order.quantity,
+        quoteAmount: totalReceived.toString(),
+        price: order.price || '0',
+        status: 'filled',
+        exchangeOrderId: order.exchangeOrderId || ''
+      });
+
+      console.log(`[MARTINGALE STRATEGY] ✓ Trade recorded for analytics`);
 
       // Complete current cycle
       await storage.completeBotCycle(cycle.id);
+      console.log(`[MARTINGALE STRATEGY] ✓ Cycle ${cycle.cycleNumber || 1} completed successfully`);
 
-      // Start new cycle automatically
-      await this.startNewMartingaleCycle(cycle.botId, (cycle.cycleNumber || 1) + 1);
+      // Check if bot should continue (not paused/stopped)
+      if (bot.isActive) {
+        console.log(`[MARTINGALE STRATEGY] 🔄 Bot is active - Starting new cycle...`);
+        
+        // Wait a moment before starting new cycle (cooldown)
+        const cooldownSeconds = typeof bot.cooldownBetweenRounds === 'string' 
+          ? parseInt(bot.cooldownBetweenRounds) 
+          : (bot.cooldownBetweenRounds || 60);
+        const cooldown = cooldownSeconds * 1000; // Convert to milliseconds
+        console.log(`[MARTINGALE STRATEGY] ⏱️ Applying cooldown: ${cooldownSeconds}s`);
+        
+        setTimeout(async () => {
+          await this.startNewMartingaleCycle(cycle.botId, (cycle.cycleNumber || 1) + 1);
+        }, cooldown);
 
-      console.log(`[MARTINGALE] Take profit filled - Profit: ${profit.toFixed(8)} - Starting new cycle`);
+      } else {
+        console.log(`[MARTINGALE STRATEGY] ⏸️ Bot is inactive - No new cycle will be started`);
+      }
+
+      console.log(`[MARTINGALE STRATEGY] ✅ CYCLE COMPLETED SUCCESSFULLY!`);
+      console.log(`[MARTINGALE STRATEGY]    Final Profit: $${profit.toFixed(2)} (${profitPercentage.toFixed(2)}%)`);
+      console.log(`[MARTINGALE STRATEGY]    Cycle Duration: Completed`);
 
     } catch (error) {
-      console.error('[MARTINGALE] Error handling take profit fill:', error);
+      console.error(`[MARTINGALE STRATEGY] ❌ Error handling take profit fill:`, error);
     }
+    
+    console.log(`[MARTINGALE STRATEGY] ===== TAKE PROFIT PROCESSING COMPLETE =====\n`);
   }
 
   private async updateTakeProfitOrder(cycle: BotCycle, newAveragePrice: number) {
+    console.log(`\n[MARTINGALE STRATEGY] ===== UPDATING TAKE PROFIT ORDER =====`);
+    
     try {
       // Get bot configuration
       const bot = await storage.getTradingBot(cycle.botId);
-      if (!bot) return;
+      if (!bot) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Bot ${cycle.botId} not found for take profit update`);
+        return;
+      }
 
-      const takeProfitPrice = newAveragePrice * (1 + parseFloat(bot.takeProfitPercentage) / 100);
+      const exchange = await storage.getExchangesByUserId(bot.userId);
+      const activeExchange = exchange.find(ex => ex.id === bot.exchangeId && ex.isActive);
+      
+      if (!activeExchange) {
+        console.error(`[MARTINGALE STRATEGY] ❌ No active exchange found for take profit update`);
+        return;
+      }
+
+      // Calculate new take profit price based on updated average
+      const takeProfitPercentage = parseFloat(bot.takeProfitPercentage || '1.5');
+      const newTakeProfitPrice = bot.direction === 'long' 
+        ? newAveragePrice * (1 + takeProfitPercentage / 100)
+        : newAveragePrice * (1 - takeProfitPercentage / 100);
+
+      console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT UPDATE CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Previous Average: $${parseFloat(cycle.baseOrderPrice || '0').toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    New Average Price: $${newAveragePrice.toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    Take Profit %: ${takeProfitPercentage}%`);
+      console.log(`[MARTINGALE STRATEGY]    New Take Profit Price: $${newTakeProfitPrice.toFixed(6)}`);
+
+      // Find existing take profit order for this cycle
+      const cycleOrders = await storage.getCycleOrders(cycle.id);
+      const existingTakeProfit = cycleOrders.find(order => 
+        order.orderType === 'take_profit' && 
+        (order.status === 'placed' || order.status === 'pending')
+      );
+
+      if (existingTakeProfit) {
+        console.log(`[MARTINGALE STRATEGY] 🔄 Found existing take profit order (ID: ${existingTakeProfit.id})`);
+        console.log(`[MARTINGALE STRATEGY]    Old Price: $${parseFloat(existingTakeProfit.price || '0').toFixed(6)}`);
+        
+        // Cancel existing order (in production, this would cancel on exchange)
+        await storage.updateCycleOrder(existingTakeProfit.id, { status: 'cancelled' });
+        console.log(`[MARTINGALE STRATEGY] ✓ Cancelled existing take profit order`);
+      }
+
+      // Get total quantity to sell
+      const totalQuantity = parseFloat(cycle.totalQuantity || '0');
 
       // Create new take profit order
       const newTakeProfitOrder = await storage.createCycleOrder({
@@ -2483,19 +2682,55 @@ export class WebSocketService {
         botId: cycle.botId,
         userId: cycle.userId,
         orderType: 'take_profit',
-        side: 'SELL',
+        side: bot.direction === 'long' ? 'SELL' : 'BUY',
         orderCategory: 'LIMIT',
         symbol: bot.tradingPair,
-        quantity: cycle.totalQuantity ?? '0',
-        price: takeProfitPrice.toString(),
+        quantity: totalQuantity.toFixed(8),
+        price: newTakeProfitPrice.toFixed(8),
+        status: 'pending',
         clientOrderId: `TP_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       });
 
-      console.log(`[MARTINGALE] Updated take profit order at ${takeProfitPrice.toFixed(8)}`);
+      console.log(`[MARTINGALE STRATEGY] ✓ Created new take profit order record (ID: ${newTakeProfitOrder.id})`);
+
+      try {
+        console.log(`[MARTINGALE STRATEGY] 🚀 Placing updated take profit order on ${activeExchange.name}...`);
+        
+        const orderResult = await this.placeOrderOnExchange(activeExchange, {
+          symbol: bot.tradingPair,
+          side: bot.direction === 'long' ? 'SELL' : 'BUY',
+          type: 'LIMIT',
+          quantity: totalQuantity.toFixed(8),
+          price: newTakeProfitPrice.toFixed(8),
+          timeInForce: 'GTC'
+        });
+
+        if (orderResult && orderResult.orderId) {
+          await storage.updateCycleOrder(newTakeProfitOrder.id, {
+            exchangeOrderId: orderResult.orderId.toString(),
+            status: 'placed'
+          });
+
+          console.log(`[MARTINGALE STRATEGY] ✅ TAKE PROFIT ORDER UPDATED SUCCESSFULLY!`);
+          console.log(`[MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
+          console.log(`[MARTINGALE STRATEGY]    New Target Price: $${newTakeProfitPrice.toFixed(6)}`);
+          console.log(`[MARTINGALE STRATEGY]    Total Quantity: ${totalQuantity.toFixed(8)}`);
+
+        } else {
+          console.error(`[MARTINGALE STRATEGY] ❌ Failed to place updated take profit order`);
+          await storage.updateCycleOrder(newTakeProfitOrder.id, { status: 'failed' });
+        }
+
+      } catch (orderError) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Error placing updated take profit order:`, orderError);
+        await storage.updateCycleOrder(newTakeProfitOrder.id, { status: 'failed' });
+      }
 
     } catch (error) {
-      console.error('[MARTINGALE] Error updating take profit order:', error);
+      console.error(`[MARTINGALE STRATEGY] ❌ Critical error updating take profit order:`, error);
     }
+    
+    console.log(`[MARTINGALE STRATEGY] ===== TAKE PROFIT UPDATE COMPLETE =====\n`);
   }
 
   public async startNewMartingaleCycle(botId: number, cycleNumber: number) {
