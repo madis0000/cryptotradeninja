@@ -280,9 +280,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user!.id;
       const botData = insertTradingBotSchema.parse({ ...req.body, userId });
+      
+      // Create the bot in database
       const bot = await storage.createTradingBot(botData);
+      
+      // If it's a Martingale bot and active, start the first cycle
+      if (bot.strategy === 'martingale' && bot.isActive) {
+        console.log(`[MARTINGALE] Starting new bot cycle for bot ${bot.id}`);
+        
+        try {
+          // Create initial bot cycle
+          const cycle = await storage.createBotCycle({
+            botId: bot.id,
+            cycleNumber: 1,
+            status: 'active',
+            totalInvested: '0',
+            currentPnl: '0',
+            averagePrice: '0'
+          });
+          
+          console.log(`[MARTINGALE] Created initial cycle ${cycle.id} for bot ${bot.id}`);
+          
+          // Start monitoring this bot for order fills
+          websocketService?.startNewMartingaleCycle(bot.id, 1);
+          
+        } catch (cycleError) {
+          console.error(`[MARTINGALE] Error creating initial cycle for bot ${bot.id}:`, cycleError);
+        }
+      }
+      
       res.json(bot);
     } catch (error) {
+      console.error('Error creating trading bot:', error);
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: "Invalid bot data", details: error.errors });
       } else {

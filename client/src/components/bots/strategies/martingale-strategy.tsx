@@ -163,7 +163,41 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     setConfig(prev => ({ ...prev, [field]: newValue.toString() }));
   };
 
-  const handleCreateBot = () => {
+  // Create bot mutation
+  const createBotMutation = useMutation({
+    mutationFn: async (botData: any) => {
+      const response = await fetch('/api/bots', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify(botData),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create bot');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (botData) => {
+      console.log('Bot created successfully:', botData);
+      // Open progress dialog to handle order placement
+      setProgressDialogOpen(true);
+    },
+    onError: (error: any) => {
+      setIsCreatingBot(false);
+      toast({
+        title: "Bot Creation Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  const handleCreateBot = async () => {
     if (!selectedExchangeId) {
       toast({
         title: "Exchange Required",
@@ -174,7 +208,35 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     }
 
     setIsCreatingBot(true);
-    setProgressDialogOpen(true);
+
+    // Prepare bot data
+    const botData = {
+      name: `Martingale Bot - ${selectedSymbol}`,
+      strategy: 'martingale',
+      symbol: selectedSymbol,
+      exchangeId: selectedExchangeId,
+      isActive: true,
+      configuration: {
+        direction: localDirection,
+        baseOrderSize: parseFloat(config.baseOrderSize),
+        safetyOrderSize: parseFloat(config.safetyOrderSize),
+        maxSafetyOrders: parseInt(config.maxSafetyOrders),
+        activeSafetyOrders: config.activeSafetyOrdersEnabled ? parseInt(config.activeSafetyOrders) : undefined,
+        takeProfit: parseFloat(config.takeProfit),
+        priceDeviation: parseFloat(config.priceDeviation),
+        priceDeviationMultiplier: config.priceDeviationMultiplier[0],
+        safetyOrderSizeMultiplier: config.safetyOrderSizeMultiplier[0],
+        cooldownBetweenRounds: parseInt(config.cooldownBetweenRounds),
+        takeProfitType: config.takeProfitType,
+        trailingProfit: parseFloat(config.trailingProfit),
+        triggerType: config.triggerType,
+        triggerPrice: config.triggerPrice ? parseFloat(config.triggerPrice) : undefined,
+        lowerPrice: config.lowerPrice ? parseFloat(config.lowerPrice) : undefined,
+        upperPrice: config.upperPrice ? parseFloat(config.upperPrice) : undefined
+      }
+    };
+
+    createBotMutation.mutate(botData);
   };
 
   const baseCurrency = selectedSymbol.replace('USDT', '');

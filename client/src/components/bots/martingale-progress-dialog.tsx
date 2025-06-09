@@ -64,13 +64,13 @@ export function MartingaleProgressDialog({
         }
       ];
 
-      // Add safety order steps
-      for (let i = 0; i < safetyOrderCount; i++) {
-        const deviation = parseFloat(botConfig.priceDeviation) * Math.pow(botConfig.priceDeviationMultiplier, i);
+      // Add safety orders
+      for (let i = 1; i <= safetyOrderCount; i++) {
+        const deviation = parseFloat(botConfig.priceDeviation) * Math.pow(botConfig.priceDeviationMultiplier, i - 1);
         initialSteps.push({
-          id: `safety_order_${i + 1}`,
-          title: `Safety Order ${i + 1}`,
-          description: `Buy order at -${deviation.toFixed(2)}% below base`,
+          id: `safety_order_${i}`,
+          title: `Safety Order ${i}`,
+          description: `Buy order at -${deviation.toFixed(1)}% from base price`,
           status: 'pending'
         });
       }
@@ -78,75 +78,106 @@ export function MartingaleProgressDialog({
       setSteps(initialSteps);
       setCurrentStep(0);
       setOverallProgress(0);
-      setIsProcessing(false);
+      
+      // Start the order placement process
+      if (!isProcessing) {
+        setIsProcessing(true);
+        startOrderPlacement();
+      }
     }
   }, [open, botConfig]);
 
-  // Simulate order placement process
+  // Start order placement process
   const startOrderPlacement = async () => {
-    if (isProcessing) return;
-    
-    setIsProcessing(true);
-    
     try {
-      for (let i = 0; i < steps.length; i++) {
-        setCurrentStep(i);
-        
-        // Update step to processing
-        setSteps(prev => prev.map((step, index) => 
-          index === i ? { ...step, status: 'processing' } : step
-        ));
-
-        // Simulate order placement delay
-        await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-
-        // Check for random errors (for demonstration)
-        if (Math.random() < 0.1) { // 10% chance of error
-          setSteps(prev => prev.map((step, index) => 
-            index === i ? { 
-              ...step, 
-              status: 'error',
-              errorMessage: 'Insufficient balance or market conditions'
-            } : step
-          ));
-          onError?.('Order placement failed');
-          setIsProcessing(false);
-          return;
-        }
-
-        // Mark step as completed
-        setSteps(prev => prev.map((step, index) => 
-          index === i ? { 
-            ...step, 
-            status: 'completed',
-            orderId: `ORDER_${Date.now()}_${i}`,
-            price: (5.55 + (Math.random() - 0.5) * 0.1).toFixed(4),
-            quantity: (parseFloat(botConfig.baseOrderSize) / 5.55).toFixed(4)
-          } : step
-        ));
-
-        // Update overall progress
-        setOverallProgress(((i + 1) / steps.length) * 100);
-      }
-
-      // All orders completed successfully
-      setTimeout(() => {
-        onComplete?.(`BOT_${Date.now()}`);
-      }, 1000);
-
+      await placeBaseOrder();
     } catch (error) {
-      onError?.('Unexpected error during order placement');
-    } finally {
-      setIsProcessing(false);
+      console.error('Error in order placement:', error);
+      onError?.(error instanceof Error ? error.message : 'Order placement failed');
     }
   };
 
-  // Start process when dialog opens
-  useEffect(() => {
-    if (open && steps.length > 0 && !isProcessing) {
-      startOrderPlacement();
+  // Place base order
+  const placeBaseOrder = async () => {
+    updateStepStatus('base_order', 'processing');
+    
+    try {
+      // Simulate API call for base order
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      updateStepStatus('base_order', 'completed', 'BO-12345', '5.993', botConfig.baseOrderSize);
+      setCurrentStep(1);
+      setOverallProgress(33);
+      
+      // Place take profit order
+      await placeTakeProfitOrder();
+    } catch (error) {
+      updateStepStatus('base_order', 'error', undefined, undefined, undefined, 'Failed to place base order');
+      throw error;
     }
-  }, [open, steps.length]);
+  };
+
+  // Place take profit order
+  const placeTakeProfitOrder = async () => {
+    updateStepStatus('take_profit', 'processing');
+    
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const takeProfitPrice = (5.993 * (1 + parseFloat(botConfig.takeProfit) / 100)).toFixed(3);
+      updateStepStatus('take_profit', 'completed', 'TP-12345', takeProfitPrice, botConfig.baseOrderSize);
+      setCurrentStep(2);
+      setOverallProgress(66);
+      
+      // Place safety orders
+      await placeSafetyOrders();
+    } catch (error) {
+      updateStepStatus('take_profit', 'error', undefined, undefined, undefined, 'Failed to place take profit order');
+      throw error;
+    }
+  };
+
+  // Place safety orders
+  const placeSafetyOrders = async () => {
+    const safetyOrderCount = botConfig.activeSafetyOrders || botConfig.maxSafetyOrders;
+    
+    for (let i = 1; i <= safetyOrderCount; i++) {
+      const stepId = `safety_order_${i}`;
+      updateStepStatus(stepId, 'processing');
+      
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const deviation = parseFloat(botConfig.priceDeviation) * Math.pow(botConfig.priceDeviationMultiplier, i - 1);
+        const orderPrice = (5.993 * (1 - deviation / 100)).toFixed(3);
+        
+        updateStepStatus(stepId, 'completed', `SO-${12345 + i}`, orderPrice, botConfig.safetyOrderSize);
+        setCurrentStep(2 + i);
+        setOverallProgress(66 + (34 * i / safetyOrderCount));
+      } catch (error) {
+        updateStepStatus(stepId, 'error', undefined, undefined, undefined, `Failed to place safety order ${i}`);
+        throw error;
+      }
+    }
+    
+    // Complete the process
+    setOverallProgress(100);
+    setIsProcessing(false);
+    
+    // Notify completion after a short delay
+    setTimeout(() => {
+      onComplete?.('martingale-bot-123');
+    }, 1000);
+  };
+
+  // Update step status
+  const updateStepStatus = (stepId: string, status: OrderStep['status'], orderId?: string, price?: string, quantity?: string, errorMessage?: string) => {
+    setSteps(prev => prev.map(step => 
+      step.id === stepId 
+        ? { ...step, status, orderId, price, quantity, errorMessage }
+        : step
+    ));
+  };
 
   const getStepIcon = (step: OrderStep, index: number) => {
     if (step.status === 'completed') {
@@ -178,59 +209,43 @@ export function MartingaleProgressDialog({
           </div>
 
           {/* Steps List */}
-          <div className="space-y-3 max-h-64 overflow-y-auto">
+          <div className="space-y-3 max-h-60 overflow-y-auto">
             {steps.map((step, index) => (
               <div
                 key={step.id}
                 className={cn(
-                  "flex items-start space-x-3 p-3 rounded-lg transition-colors",
-                  index === currentStep && step.status === 'processing' 
-                    ? "bg-blue-500/10 border border-blue-500/20" 
-                    : "bg-crypto-darker"
+                  "flex items-start gap-3 p-3 rounded-lg border",
+                  step.status === 'completed' && "bg-green-900/20 border-green-700/50",
+                  step.status === 'error' && "bg-red-900/20 border-red-700/50",
+                  step.status === 'processing' && "bg-blue-900/20 border-blue-700/50",
+                  step.status === 'pending' && "bg-gray-900/20 border-gray-700/50"
                 )}
               >
-                <div className="flex-shrink-0 mt-0.5">
-                  {getStepIcon(step, index)}
-                </div>
+                {getStepIcon(step, index)}
                 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-white">{step.title}</p>
-                    {step.status === 'processing' && (
-                      <span className="text-xs text-blue-400">Processing...</span>
+                    <h4 className="text-sm font-medium text-white">{step.title}</h4>
+                    {step.orderId && (
+                      <span className="text-xs text-gray-400">#{step.orderId}</span>
                     )}
                   </div>
                   
                   <p className="text-xs text-gray-400 mt-1">{step.description}</p>
                   
-                  {step.status === 'completed' && step.orderId && (
-                    <div className="mt-2 text-xs text-green-400">
-                      <div>Order ID: {step.orderId}</div>
-                      {step.price && step.quantity && (
-                        <div>Price: ${step.price} | Qty: {step.quantity}</div>
-                      )}
+                  {step.price && step.quantity && (
+                    <div className="flex gap-4 mt-2 text-xs">
+                      <span className="text-green-400">Price: {step.price}</span>
+                      <span className="text-blue-400">Qty: {step.quantity}</span>
                     </div>
                   )}
                   
-                  {step.status === 'error' && step.errorMessage && (
-                    <div className="mt-2 text-xs text-red-400">
-                      Error: {step.errorMessage}
-                    </div>
+                  {step.errorMessage && (
+                    <p className="text-xs text-red-400 mt-1">{step.errorMessage}</p>
                   )}
                 </div>
               </div>
             ))}
-          </div>
-
-          {/* Bot Configuration Summary */}
-          <div className="border-t border-gray-700 pt-4">
-            <h4 className="text-sm font-medium text-gray-300 mb-2">Bot Configuration</h4>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="text-gray-400">Symbol: <span className="text-white">{botConfig.symbol}</span></div>
-              <div className="text-gray-400">Base Order: <span className="text-white">{botConfig.baseOrderSize} USDT</span></div>
-              <div className="text-gray-400">Take Profit: <span className="text-white">{botConfig.takeProfit}%</span></div>
-              <div className="text-gray-400">Safety Orders: <span className="text-white">{botConfig.activeSafetyOrders || botConfig.maxSafetyOrders}</span></div>
-            </div>
           </div>
         </div>
       </DialogContent>
