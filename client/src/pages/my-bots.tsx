@@ -185,7 +185,7 @@ export function MyBotsPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-lg font-medium text-white capitalize">{botData.strategy}</p>
-                <p className="text-xs text-crypto-light mt-1">Direction: {botData.direction?.toUpperCase()}</p>
+                <p className="text-xs text-crypto-light mt-1">Direction: {botData.direction?.toUpperCase() || 'LONG'}</p>
               </CardContent>
             </Card>
 
@@ -194,7 +194,7 @@ export function MyBotsPage() {
                 <CardTitle className="text-sm text-crypto-light">Base Order</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-lg font-medium text-white">${botData.baseOrderAmount || botData.base_order_amount || '0.00'}</p>
+                <p className="text-lg font-medium text-white">${parseFloat(botData.baseOrderAmount || '0').toFixed(2)}</p>
                 <p className="text-xs text-crypto-light mt-1">Initial investment per cycle</p>
               </CardContent>
             </Card>
@@ -204,8 +204,8 @@ export function MyBotsPage() {
                 <CardTitle className="text-sm text-crypto-light">Safety Orders</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-lg font-medium text-white">{botData.maxSafetyOrders || botData.max_safety_orders || 0}</p>
-                <p className="text-xs text-crypto-light mt-1">Max: ${botData.safetyOrderAmount || botData.safety_order_amount || '0.00'} each</p>
+                <p className="text-lg font-medium text-white">{botData.maxSafetyOrders || 0}</p>
+                <p className="text-xs text-crypto-light mt-1">Max: ${parseFloat(botData.safetyOrderAmount || '0').toFixed(2)} each</p>
               </CardContent>
             </Card>
           </div>
@@ -219,20 +219,20 @@ export function MyBotsPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <p className="text-crypto-light text-sm">Price Deviation</p>
-                  <p className="text-white font-medium">{botData.priceDeviation || botData.price_deviation || 0}%</p>
+                  <p className="text-white font-medium">{parseFloat(botData.priceDeviation || '0').toFixed(1)}%</p>
                 </div>
                 <div>
                   <p className="text-crypto-light text-sm">Take Profit</p>
-                  <p className="text-white font-medium">{botData.takeProfitPercentage || botData.take_profit_percentage || 0}%</p>
+                  <p className="text-white font-medium">{parseFloat(botData.takeProfitPercentage || '0').toFixed(1)}%</p>
                 </div>
                 <div>
                   <p className="text-crypto-light text-sm">Volume Scale</p>
-                  <p className="text-white font-medium">{botData.volumeScale || botData.volume_scale || 0}x</p>
+                  <p className="text-white font-medium">{parseFloat(botData.safetyOrderSizeMultiplier || '1').toFixed(1)}x</p>
                 </div>
                 <div>
                   <p className="text-crypto-light text-sm">Created</p>
                   <p className="text-white font-medium">
-                    {new Date(botData.createdAt || botData.created_at).toLocaleDateString()}
+                    {botData.createdAt ? new Date(botData.createdAt).toLocaleDateString() : 'N/A'}
                   </p>
                 </div>
               </div>
@@ -306,12 +306,12 @@ export function MyBotsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-crypto-light">Total Invested:</span>
-                  <span className="text-white font-medium">${parseFloat(botData.totalInvested || botData.total_invested || '0').toFixed(2)}</span>
+                  <span className="text-white font-medium">${parseFloat(botData.totalInvested || '0').toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-crypto-light">Total PnL:</span>
-                  <span className={`font-medium ${parseFloat(botData.totalPnl || botData.total_pnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    ${parseFloat(botData.totalPnl || botData.total_pnl || '0').toFixed(2)}
+                  <span className={`font-medium ${parseFloat(botData.totalPnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${parseFloat(botData.totalPnl || '0').toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -324,7 +324,7 @@ export function MyBotsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-crypto-light">Win Rate:</span>
-                  <span className="text-white font-medium">{parseFloat(botData.winRate || botData.win_rate || '0').toFixed(1)}%</span>
+                  <span className="text-white font-medium">{parseFloat(botData.winRate || '0').toFixed(1)}%</span>
                 </div>
               </CardContent>
             </Card>

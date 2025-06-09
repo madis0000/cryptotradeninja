@@ -523,9 +523,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const orders = await storage.getCycleOrdersByBotId(botId);
+      console.log(`[API] Found ${orders.length} orders for bot ${botId}`);
       res.json(orders);
     } catch (error) {
+      console.error('Error fetching bot orders:', error);
       res.status(500).json({ error: "Failed to fetch bot orders" });
+    }
+  });
+
+  // Individual bot API - Secured
+  app.get("/api/bots/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const botId = parseInt(req.params.id);
+      
+      const bot = await storage.getTradingBot(botId);
+      if (!bot || bot.userId !== userId) {
+        return res.status(404).json({ error: "Trading bot not found" });
+      }
+      
+      res.json(bot);
+    } catch (error) {
+      console.error('Error fetching individual bot:', error);
+      res.status(500).json({ error: "Failed to fetch bot" });
     }
   });
 
