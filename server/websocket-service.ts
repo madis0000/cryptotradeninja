@@ -79,6 +79,7 @@ export class WebSocketService {
   private pendingOrderRequests = new Map<string, { resolve: Function, reject: Function, timestamp: number }>();
   private binanceOrderWs: WebSocket | null = null;
   private binanceTickerWs: WebSocket | null = null;
+  private orderMonitoringInterval: NodeJS.Timeout | null = null;
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -2866,16 +2867,27 @@ export class WebSocketService {
 
   private async checkOrderFillsViaAPI(order: CycleOrder): Promise<boolean> {
     try {
+      // Get bot first to find the correct exchange
+      const bot = await storage.getTradingBot(order.botId);
+      if (!bot) return false;
+
       // Get exchange credentials
       const exchanges = await storage.getExchangesByUserId(order.userId);
-      const exchange = exchanges.find(ex => ex.id && order.botId);
+      const exchange = exchanges.find(ex => ex.id === bot.exchangeId);
       
       if (!exchange || !order.exchangeOrderId) {
+        console.log(`[ORDER MONITOR] Missing exchange (${!exchange ? 'not found' : 'found'}) or exchangeOrderId (${order.exchangeOrderId}) for order ${order.id}`);
         return false;
       }
 
-      const bot = await storage.getTradingBot(order.botId);
-      if (!bot) return false;
+      console.log(`[ORDER MONITOR] Checking order ${order.exchangeOrderId} on ${exchange.name}`);
+
+      // Decrypt API credentials
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.apiKey, 
+        exchange.apiSecret, 
+        exchange.encryptionIv
+      );
 
       // Query order status from Binance API
       const orderParams = new URLSearchParams({
@@ -2884,12 +2896,12 @@ export class WebSocketService {
         timestamp: Date.now().toString()
       });
 
-      const signature = this.createSignature(orderParams.toString(), exchange.apiSecret);
+      const signature = this.createSignature(orderParams.toString(), apiSecret);
       orderParams.append('signature', signature);
 
       const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order?${orderParams}`, {
         headers: {
-          'X-MBX-APIKEY': exchange.apiKey
+          'X-MBX-APIKEY': apiKey
         }
       });
 
