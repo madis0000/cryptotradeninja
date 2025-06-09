@@ -3307,8 +3307,12 @@ export class WebSocketService {
           // Get current cycle for safety order placement
           const currentCycle = await storage.getActiveBotCycle(botId);
           if (currentCycle) {
-            // Place the first safety order
-            await this.placeNextSafetyOrder(bot, currentCycle, currentPrice, 0);
+            // Place all initial safety orders
+            const maxSafetyOrders = parseInt(String(bot.maxSafetyOrders || 1));
+            for (let i = 0; i < maxSafetyOrders; i++) {
+              console.log(`[MARTINGALE STRATEGY] 🔄 Placing safety order ${i + 1} of ${maxSafetyOrders}...`);
+              await this.placeNextSafetyOrder(bot, currentCycle, currentPrice, i);
+            }
           }
           
           // Broadcast order fill

@@ -123,7 +123,7 @@ export function MartingaleProgressDialog({
               // Check base order status
               if (baseOrder && !baseOrderCompleted) {
                 if (baseOrder.status === 'filled') {
-                  updateStepStatus('base_order', 'completed', baseOrder.exchangeOrderId, baseOrder.filledPrice, baseOrder.quantity);
+                  updateStepStatus('base_order', 'completed', baseOrder.exchangeOrderId, baseOrder.filledPrice || baseOrder.price, baseOrder.filledQuantity || baseOrder.quantity);
                   setCurrentStep(1);
                   setOverallProgress(25);
                   baseOrderCompleted = true;
@@ -147,16 +147,24 @@ export function MartingaleProgressDialog({
               
               // Check safety orders status
               if (safetyOrders.length > 0) {
+                let placedSafetyOrders = 0;
                 safetyOrders.forEach((order: any, index: number) => {
                   const stepId = `safety_order_${index + 1}`;
                   if (order.status === 'placed') {
                     updateStepStatus(stepId, 'completed', order.exchangeOrderId, order.price, order.quantity);
-                    setCurrentStep(3);
-                    setOverallProgress(75 + (index + 1) * 25 / safetyOrders.length);
+                    placedSafetyOrders++;
                   } else if (order.status === 'failed') {
                     updateStepStatus(stepId, 'error', undefined, undefined, undefined, order.errorMessage || 'Safety order failed due to PRICE_FILTER');
+                  } else if (order.status === 'pending') {
+                    updateStepStatus(stepId, 'processing');
                   }
                 });
+                
+                // Update overall progress based on placed safety orders
+                if (placedSafetyOrders > 0) {
+                  setCurrentStep(3);
+                  setOverallProgress(75 + (placedSafetyOrders * 25 / safetyOrders.length));
+                }
               }
               
               // Complete if we have successful base order
