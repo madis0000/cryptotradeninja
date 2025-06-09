@@ -3170,6 +3170,47 @@ export class WebSocketService {
 
       console.log(`[MARTINGALE STRATEGY] ✓ Trade recorded for analytics`);
 
+      // CRITICAL: Cancel all pending safety orders before completing cycle
+      console.log(`[MARTINGALE STRATEGY] 🚫 CANCELLING PENDING SAFETY ORDERS...`);
+      const pendingSafetyOrders = await storage.getCycleOrders(cycle.id);
+      const safetyOrdersToCancel = pendingSafetyOrders.filter(ord => 
+        ord.orderType === 'safety_order' && 
+        (ord.status === 'placed' || ord.status === 'pending')
+      );
+
+      console.log(`[MARTINGALE STRATEGY] Found ${safetyOrdersToCancel.length} pending safety orders to cancel`);
+
+      for (const safetyOrder of safetyOrdersToCancel) {
+        try {
+          console.log(`[MARTINGALE STRATEGY] Cancelling safety order ${safetyOrder.id} (Exchange ID: ${safetyOrder.exchangeOrderId})`);
+          
+          if (safetyOrder.exchangeOrderId) {
+            // Cancel order on exchange
+            const cancelled = await this.cancelOrderOnExchange(safetyOrder.exchangeOrderId, order.symbol, bot.exchangeId);
+            if (cancelled) {
+              console.log(`[MARTINGALE STRATEGY] ✅ Successfully cancelled safety order ${safetyOrder.exchangeOrderId} on exchange`);
+            } else {
+              console.log(`[MARTINGALE STRATEGY] ⚠️ Failed to cancel safety order ${safetyOrder.exchangeOrderId} on exchange (may already be filled)`);
+            }
+          }
+
+          // Update order status to cancelled in database
+          await storage.updateCycleOrder(safetyOrder.id, {
+            status: 'cancelled'
+          });
+
+          // Broadcast cancellation notification
+          this.broadcastOrderNotification(safetyOrder, 'cancelled');
+          console.log(`[MARTINGALE STRATEGY] ✅ Updated safety order ${safetyOrder.id} status to cancelled`);
+
+        } catch (cancelError) {
+          console.error(`[MARTINGALE STRATEGY] ❌ Error cancelling safety order ${safetyOrder.id}:`, cancelError);
+          // Continue with other orders even if one fails
+        }
+      }
+
+      console.log(`[MARTINGALE STRATEGY] ✅ All pending safety orders have been cancelled`);
+
       // Update bot statistics
       const currentPnl = parseFloat(bot.totalPnl || '0');
       const newTotalPnl = currentPnl + profit;
