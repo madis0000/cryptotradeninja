@@ -156,6 +156,7 @@ export const cycleOrders = pgTable("cycle_orders", {
   status: text("status").notNull().default("pending"), // pending, filled, cancelled, partially_filled, failed
   filledQuantity: decimal("filled_quantity", { precision: 20, scale: 8 }).default("0"),
   filledPrice: decimal("filled_price", { precision: 20, scale: 8 }),
+  errorMessage: text("error_message"), // Store detailed error messages for failed orders
   
   createdAt: timestamp("created_at").defaultNow().notNull(),
   filledAt: timestamp("filled_at"),
