@@ -27,26 +27,11 @@ export function OrderForm({ symbol, className }: OrderFormProps) {
   const quoteAsset = symbol.includes("USDT") ? "USDT" : "USDC";
 
   // Get market data from WebSocket
-  const [marketPrice, setMarketPrice] = useState<string>("");
-  
-  useEffect(() => {
-    const publicWs = usePublicWebSocket({
-      onMessage: (data: any) => {
-        if (data && data.type === 'market_update' && data.data && data.data.symbol === symbol) {
-          setMarketPrice(data.data.price);
-        }
-      }
-    });
-
-    publicWs.connect([symbol]);
-
-    return () => {
-      publicWs.disconnect();
-    };
-  }, [symbol]);
+  const { marketData } = usePublicWebSocket(['ticker'], [symbol]);
+  const marketPrice = marketData?.[symbol]?.price;
 
   // Fetch balance data
-  const { data: balances = {} } = useQuery<Record<string, { free: string; locked: string }>>({
+  const { data: balances = {} } = useQuery({
     queryKey: ['/api/exchanges/1/balance'],
     refetchInterval: 5000,
   });

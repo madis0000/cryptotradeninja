@@ -93,17 +93,17 @@ export default function Trading() {
             {/* Left Panel - Order Book */}
             <OrderBook className="w-80 border-r border-gray-800" />
 
-            {/* Center Panel - Chart */}
+            {/* Center Panel - Chart & Trading Interface */}
             <div className="flex-1 flex flex-col">
               {/* Chart Section */}
               <TradingChart 
                 className="flex-1 border-b border-gray-800" 
                 symbol={selectedSymbol}
               />
-            </div>
 
-            {/* Right Panel - Order Form */}
-            <OrderForm className="w-80 border-l border-gray-800" symbol={selectedSymbol} />
+              {/* Order Form Section - Full Width */}
+              <OrderForm className="h-64 border-b border-gray-800" symbol={selectedSymbol} />
+            </div>
           </div>
 
           {/* Orders & History Section - Full Screen Width */}
