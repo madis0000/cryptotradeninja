@@ -81,36 +81,35 @@ export default function Trading() {
     <div className="min-h-screen bg-crypto-darker">
       <div className="flex h-screen overflow-hidden">
         {/* Left Column */}
-        <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex flex-col flex-1 overflow-hidden">
           {/* Header Section using shared component */}
           <TradingHeader 
             selectedSymbol={selectedSymbol}
             tickerData={tickerData}
           />
 
-          {/* Main Content Row */}
-          <div className="flex flex-1 min-h-0">
+          {/* Chart and OrderBook Row */}
+          <div className="flex h-96 border-b border-gray-800">
             {/* Left Panel - Order Book */}
             <OrderBook className="w-80 border-r border-gray-800" />
 
             {/* Center Panel - Chart Only */}
-            <div className="flex-1 flex flex-col min-h-0">
-              {/* Chart Section */}
+            <div className="flex-1">
               <TradingChart 
-                className="flex-1 border-b border-gray-800 min-h-0" 
+                className="h-full" 
                 symbol={selectedSymbol}
               />
             </div>
           </div>
 
-          {/* Order Form Section - Dynamic Height */}
-          <div className="border-b border-gray-800">
-            <OrderForm className="min-h-[16rem]" symbol={selectedSymbol} />
+          {/* Order Form Section */}
+          <div className="h-64 border-b border-gray-800">
+            <OrderForm className="h-full" symbol={selectedSymbol} />
           </div>
 
-          {/* Orders & History Section - Dynamic Height at Bottom */}
-          <div className="border-t border-gray-800">
-            <OrdersHistory className="min-h-[16rem]" />
+          {/* Orders & History Section */}
+          <div className="flex-1 min-h-0">
+            <OrdersHistory className="h-full" />
           </div>
         </div>
 
