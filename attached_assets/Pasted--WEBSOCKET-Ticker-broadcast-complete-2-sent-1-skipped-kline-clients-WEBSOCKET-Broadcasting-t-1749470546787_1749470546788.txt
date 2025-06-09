@@ -1,0 +1,54 @@
+[WEBSOCKET] Ticker broadcast complete: 2 sent, 1 skipped (kline clients)
+[WEBSOCKET] Broadcasting ticker update for AVAXUSDT to ticker clients only
+[WEBSOCKET] ⏭ Skipped KLINE client 7l1enxjsz - needs kline data, not ticker
+[WEBSOCKET] TICKER CLIENT mmitaj6ij: subscribed to [ICPUSDT], match: false
+[WEBSOCKET] TICKER CLIENT v6mt8q4v9: subscribed to [], match: true
+[WEBSOCKET] ✓ Sent ticker to v6mt8q4v9 for AVAXUSDT
+[WEBSOCKET] TICKER CLIENT 7uirttbyw: subscribed to [BTCUSDT, ETHUSDT, BNBUSDT, XRPUSDT, ADAUSDT, SOLUSDT, DOGEUSDT, AVAXUSDT, DOTUSDT, LINKUSDT, LTCUSDT, UNIUSDT, ATOMUSDT, ICPUSDT, APTUSDT, BTCUSDC, ETHUSDC, ADAUSDC, SOLUSDC, AVAXUSDC, ETHBTC, ADABTC, XRPBTC, LTCBTC, BNBBTC, DOGEBTC], match: true
+[WEBSOCKET] ✓ Sent ticker to 7uirttbyw for AVAXUSDT
+[WEBSOCKET] Ticker broadcast complete: 2 sent, 1 skipped (kline clients)
+[WEBSOCKET] Broadcasting ticker update for ICPUSDT to ticker clients only
+[WEBSOCKET] ⏭ Skipped KLINE client 7l1enxjsz - needs kline data, not ticker
+[WEBSOCKET] TICKER CLIENT mmitaj6ij: subscribed to [ICPUSDT], match: true
+[WEBSOCKET] ✓ Sent ticker to mmitaj6ij for ICPUSDT
+[WEBSOCKET] TICKER CLIENT v6mt8q4v9: subscribed to [], match: true
+[WEBSOCKET] ✓ Sent ticker to v6mt8q4v9 for ICPUSDT
+[WEBSOCKET] TICKER CLIENT 7uirttbyw: subscribed to [BTCUSDT, ETHUSDT, BNBUSDT, XRPUSDT, ADAUSDT, SOLUSDT, DOGEUSDT, AVAXUSDT, DOTUSDT, LINKUSDT, LTCUSDT, UNIUSDT, ATOMUSDT, ICPUSDT, APTUSDT, BTCUSDC, ETHUSDC, ADAUSDC, SOLUSDC, AVAXUSDC, ETHBTC, ADABTC, XRPBTC, LTCBTC, BNBBTC, DOGEBTC], match: true
+[WEBSOCKET] ✓ Sent ticker to 7uirttbyw for ICPUSDT
+[WEBSOCKET] Ticker broadcast complete: 3 sent, 1 skipped (kline clients)
+[WEBSOCKET] Broadcasting ticker update for SOLUSDC to ticker clients only
+[WEBSOCKET] ⏭ Skipped KLINE client 7l1enxjsz - needs kline data, not ticker
+[WEBSOCKET] TICKER CLIENT mmitaj6ij: subscribed to [ICPUSDT], match: false
+[WEBSOCKET] TICKER CLIENT v6mt8q4v9: subscribed to [], match: true
+[WEBSOCKET] ✓ Sent ticker to v6mt8q4v9 for SOLUSDC
+[WEBSOCKET] TICKER CLIENT 7uirttbyw: subscribed to [BTCUSDT, ETHUSDT, BNBUSDT, XRPUSDT, ADAUSDT, SOLUSDT, DOGEUSDT, AVAXUSDT, DOTUSDT, LINKUSDT, LTCUSDT, UNIUSDT, ATOMUSDT, ICPUSDT, APTUSDT, BTCUSDC, ETHUSDC, ADAUSDC, SOLUSDC, AVAXUSDC, ETHBTC, ADABTC, XRPBTC, LTCBTC, BNBBTC, DOGEBTC], match: true
+[WEBSOCKET] ✓ Sent ticker to 7uirttbyw for SOLUSDC
+[WEBSOCKET] Ticker broadcast complete: 2 sent, 1 skipped (kline clients)
+[WEBSOCKET] Broadcasting ticker update for APTUSDT to ticker clients only
+[WEBSOCKET] ⏭ Skipped KLINE client 7l1enxjsz - needs kline data, not ticker
+[WEBSOCKET] TICKER CLIENT mmitaj6ij: subscribed to [ICPUSDT], match: false
+[WEBSOCKET] TICKER CLIENT v6mt8q4v9: subscribed to [], match: true
+[WEBSOCKET] ✓ Sent ticker to v6mt8q4v9 for APTUSDT
+[WEBSOCKET] TICKER CLIENT 7uirttbyw: subscribed to [BTCUSDT, ETHUSDT, BNBUSDT, XRPUSDT, ADAUSDT, SOLUSDT, DOGEUSDT, AVAXUSDT, DOTUSDT, LINKUSDT, LTCUSDT, UNIUSDT, ATOMUSDT, ICPUSDT, APTUSDT, BTCUSDC, ETHUSDC, ADAUSDC, SOLUSDC, AVAXUSDC, ETHBTC, ADABTC, XRPBTC, LTCBTC, BNBBTC, DOGEBTC], match: true
+[WEBSOCKET] ✓ Sent ticker to 7uirttbyw for APTUSDT
+[WEBSOCKET] Ticker broadcast complete: 2 sent, 1 skipped (kline clients)
+[WEBSOCKET] Broadcasting ticker update for AVAXUSDC to ticker clients only
+[WEBSOCKET] ⏭ Skipped KLINE client 7l1enxjsz - needs kline data, not ticker
+[WEBSOCKET] TICKER CLIENT mmitaj6ij: subscribed to [ICPUSDT], match: false
+[WEBSOCKET] TICKER CLIENT v6mt8q4v9: subscribed to [], match: true
+[WEBSOCKET] ✓ Sent ticker to v6mt8q4v9 for AVAXUSDC
+[WEBSOCKET] TICKER CLIENT 7uirttbyw: subscribed to [BTCUSDT, ETHUSDT, BNBUSDT, XRPUSDT, ADAUSDT, SOLUSDT, DOGEUSDT, AVAXUSDT, DOTUSDT, LINKUSDT, LTCUSDT, UNIUSDT, ATOMUSDT, ICPUSDT, APTUSDT, BTCUSDC, ETHUSDC, ADAUSDC, SOLUSDC, AVAXUSDC, ETHBTC, ADABTC, XRPBTC, LTCBTC, BNBBTC, DOGEBTC], match: true
+[WEBSOCKET] ✓ Sent ticker to 7uirttbyw for AVAXUSDC
+[WEBSOCKET] Ticker broadcast complete: 2 sent, 1 skipped (kline clients)
+[BINANCE STREAM] Disconnected - Code: 1005, Reason: 
+[BALANCE] ✓ Sent balance update to client 7uirttbyw: USDT 10000.00000000
+[BALANCE] Broadcast complete: 1 clients updated for 1:1:ICPUSDT
+12:01:36 PM [express] GET /api/exchanges/1/balance/ICPUSDT 304 in 35ms :: {"asset":"","free":"0.00000…
+[BALANCE] ✓ Sent balance update to client 7uirttbyw: USDT 10000.00000000
+[BALANCE] Broadcast complete: 1 clients updated for 1:1:ICPUSDT
+[BALANCE] ✓ Sent balance update to client 7uirttbyw: USDT 10000.00000000
+[BALANCE] Broadcast complete: 1 clients updated for 1:1:ICPUSDT
+[BALANCE] ✓ Sent balance update to client 7uirttbyw: USDT 10000.00000000
+[BALANCE] Broadcast complete: 1 clients updated for 1:1:ICPUSDT
+[BALANCE] ✓ Sent balance update to client 7uirttbyw: USDT 10000.00000000
+[BALANCE] Broadcast complete: 1 clients updated for 1:1:ICPUSDT

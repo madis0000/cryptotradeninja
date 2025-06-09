@@ -801,7 +801,7 @@ export class WebSocketService {
         if (streamName.includes('@ticker')) {
           const symbol = processedData.s;
           if (symbol) {
-            console.log(`[BINANCE STREAM] Processing ticker for ${symbol}: price=${processedData.c}, change=${processedData.P}%`);
+
             
             const marketUpdate = {
               symbol: symbol,
@@ -1013,14 +1013,9 @@ export class WebSocketService {
           }
         }
         
-        console.log(`[BINANCE STREAM] Stream name: "${streamName}", processedData exists: ${!!processedData}`);
-        
         if (processedData) {
-          console.log(`[BINANCE STREAM] Processing stream: ${streamName}, data type: ${processedData.e}`);
-          
           // Handle ticker data
           if (streamName.includes('@ticker')) {
-            console.log(`[BINANCE STREAM] Processing ticker data for stream: ${streamName}`);
             const symbol = processedData.s;
             
             if (symbol) {
@@ -1035,9 +1030,7 @@ export class WebSocketService {
                 timestamp: Date.now()
               };
 
-              console.log(`[BINANCE STREAM] Market update for ${symbol}: ${processedData.c} (${processedData.P}%)`);
               this.marketData.set(symbol, marketUpdate);
-              console.log(`[WEBSOCKET] Broadcasting update for ${symbol} to ${this.marketSubscriptions.size} clients`);
               this.broadcastMarketUpdate(marketUpdate);
             }
           }
@@ -1053,8 +1046,6 @@ export class WebSocketService {
               
               // STRICT: Only process data for the exactly requested interval
               if (receivedInterval === expectedInterval) {
-                console.log(`[BINANCE STREAM] Processing ${receivedInterval} kline for ${symbol}: ${kline.c}`);
-                
                 const klineUpdate = {
                   symbol: symbol,
                   openTime: kline.t,
@@ -1085,9 +1076,6 @@ export class WebSocketService {
                 
                 this.marketData.set(symbol, marketUpdate);
                 this.broadcastMarketUpdate(marketUpdate);
-              } else {
-                // Ignore data from other intervals to prevent chart mixing
-                console.log(`[BINANCE STREAM] Ignoring ${receivedInterval} data (expecting ${expectedInterval})`);
               }
             }
           }
