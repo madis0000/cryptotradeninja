@@ -338,7 +338,7 @@ export class WebSocketService {
       });
 
       // Don't start streams automatically - wait for frontend subscription
-      console.log('[WEBSOCKET] Client connected - waiting for subscription request');
+      // Client connected - waiting for subscription request
     });
   }
 
@@ -2322,7 +2322,7 @@ export class WebSocketService {
   }
 
   private async fetchHistoricalKlinesWS(symbols: string[], interval: string) {
-    console.log(`[HISTORICAL WS] Fetching historical klines for:`, symbols, 'interval:', interval);
+    // Fetching historical klines
     
     for (const symbol of symbols) {
       try {
@@ -2343,7 +2343,7 @@ export class WebSocketService {
             }
           }
         } catch (error) {
-          console.log(`[HISTORICAL WS] Using default testnet WebSocket API endpoint`);
+          // Using default testnet WebSocket API endpoint
         }
         
         // Calculate time range for last 100 candles
@@ -2351,13 +2351,13 @@ export class WebSocketService {
         const intervalMs = this.getIntervalInMs(interval);
         const startTime = endTime - (intervalMs * 100);
         
-        console.log(`[HISTORICAL WS] Connecting to: ${wsApiUrl} for ${symbol} ${interval}`);
+        // Connecting to WebSocket API for historical data
         
         // Create WebSocket connection for historical data
         const ws = new WebSocket(wsApiUrl);
         
         ws.onopen = () => {
-          console.log(`[HISTORICAL WS] Connected to WebSocket API for ${symbol}`);
+          // Connected to WebSocket API
           
           // Send klines request using WebSocket API
           const klinesRequest = {
@@ -2372,7 +2372,7 @@ export class WebSocketService {
             }
           };
           
-          console.log(`[HISTORICAL WS] Sending klines request:`, klinesRequest);
+          // Sending klines request
           ws.send(JSON.stringify(klinesRequest));
         };
         
@@ -2452,7 +2452,7 @@ export class WebSocketService {
   private startMarketRefreshInterval() {
     // Request market data every 60 seconds via WebSocket API to reduce overhead
     this.marketRefreshInterval = setInterval(() => {
-      console.log('[WEBSOCKET] 🔄 Requesting market data via WebSocket API (60s interval)');
+      // Requesting market data via WebSocket API
       
       // Get all unique symbols currently subscribed across all clients
       const allSymbols = new Set<string>();
@@ -2469,7 +2469,7 @@ export class WebSocketService {
           console.error('[WEBSOCKET] Market data request failed:', error);
         });
       } else {
-        console.log('[WEBSOCKET] No active subscriptions - skipping data request');
+        // No active subscriptions - skipping data request
       }
     }, 60000); // 60 seconds
     
