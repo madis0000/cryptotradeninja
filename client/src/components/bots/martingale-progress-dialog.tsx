@@ -87,37 +87,129 @@ export function MartingaleProgressDialog({
     }
   }, [open, botConfig]);
 
-  // Start order placement process
-  const startOrderPlacement = async () => {
-    try {
-      await placeBaseOrder();
-    } catch (error) {
-      console.error('Error in order placement:', error);
-      onError?.(error instanceof Error ? error.message : 'Order placement failed');
-    }
-  };
-
-  // Place base order
-  const placeBaseOrder = async () => {
-    updateStepStatus('base_order', 'processing');
+  // Monitor order placement progress
+  const monitorOrderPlacementProgress = async (botId: string) => {
+    updateStepStatus('take_profit', 'processing');
     
     try {
-      // Simulate API call for base order
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Poll for order status updates
+      let attempts = 0;
+      const maxAttempts = 10;
       
-      updateStepStatus('base_order', 'completed', 'BO-12345', '5.993', botConfig.baseOrderSize);
-      setCurrentStep(1);
-      setOverallProgress(33);
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check bot cycles and orders
+        const cycleResponse = await fetch(`/api/bot-cycles/${botId}`);
+        if (cycleResponse.ok) {
+          const cycles = await cycleResponse.json();
+          if (cycles.length > 0) {
+            const latestCycle = cycles[0];
+            
+            // Check if base order was placed successfully
+            const ordersResponse = await fetch(`/api/bot-orders/${botId}`);
+            if (ordersResponse.ok) {
+              const orders = await ordersResponse.json();
+              const baseOrder = orders.find((order: any) => order.orderType === 'base_order');
+              
+              if (baseOrder) {
+                if (baseOrder.status === 'filled') {
+                  updateStepStatus('base_order', 'completed', baseOrder.exchangeOrderId, baseOrder.filledPrice, baseOrder.quantity);
+                  updateStepStatus('take_profit', 'completed', 'TP-PENDING', 'Pending', baseOrder.quantity);
+                  setCurrentStep(2);
+                  setOverallProgress(100);
+                  
+                  setTimeout(() => {
+                    onComplete?.(botId);
+                  }, 1000);
+                  return;
+                } else if (baseOrder.status === 'failed') {
+                  throw new Error(`Base order failed: ${baseOrder.errorMessage || 'Unknown error'}`);
+                }
+              }
+            }
+          }
+        }
+        
+        attempts++;
+      }
       
-      // Place take profit order
-      await placeTakeProfitOrder();
+      throw new Error('Order placement timeout - unable to confirm order status');
+      
     } catch (error) {
-      updateStepStatus('base_order', 'error', undefined, undefined, undefined, 'Failed to place base order');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to monitor order placement';
+      updateStepStatus('take_profit', 'error', undefined, undefined, undefined, errorMessage);
       throw error;
     }
   };
 
-  // Place take profit order
+  // Create bot and place orders via API
+  const createBotWithOrders = async () => {
+    updateStepStatus('base_order', 'processing');
+    
+    try {
+      // Call the actual bot creation API
+      const response = await fetch('/api/bots', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: `Martingale Bot - ${botConfig.symbol}`,
+          strategy: 'martingale',
+          tradingPair: botConfig.symbol,
+          direction: 'long',
+          baseOrderAmount: botConfig.baseOrderSize,
+          safetyOrderAmount: botConfig.safetyOrderSize,
+          maxSafetyOrders: botConfig.maxSafetyOrders,
+          activeSafetyOrdersEnabled: false,
+          activeSafetyOrders: botConfig.activeSafetyOrders || 1,
+          priceDeviation: botConfig.priceDeviation,
+          takeProfitPercentage: botConfig.takeProfit,
+          takeProfitType: 'fix',
+          trailingProfitPercentage: '0.5',
+          triggerType: 'market',
+          priceDeviationMultiplier: botConfig.priceDeviationMultiplier.toString(),
+          safetyOrderSizeMultiplier: '2.0',
+          cooldownBetweenRounds: 60,
+          exchangeId: 1 // Default to first exchange for now
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const bot = await response.json();
+      
+      updateStepStatus('base_order', 'completed', 'BO-PENDING', 'Market Price', botConfig.baseOrderSize);
+      setCurrentStep(1);
+      setOverallProgress(50);
+      
+      // Monitor order placement progress
+      await monitorOrderPlacementProgress(bot.id);
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create bot and place orders';
+      updateStepStatus('base_order', 'error', undefined, undefined, undefined, errorMessage);
+      throw error;
+    }
+  };
+
+  // Start order placement process
+  const startOrderPlacement = async () => {
+    try {
+      await createBotWithOrders();
+    } catch (error) {
+      console.error('Error in bot creation:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Bot creation failed';
+      updateStepStatus('base_order', 'error', undefined, undefined, undefined, errorMessage);
+      onError?.(errorMessage);
+    }
+  };
+
+  // Place take profit order (legacy function - now handled in monitoring)
   const placeTakeProfitOrder = async () => {
     updateStepStatus('take_profit', 'processing');
     
