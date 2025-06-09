@@ -101,13 +101,13 @@ export default function Trading() {
                 symbol={selectedSymbol}
               />
 
-              {/* Order Form Section - Full Width */}
+              {/* Order Form Section */}
               <OrderForm className="h-64 border-b border-gray-800" symbol={selectedSymbol} />
+
+              {/* Orders & History Section - Below Order Form */}
+              <OrdersHistory className="h-64 border-b border-gray-800" />
             </div>
           </div>
-
-          {/* Orders & History Section - Full Screen Width */}
-          <OrdersHistory className="h-64 border-t border-gray-800" />
         </div>
 
         {/* Right Panel - Markets using shared component */}
