@@ -80,6 +80,8 @@ export class WebSocketService {
   private binanceOrderWs: WebSocket | null = null;
   private binanceTickerWs: WebSocket | null = null;
   private orderMonitoringInterval: NodeJS.Timeout | null = null;
+  private userDataStreams = new Map<number, WebSocket>(); // exchangeId -> WebSocket
+  private listenKeys = new Map<number, string>(); // exchangeId -> listenKey
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -2698,18 +2700,20 @@ export class WebSocketService {
   }
 
   // Order monitoring system for Martingale cycle management
-  private orderMonitoringInterval: NodeJS.Timeout | null = null;
 
-  private startOrderMonitoring() {
-    // Check order status every 10 seconds
-    this.orderMonitoringInterval = setInterval(async () => {
-      await this.checkOrderFills();
-    }, 10000);
+  private async startOrderMonitoring() {
+    console.log('[ORDER MONITOR] Starting order monitoring for Martingale cycles');
     
-    console.log('[ORDER MONITOR] Started order monitoring for Martingale cycles');
+    // Start user data streams for real-time order updates
+    await this.initializeUserDataStreams();
+    
+    console.log('[ORDER MONITOR] Order monitoring initialized with WebSocket streams');
   }
 
   private async checkOrderFills() {
+    // This method is now primarily a fallback when WebSocket streams are not available
+    console.log('[ORDER MONITOR] Running fallback order status check via REST API');
+    
     try {
       // Get all users and check their active bots
       const users = [1]; // For now, check user 1 - in production, iterate through all users
@@ -2748,9 +2752,7 @@ export class WebSocketService {
     }
   }
 
-  // Real-time order monitoring via Binance User Data Stream
-  private userDataStreams = new Map<number, WebSocket>(); // exchangeId -> WebSocket
-  private userListenKeys = new Map<number, string>(); // exchangeId -> listenKey
+
 
   // Start User Data Stream for real-time order updates
   async startUserDataStream(exchangeId: number, userId: number) {
@@ -4125,6 +4127,170 @@ export class WebSocketService {
     });
 
     console.log(`[MARTINGALE STRATEGY] ✓ Broadcasted to ${broadcastCount} connected clients`);
+  }
+
+  private async initializeUserDataStreams() {
+    try {
+      // Get all active exchanges for all users
+      const users = [1]; // For now, check user 1 - in production, iterate through all users
+      
+      for (const userId of users) {
+        const exchanges = await storage.getExchangesByUserId(userId);
+        
+        for (const exchange of exchanges) {
+          if (exchange.isActive) {
+            await this.startUserDataStreamForExchange(exchange);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[USER DATA STREAM] Error initializing streams:', error);
+    }
+  }
+
+  private async startUserDataStreamForExchange(exchange: any) {
+    try {
+      // Get listen key from Binance
+      const listenKey = await this.createListenKey(exchange);
+      if (!listenKey) {
+        console.error(`[USER DATA STREAM] Failed to get listen key for exchange ${exchange.id}`);
+        return;
+      }
+
+      this.listenKeys.set(exchange.id, listenKey);
+
+      // Create WebSocket connection for user data stream
+      const wsEndpoint = exchange.exchangeType === 'binance' 
+        ? (exchange.name.includes('testnet') 
+            ? `wss://stream.testnet.binance.vision/ws/${listenKey}`
+            : `wss://stream.binance.com:9443/ws/${listenKey}`)
+        : `${exchange.wsStreamEndpoint}/${listenKey}`;
+
+      console.log(`[USER DATA STREAM] Connecting to ${exchange.name} user data stream`);
+
+      const userDataWs = new WebSocket(wsEndpoint);
+
+      userDataWs.on('open', () => {
+        console.log(`[USER DATA STREAM] ✅ Connected to ${exchange.name} user data stream`);
+      });
+
+      userDataWs.on('message', (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+          this.handleUserDataUpdate(message, exchange);
+        } catch (error) {
+          console.error(`[USER DATA STREAM] Error parsing message:`, error);
+        }
+      });
+
+      userDataWs.on('error', (error) => {
+        console.error(`[USER DATA STREAM] WebSocket error for ${exchange.name}:`, error);
+      });
+
+      userDataWs.on('close', () => {
+        console.log(`[USER DATA STREAM] Connection closed for ${exchange.name}`);
+        this.userDataStreams.delete(exchange.id);
+        
+        // Attempt to reconnect after 5 seconds
+        setTimeout(() => {
+          this.startUserDataStreamForExchange(exchange);
+        }, 5000);
+      });
+
+      this.userDataStreams.set(exchange.id, userDataWs);
+
+      // Keep alive the listen key every 30 minutes
+      setInterval(() => {
+        this.keepAliveListenKey(exchange.id);
+      }, 30 * 60 * 1000);
+
+    } catch (error) {
+      console.error(`[USER DATA STREAM] Error starting stream for exchange ${exchange.id}:`, error);
+    }
+  }
+
+  private async createListenKey(exchange: any): Promise<string | null> {
+    try {
+      // Decrypt API credentials
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.apiKey, 
+        exchange.apiSecret, 
+        exchange.encryptionIv
+      );
+
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/userDataStream`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`[USER DATA STREAM] Created listen key for ${exchange.name}`);
+        return data.listenKey;
+      } else {
+        console.error(`[USER DATA STREAM] Failed to create listen key for ${exchange.name}`);
+        return null;
+      }
+    } catch (error) {
+      console.error(`[USER DATA STREAM] Error creating listen key:`, error);
+      return null;
+    }
+  }
+
+  private async handleUserDataUpdate(message: any, exchange: any) {
+    try {
+      // Handle different event types
+      if (message.e === 'executionReport') {
+        // Order update event
+        const orderId = message.i.toString();
+        const orderStatus = message.X; // Order status: NEW, PARTIALLY_FILLED, FILLED, CANCELED, etc.
+        const symbol = message.s;
+        const side = message.S;
+        const executedQty = message.z;
+        const avgPrice = message.Z && message.z !== '0' ? (parseFloat(message.Z) / parseFloat(message.z)).toString() : message.p;
+
+        console.log(`[USER DATA STREAM] Order update: ${orderId} - ${orderStatus} (${symbol} ${side})`);
+
+        // Find the order in our database
+        const order = await storage.getCycleOrderByExchangeId(orderId);
+        if (order) {
+          // Update order status based on Binance status
+          let dbStatus = 'placed';
+          if (orderStatus === 'FILLED') {
+            dbStatus = 'filled';
+          } else if (orderStatus === 'CANCELED' || orderStatus === 'REJECTED' || orderStatus === 'EXPIRED') {
+            dbStatus = 'cancelled';
+          }
+
+          if (dbStatus === 'filled') {
+            // Update order with fill data
+            await storage.updateCycleOrder(order.id, {
+              status: 'filled',
+              filledQuantity: executedQty,
+              filledPrice: avgPrice,
+              filledAt: new Date()
+            });
+
+            console.log(`[USER DATA STREAM] ✅ Order ${orderId} filled via WebSocket - processing...`);
+
+            // Get the active cycle and handle the fill
+            const cycle = await storage.getActiveBotCycle(order.botId);
+            if (cycle) {
+              await this.handleOrderFill(order, cycle);
+            }
+          } else if (dbStatus === 'cancelled') {
+            await storage.updateCycleOrder(order.id, {
+              status: 'cancelled'
+            });
+            console.log(`[USER DATA STREAM] Order ${orderId} cancelled via WebSocket`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[USER DATA STREAM] Error handling user data update:`, error);
+    }
   }
 
   private async cancelOrderOnExchange(exchangeOrderId: string, symbol: string, exchange: any): Promise<boolean> {
