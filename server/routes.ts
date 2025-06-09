@@ -711,21 +711,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Test Martingale Strategy Logging
-  app.post("/api/test-martingale", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  // Demo Martingale Strategy Logging - No auth required for demonstration
+  app.get("/api/demo-martingale", async (req: Request, res: Response) => {
     try {
-      const userId = req.user!.id;
-      
-      // Get user's first bot for demonstration
-      const bots = await storage.getTradingBotsByUserId(userId);
-      if (bots.length === 0) {
-        return res.status(404).json({ error: 'No bots found for testing' });
-      }
-      
-      const bot = bots[0]; // Use first available bot
+      // Use hardcoded bot configuration for demonstration
+      const bot = {
+        id: 1,
+        name: "Demo Martingale Bot - ETHUSDT",
+        tradingPair: "ETHUSDT",
+        direction: "long",
+        baseOrderAmount: "7.5",
+        takeProfitPercentage: "2.0",
+        maxSafetyOrders: "3",
+        priceDeviation: "1.5",
+        priceDeviationMultiplier: "1.5"
+      };
       
       console.log(`[MARTINGALE STRATEGY] ===== STARTING BOT EXECUTION DEMO =====`);
-      console.log(`[MARTINGALE STRATEGY] Bot ID: ${bot.id}, User ID: ${userId}`);
+      console.log(`[MARTINGALE STRATEGY] Bot ID: ${bot.id}, User ID: 1`);
       console.log(`[MARTINGALE STRATEGY] ✓ Bot loaded: ${bot.name} (${bot.tradingPair}, ${bot.direction})`);
       
       // Get current market price
