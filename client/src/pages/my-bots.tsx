@@ -17,20 +17,54 @@ export function MyBotsPage() {
   // Initialize order notifications
   useOrderNotifications();
 
-  // Fetch market data for live price display
-  const { data: marketData } = useQuery({
-    queryKey: ['market', selectedBot?.tradingPair],
-    queryFn: async () => {
-      if (!selectedBot?.tradingPair) return null;
-      const response = await fetch('/api/market');
-      const data = await response.json();
-      const found = data.find((item: any) => item.symbol === selectedBot.tradingPair);
-      return found || null;
-    },
-    enabled: !!selectedBot?.tradingPair,
-    refetchInterval: 5000, // Refresh every 5 seconds
-    retry: false, // Don't retry on failure
-  });
+  // Use WebSocket for live market data instead of polling API
+  const [marketData, setMarketData] = useState<any>(null);
+  
+  useEffect(() => {
+    if (!selectedBot?.tradingPair) return;
+    
+    // Get initial market data
+    fetch('/api/market')
+      .then(res => res.json())
+      .then(data => {
+        const found = data.find((item: any) => item.symbol === selectedBot.tradingPair);
+        if (found) setMarketData(found);
+      })
+      .catch(console.error);
+    
+    // WebSocket connection for live updates
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host.split(':')[0]}:8080`;
+    const ws = new WebSocket(wsUrl);
+    
+    ws.onopen = () => {
+      // Subscribe to market data
+      ws.send(JSON.stringify({
+        type: 'subscribe_market',
+        symbols: [selectedBot.tradingPair],
+        dataType: 'ticker'
+      }));
+    };
+    
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'market_update' && message.data.symbol === selectedBot.tradingPair) {
+          setMarketData(message.data);
+        }
+      } catch (error) {
+        console.error('WebSocket message error:', error);
+      }
+    };
+    
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+    
+    return () => {
+      ws.close();
+    };
+  }, [selectedBot?.tradingPair]);
 
   // Fetch bots data
   const { data: bots = [], isLoading: botsLoading } = useQuery<any[]>({
@@ -116,14 +150,18 @@ export function MyBotsPage() {
       return { takeProfitDistance: null, nextSafetyDistance: null, takeProfitOrder: null, nextSafetyOrder: null };
     }
 
-    // Find take profit order
+    // Find take profit order that is not filled
     const takeProfitOrder = botOrders.find((order: any) => 
-      order.orderType === 'take_profit' && order.status !== 'filled'
+      order.orderType === 'take_profit' && 
+      order.status !== 'filled' && 
+      order.status !== 'cancelled'
     );
 
     // Find next unfilled safety order (lowest price for long strategy)
     const unfilledSafetyOrders = botOrders.filter((order: any) => 
-      order.orderType === 'safety_order' && order.status !== 'filled'
+      order.orderType === 'safety_order' && 
+      order.status !== 'filled' && 
+      order.status !== 'cancelled'
     ).sort((a: any, b: any) => parseFloat(a.price || '0') - parseFloat(b.price || '0'));
 
     const nextSafetyOrder = unfilledSafetyOrders[0];

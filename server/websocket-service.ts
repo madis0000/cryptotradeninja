@@ -93,8 +93,7 @@ export class WebSocketService {
     // Stop any automatic streaming on initialization
     this.stopBinanceStreams();
     
-    // Start market refresh interval (every 60 seconds)
-    this.startMarketRefreshInterval();
+    // No market refresh interval needed - using live WebSocket streams
     
     // Start order monitoring for Martingale bots
     this.startOrderMonitoring();
@@ -2058,12 +2057,12 @@ export class WebSocketService {
         console.log(`[WEBSOCKET] Starting live streams for symbols: ${Array.from(symbols).join(', ')}`);
         // Start live ticker streams for real-time updates
         this.startBinanceTickerStreams(Array.from(symbols));
-        // Also get initial data via API
+        // Get initial data via API once
         await this.requestMarketDataViaAPI(Array.from(symbols));
       }
       
-      // Start market refresh interval as backup for continuous updates
-      this.startMarketRefreshInterval();
+      // No need for polling interval since we have live WebSocket data
+      console.log('[WEBSOCKET] Using live streams only - no polling interval needed');
     } catch (error) {
       console.error('[WEBSOCKET] Error starting market ticker:', error);
     }
