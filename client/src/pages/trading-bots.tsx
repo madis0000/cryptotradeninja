@@ -1,356 +1,261 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { MartingaleStrategy } from "@/components/bots/strategies/martingale-strategy";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { MarketsPanel } from "@/components/shared/markets-panel";
+import { TradingHeader } from "@/components/shared/trading-header";
+import { TradingChart } from "@/components/trading/trading-chart";
 import { GridStrategy } from "@/components/bots/strategies/grid-strategy";
-import { Plus, Bot, TrendingUp, DollarSign, Zap, AlertTriangle, Settings, BarChart3, History, Eye } from "lucide-react";
+import { MartingaleStrategy } from "@/components/bots/strategies/martingale-strategy";
+import { usePublicWebSocket } from "@/hooks/useWebSocketService";
+import { useQuery } from "@tanstack/react-query";
 
-interface TradingBot {
-  id: number;
-  name: string;
-  strategy: string;
-  tradingPair: string;
-  direction: string;
-  isActive: boolean;
-  baseOrderAmount: string;
-  safetyOrderAmount: string;
-  maxSafetyOrders: number;
-  takeProfitPercentage: string;
-  priceDeviation: string;
-  totalPnl: string;
-  totalTrades: number;
-  winRate: string;
-  createdAt: string;
+interface TickerData {
+  symbol: string;
+  price: string;
+  priceChange: string;
+  priceChangePercent: string;
+  highPrice: string;
+  lowPrice: string;
+  volume: string;
+  quoteVolume: string;
 }
 
 export default function TradingBots() {
-  const [location, navigate] = useLocation();
-  const [selectedSymbol, setSelectedSymbol] = useState("BTCUSDT");
-  const [activeSection, setActiveSection] = useState(() => {
-    if (location === "/bots/overview") return "overview";
-    if (location === "/create-bot") return "create";
-    return "overview";
+  const [selectedSymbol, setSelectedSymbol] = useState("ICPUSDT");
+  const [selectedStrategy, setSelectedStrategy] = useState("grid");
+  const [tickerData, setTickerData] = useState<TickerData | null>(null);
+  const [selectedExchangeId, setSelectedExchangeId] = useState<number | undefined>();
+  const [martingaleConfig, setMartingaleConfig] = useState<{
+    baseOrderPrice: number;
+    takeProfitDeviation: number;
+    safetyOrderDeviation: number;
+    maxSafetyOrders: number;
+    priceDeviationMultiplier: number;
+    activeSafetyOrders?: number;
+  }>({
+    baseOrderPrice: 5.64, // Will be updated by current market price
+    takeProfitDeviation: 1.5, // From takeProfit setting
+    safetyOrderDeviation: 1.0, // From priceDeviation setting
+    maxSafetyOrders: 8, // From maxSafetyOrders setting
+    priceDeviationMultiplier: 1.5, // From priceDeviationMultiplier setting
   });
 
-  // Fetch bots from API
-  const { data: bots = [], isLoading } = useQuery<TradingBot[]>({
-    queryKey: ["/api/bots"],
+  // Fetch exchanges for balance data
+  const { data: exchanges } = useQuery({
+    queryKey: ['/api/exchanges']
   });
 
-  // Fetch user stats
-  const { data: stats } = useQuery({
-    queryKey: ["/api/stats"],
-  });
+  // Auto-select first exchange if available
+  useEffect(() => {
+    if (exchanges && Array.isArray(exchanges) && exchanges.length > 0 && !selectedExchangeId) {
+      setSelectedExchangeId((exchanges as any[])[0].id);
+    }
+  }, [exchanges, selectedExchangeId]);
 
-  const getStatusBadge = (isActive: boolean) => {
-    return isActive ? (
-      <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Active</Badge>
-    ) : (
-      <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30">Stopped</Badge>
-    );
+  const handleExchangeChange = (exchangeId: number) => {
+    setSelectedExchangeId(exchangeId);
   };
 
-  const sidebarItems = [
-    { 
-      id: "overview", 
-      label: "Overview", 
-      icon: BarChart3,
-      path: "/bots/overview"
-    },
-    { 
-      id: "create", 
-      label: "Create Bot", 
-      icon: Plus,
-      path: "/create-bot"
-    },
-    { 
-      id: "history", 
-      label: "Trading History", 
-      icon: History,
-      path: "/bots/history"
-    }
+  const strategies = [
+    { id: "grid", name: "Grid", active: true },
+    { id: "martingale", name: "Martingale", active: false },
   ];
 
-  const handleSectionChange = (sectionId: string, path: string) => {
-    setActiveSection(sectionId);
-    navigate(path);
+  const publicWs = usePublicWebSocket({
+    onMessage: (data: any) => {
+      if (data && data.type === 'market_update' && data.data) {
+        const marketData = data.data;
+        setTickerData({
+          symbol: marketData.symbol,
+          price: marketData.price,
+          priceChange: marketData.priceChange,
+          priceChangePercent: marketData.priceChangePercent,
+          highPrice: marketData.highPrice,
+          lowPrice: marketData.lowPrice,
+          volume: marketData.volume,
+          quoteVolume: marketData.quoteVolume
+        });
+      }
+    },
+    onConnect: () => {
+      console.log(`[BOTS] Connected to WebSocket for ${selectedSymbol} ticker`);
+    },
+    onDisconnect: () => {
+      console.log('[BOTS] Disconnected from WebSocket');
+    }
+  });
+
+  const handleSymbolSelect = (symbol: string) => {
+    console.log(`[BOTS] Symbol selected: ${symbol}`);
+    setSelectedSymbol(symbol);
+    setTickerData(null);
+    publicWs.subscribe([symbol]);
   };
 
-  const activeBots = bots.filter(bot => bot.isActive).length;
-  const totalInvested = bots.reduce((sum, bot) => sum + parseFloat(bot.baseOrderAmount), 0);
-  const totalPnl = bots.reduce((sum, bot) => sum + parseFloat(bot.totalPnl), 0);
+  useEffect(() => {
+    console.log(`[BOTS] Starting WebSocket connection...`);
+    publicWs.connect([selectedSymbol]);
+
+    return () => {
+      publicWs.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (publicWs.status === 'connected') {
+      console.log(`[BOTS] Changing subscription to ${selectedSymbol}`);
+      publicWs.subscribe([selectedSymbol]);
+    }
+  }, [selectedSymbol, publicWs.status]);
 
   return (
-    <div className="min-h-screen bg-crypto-darker">
-      <div className="flex">
-        {/* Sidebar */}
-        <div className="w-64 bg-crypto-dark border-r border-gray-800 min-h-screen">
-          <div className="p-6">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <Bot className="w-6 h-6 text-crypto-accent" />
-              Bot Management
-            </h2>
-            
-            <nav className="space-y-2">
-              {sidebarItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeSection === item.id;
-                
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleSectionChange(item.id, item.path)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                      isActive
-                        ? 'bg-crypto-accent text-white'
-                        : 'text-crypto-light hover:bg-gray-800 hover:text-white'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </nav>
+    <div className="h-screen bg-crypto-darker overflow-hidden">
+      <div className="h-full flex flex-col">
+        {/* Orange Section - Strategy Selection */}
+        <div className="bg-crypto-dark border-b border-gray-800 px-4 py-2">
+          <div className="flex items-center space-x-6">
+            {strategies.map((strategy) => (
+              <Button
+                key={strategy.id}
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedStrategy(strategy.id)}
+                className={`text-xs px-3 py-1.5 ${
+                  selectedStrategy === strategy.id
+                    ? 'text-orange-400 bg-orange-400/10 border border-orange-400/20' 
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                {strategy.name}
+              </Button>
+            ))}
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 p-6">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-white">
-                {activeSection === "overview" && "Bot Overview"}
-                {activeSection === "create" && "Create Trading Bot"}
-                {activeSection === "history" && "Trading History"}
-              </h1>
-              <p className="text-crypto-light mt-1">
-                {activeSection === "overview" && "Monitor and manage your trading bots"}
-                {activeSection === "create" && "Set up automated trading strategies"}
-                {activeSection === "history" && "View completed bot trading cycles"}
-              </p>
+        {/* Main Content Area */}
+        <div className="flex-1 flex">
+          {/* Left Side - Market List and Chart with Bottom Tabs */}
+          <div className="flex-1 flex flex-col">
+            {/* Top Content Row */}
+            <div className="flex-1 flex">
+              {/* Red Section - Market List (shared component) */}
+              <MarketsPanel
+                className="w-80"
+                onSymbolSelect={handleSymbolSelect}
+                selectedSymbol={selectedSymbol}
+              />
+
+              {/* Center Area - Chart */}
+              <div className="flex-1 flex flex-col">
+                {/* Blue Section - Trading Header (shared component) */}
+                <TradingHeader 
+                  selectedSymbol={selectedSymbol}
+                  tickerData={tickerData}
+                />
+
+                {/* Green Section - Chart (specific to bots page with future enhancements) */}
+                <div className="flex-1 bg-crypto-dark">
+                  <TradingChart 
+                    symbol={selectedSymbol} 
+                    strategy={selectedStrategy === "martingale" ? martingaleConfig : undefined} 
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Black Section - Bottom Tabs spanning market and chart sections */}
+            <div className="border-t border-gray-800 bg-crypto-dark">
+              <Tabs defaultValue="running" className="w-full">
+                <TabsList className="bg-transparent border-b border-gray-800 rounded-none h-auto p-0">
+                  <TabsTrigger 
+                    value="running" 
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-orange-400 data-[state=active]:bg-transparent data-[state=active]:text-orange-400 text-gray-400 hover:text-white px-4 py-2"
+                  >
+                    Running
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="history" 
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-orange-400 data-[state=active]:bg-transparent data-[state=active]:text-orange-400 text-gray-400 hover:text-white px-4 py-2"
+                  >
+                    History
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="pnl" 
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-orange-400 data-[state=active]:bg-transparent data-[state=active]:text-orange-400 text-gray-400 hover:text-white px-4 py-2"
+                  >
+                    PNL Analysis
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="running" className="p-4">
+                  <div className="text-center py-8 text-gray-400">
+                    <i className="fas fa-robot text-4xl mb-4"></i>
+                    <p>No running bots for this pair</p>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="history" className="p-4">
+                  <div className="text-center py-8 text-gray-400">
+                    <i className="fas fa-history text-4xl mb-4"></i>
+                    <p>No historical data available</p>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="pnl" className="p-4">
+                  <div className="text-center py-8 text-gray-400">
+                    <i className="fas fa-chart-line text-4xl mb-4"></i>
+                    <p>No PNL data available</p>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
           </div>
 
-          {/* Stats Cards */}
-          {activeSection === "overview" && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <Card className="bg-crypto-dark border-gray-800">
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-blue-500/20 rounded-lg">
-                      <Bot className="w-5 h-5 text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-crypto-light">Total Bots</p>
-                      <p className="text-xl font-bold text-white">{bots.length}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Gray Section - Strategy Configuration Panel */}
+          <div className="w-80 bg-crypto-dark border-l border-gray-800 flex flex-col">
+            <div className="p-4 flex-1">
+              
+              {/* Strategy Configuration Content */}
+              {selectedStrategy === "grid" && (
+                <GridStrategy className="flex-1" />
+              )}
+              
+              {selectedStrategy === "martingale" && (
+                <MartingaleStrategy 
+                  className="flex-1" 
+                  selectedSymbol={selectedSymbol}
+                  selectedExchangeId={selectedExchangeId}
+                  exchanges={Array.isArray(exchanges) ? exchanges : []}
+                  onExchangeChange={handleExchangeChange}
+                  onConfigChange={(config) => {
+                    setMartingaleConfig({
+                      baseOrderPrice: martingaleConfig.baseOrderPrice, // Keep current market price
+                      takeProfitDeviation: parseFloat(config.takeProfit || "1.5"),
+                      safetyOrderDeviation: parseFloat(config.priceDeviation || "1.0"),
+                      maxSafetyOrders: parseInt(config.maxSafetyOrders || "8"),
+                      priceDeviationMultiplier: config.priceDeviationMultiplier?.[0] || 1.5,
+                      activeSafetyOrders: config.activeSafetyOrdersEnabled ? parseInt(config.activeSafetyOrders || "1") : undefined,
+                    });
+                  }}
+                />
+              )}
 
-              <Card className="bg-crypto-dark border-gray-800">
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-green-500/20 rounded-lg">
-                      <Zap className="w-5 h-5 text-green-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-crypto-light">Active</p>
-                      <p className="text-xl font-bold text-white">{activeBots}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-crypto-dark border-gray-800">
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-purple-500/20 rounded-lg">
-                      <TrendingUp className="w-5 h-5 text-purple-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-crypto-light">Total PnL</p>
-                      <p className={`text-xl font-bold ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-crypto-dark border-gray-800">
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-orange-500/20 rounded-lg">
-                      <DollarSign className="w-5 h-5 text-orange-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-crypto-light">Invested</p>
-                      <p className="text-xl font-bold text-white">${totalInvested.toFixed(2)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Content Sections */}
-          {activeSection === "overview" && (
-            <Card className="bg-crypto-dark border-gray-800">
-              <CardHeader>
-                <CardTitle className="text-white">Trading Bots</CardTitle>
-                <CardDescription className="text-crypto-light">
-                  {bots.length === 0 ? "No bots created yet" : `Managing ${bots.length} trading bot${bots.length !== 1 ? 's' : ''}`}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-crypto-accent mx-auto"></div>
-                    <p className="text-crypto-light mt-2">Loading bots...</p>
-                  </div>
-                ) : bots.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Bot className="w-12 h-12 text-crypto-light mx-auto mb-4" />
-                    <p className="text-crypto-light">No trading bots created yet</p>
-                    <p className="text-sm text-crypto-light/70 mt-1 mb-4">
-                      Create your first bot to start automated trading
-                    </p>
+              {selectedStrategy === "grid" && (
+                <div className="mt-auto pt-6">
+                  <div className="text-center">
+                    <p className="text-xs text-gray-500 mb-3">Preview</p>
                     <Button 
-                      onClick={() => handleSectionChange("create", "/create-bot")}
-                      className="bg-crypto-accent hover:bg-crypto-accent-dark text-white"
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+                      disabled
                     >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create Bot
+                      Create Grid Bot
                     </Button>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {bots.map((bot) => (
-                      <div key={bot.id} className="border border-gray-800 rounded-lg p-4 hover:border-gray-700 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <div className="w-10 h-10 bg-crypto-accent/20 rounded-lg flex items-center justify-center">
-                              <Bot className="w-5 h-5 text-crypto-accent" />
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-white">{bot.name}</h3>
-                              <p className="text-sm text-crypto-light">
-                                {bot.strategy.charAt(0).toUpperCase() + bot.strategy.slice(1)} • {bot.tradingPair} • {bot.direction}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-4">
-                            {getStatusBadge(bot.isActive)}
-                            <div className="text-right">
-                              <p className={`font-semibold ${parseFloat(bot.totalPnl) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {parseFloat(bot.totalPnl) >= 0 ? '+' : ''}${parseFloat(bot.totalPnl).toFixed(2)}
-                              </p>
-                              <p className="text-sm text-crypto-light">${parseFloat(bot.baseOrderAmount).toFixed(2)} invested</p>
-                            </div>
-                            <Button variant="outline" size="sm" className="border-gray-700 text-crypto-light hover:bg-gray-800">
-                              <Eye className="w-4 h-4 mr-1" />
-                              View
-                            </Button>
-                          </div>
-                        </div>
-                        <Separator className="my-4 bg-gray-800" />
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                          <div>
-                            <p className="text-crypto-light">Base Order</p>
-                            <p className="text-white font-medium">${parseFloat(bot.baseOrderAmount).toFixed(2)}</p>
-                          </div>
-                          <div>
-                            <p className="text-crypto-light">Safety Orders</p>
-                            <p className="text-white font-medium">{bot.maxSafetyOrders}</p>
-                          </div>
-                          <div>
-                            <p className="text-crypto-light">Take Profit</p>
-                            <p className="text-white font-medium">{parseFloat(bot.takeProfitPercentage).toFixed(2)}%</p>
-                          </div>
-                          <div>
-                            <p className="text-crypto-light">Total Trades</p>
-                            <p className="text-white font-medium">{bot.totalTrades}</p>
-                          </div>
-                          <div>
-                            <p className="text-crypto-light">Win Rate</p>
-                            <p className="text-white font-medium">{parseFloat(bot.winRate).toFixed(1)}%</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {activeSection === "create" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-crypto-dark border-gray-800">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
-                    Grid Trading Bot
-                  </CardTitle>
-                  <CardDescription className="text-crypto-light">
-                    Profit from market volatility with automated grid orders
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <GridStrategy 
-                    className="space-y-4"
-                  />
-                </CardContent>
-              </Card>
-
-              <Card className="bg-crypto-dark border-gray-800">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5" />
-                    Martingale Bot
-                  </CardTitle>
-                  <CardDescription className="text-crypto-light">
-                    Average down with increasing position sizes
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <MartingaleStrategy 
-                    selectedSymbol={selectedSymbol}
-                    className="space-y-4"
-                    selectedExchangeId={undefined}
-                    exchanges={[]}
-                  />
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {activeSection === "history" && (
-            <Card className="bg-crypto-dark border-gray-800">
-              <CardHeader>
-                <CardTitle className="text-white">Trading History</CardTitle>
-                <CardDescription className="text-crypto-light">
-                  View completed bot trading cycles and performance
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8">
-                  <History className="w-12 h-12 text-crypto-light mx-auto mb-4" />
-                  <p className="text-crypto-light">No trading history yet</p>
-                  <p className="text-sm text-crypto-light/70 mt-1">
-                    Completed bot cycles and trades will appear here
-                  </p>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

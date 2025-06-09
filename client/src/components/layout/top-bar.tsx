@@ -31,7 +31,6 @@ export function TopBar({ onLogout }: TopBarProps) {
   const tradingSubItems = [
     { path: '/trading', label: 'Trading', icon: 'fas fa-chart-bar' },
     { path: '/bots', label: 'Bots', icon: 'fas fa-robot' },
-    { path: '/bots/overview', label: 'My Bots', icon: 'fas fa-cogs' },
   ];
 
   return (
