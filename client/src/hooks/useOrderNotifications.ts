@@ -90,6 +90,7 @@ export function useOrderNotifications() {
 
       // Invalidate relevant query cache to refresh UI data
       queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bots', data.botId] });
       queryClient.invalidateQueries({ queryKey: ['/api/bot-orders', data.botId] });
       queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles', data.botId] });
       queryClient.invalidateQueries({ queryKey: ['/api/stats'] });

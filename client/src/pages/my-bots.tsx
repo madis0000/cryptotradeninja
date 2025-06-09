@@ -87,7 +87,42 @@ export function MyBotsPage() {
     enabled: !!selectedBot?.id
   });
 
-  // Fetch bot data for the selected bot
+  // Fetch individual bot data for the selected bot
+  const { data: selectedBotData } = useQuery({
+    queryKey: ['/api/bots', selectedBot?.id],
+    queryFn: async () => {
+      if (!selectedBot?.id) return null;
+      const response = await fetch(`/api/bots/${selectedBot.id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch bot data');
+      return response.json();
+    },
+    enabled: !!selectedBot?.id
+  });
+
+  // Fetch bot cycles for current cycle information
+  const { data: botCycles = [] } = useQuery({
+    queryKey: ['/api/bot-cycles', selectedBot?.id],
+    queryFn: async () => {
+      if (!selectedBot?.id) return [];
+      const response = await fetch(`/api/bot-cycles/${selectedBot.id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch cycles');
+      return response.json();
+    },
+    enabled: !!selectedBot?.id
+  });
+
+  // Get current active cycle
+  const currentCycle = botCycles.find((cycle: any) => cycle.status === 'active') || botCycles[0];
+
+  // Fetch general stats for dashboard overview
   const { data: botData } = useQuery({
     queryKey: ['/api/stats'],
     enabled: !!selectedBot
@@ -549,37 +584,47 @@ export function MyBotsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Dashboard Overview */}
+            {/* Bot Overview */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card className="bg-crypto-darker border-gray-800">
                 <CardHeader>
-                  <CardTitle className="text-white text-lg">Total Portfolio</CardTitle>
+                  <CardTitle className="text-white text-lg">Current Cycle</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-green-400">${botData?.totalBalance || '0.00'}</div>
-                  <p className="text-sm text-crypto-light mt-2">Current value across all bots</p>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-crypto-darker border-gray-800">
-                <CardHeader>
-                  <CardTitle className="text-white text-lg">Total P&L</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold ${parseFloat(botData?.totalPnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    ${botData?.totalPnl || '0.00'}
+                  <div className="text-2xl font-bold text-blue-400">
+                    {currentCycle ? `#${currentCycle.cycleNumber || 1}` : 'No Active Cycle'}
                   </div>
-                  <p className="text-sm text-crypto-light mt-2">Profit and loss</p>
+                  <p className="text-sm text-crypto-light mt-2">
+                    {currentCycle?.status === 'active' ? 'Running' : 'Completed'}
+                  </p>
                 </CardContent>
               </Card>
 
               <Card className="bg-crypto-darker border-gray-800">
                 <CardHeader>
-                  <CardTitle className="text-white text-lg">Active Bots</CardTitle>
+                  <CardTitle className="text-white text-lg">Bot P&L</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-blue-400">{botData?.activeBots || 0}</div>
-                  <p className="text-sm text-crypto-light mt-2">Currently running</p>
+                  <div className={`text-2xl font-bold ${parseFloat(selectedBotData?.totalPnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${parseFloat(selectedBotData?.totalPnl || '0').toFixed(4)}
+                  </div>
+                  <p className="text-sm text-crypto-light mt-2">
+                    {selectedBotData?.totalTrades || 0} trades completed
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-lg">Total Invested</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-yellow-400">
+                    ${totalInvested.toFixed(4)}
+                  </div>
+                  <p className="text-sm text-crypto-light mt-2">
+                    {totalPositionSize.toFixed(1)} {selectedBot?.tradingPair?.replace('USDT', '')} held
+                  </p>
                 </CardContent>
               </Card>
             </div>
