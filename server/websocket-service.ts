@@ -3012,30 +3012,40 @@ export class WebSocketService {
 
   private async placeOrderOnExchange(exchange: any, orderParams: any): Promise<any> {
     try {
+      // Check if exchange has encrypted credentials
+      if (!exchange.apiKey || !exchange.apiSecret || !exchange.encryptionIv) {
+        console.error(`[WS ORDER] ❌ Exchange ${exchange.name} missing API credentials`);
+        throw new Error('Exchange API credentials not configured');
+      }
+
       // Decrypt API credentials
       const { apiKey, apiSecret } = decryptApiCredentials(
-        exchange.encryptedApiKey,
-        exchange.encryptedApiSecret,
+        exchange.apiKey,
+        exchange.apiSecret,
         exchange.encryptionIv
       );
 
       // Generate unique request ID
       const requestId = crypto.randomUUID();
       
-      // Prepare order parameters for WebSocket API
+      // Prepare order parameters for WebSocket API according to Binance documentation
       const timestamp = Date.now();
       const params: any = {
         symbol: orderParams.symbol,
         side: orderParams.side,
         type: orderParams.type,
-        quantity: orderParams.quantity,
         apiKey: apiKey,
         timestamp: timestamp
       };
 
-      // For MARKET orders, we don't need price or timeInForce
-      if (orderParams.type === 'LIMIT') {
+      // For MARKET orders, quantity is required (base asset quantity)
+      if (orderParams.type === 'MARKET') {
+        params.quantity = orderParams.quantity;
+        // Optional: use quoteOrderQty for quote asset quantity instead
+        // params.quoteOrderQty = orderParams.quoteOrderQty;
+      } else if (orderParams.type === 'LIMIT') {
         params.price = orderParams.price;
+        params.quantity = orderParams.quantity;
         params.timeInForce = 'GTC';
       }
 
