@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useAuth } from "@/hooks/useAuth";
-import { MartingaleProgressDialog } from "../martingale-progress-dialog";
+import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 
 interface MartingaleStrategyProps {
   className?: string;
@@ -28,6 +28,9 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
   const { user } = useAuth();
   const [localDirection, setLocalDirection] = useState<"long" | "short">("long");
   const [realtimeBalance, setRealtimeBalance] = useState<string | null>(null);
+  
+  // Initialize order notifications
+  useOrderNotifications();
   
   // Exchange-specific minimum order amounts (in USDT)
   const getMinimumOrderAmount = (exchangeId?: number) => {
@@ -66,8 +69,7 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // Progress dialog state
-  const [progressDialogOpen, setProgressDialogOpen] = useState(false);
+  // Bot creation state
   const [isCreatingBot, setIsCreatingBot] = useState(false);
 
   // WebSocket for real-time balance updates
@@ -196,9 +198,13 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     },
     onSuccess: (botData) => {
       console.log('Bot created successfully:', botData);
-      // Store bot ID and open progress dialog to monitor order placement
+      // Bot created - real-time notifications will handle order updates
       setCreatedBotId(botData.id.toString());
-      setProgressDialogOpen(true);
+      toast({
+        title: "Bot Created Successfully",
+        description: `Martingale bot for ${selectedSymbol} has been created and is starting trades`,
+        variant: "default"
+      });
     },
     onError: (error: any) => {
       setIsCreatingBot(false);
@@ -719,24 +725,7 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
         </Button>
       </div>
 
-      {/* Progress Dialog */}
-      <MartingaleProgressDialog
-        open={progressDialogOpen}
-        onOpenChange={setProgressDialogOpen}
-        botId={createdBotId || undefined}
-        botConfig={{
-          symbol: selectedSymbol,
-          baseOrderSize: config.baseOrderSize,
-          safetyOrderSize: config.safetyOrderSize,
-          maxSafetyOrders: parseInt(config.maxSafetyOrders),
-          activeSafetyOrders: config.activeSafetyOrdersEnabled ? parseInt(config.activeSafetyOrders) : undefined,
-          takeProfit: config.takeProfit,
-          priceDeviation: config.priceDeviation,
-          priceDeviationMultiplier: config.priceDeviationMultiplier[0]
-        }}
-        onComplete={handleProgressComplete}
-        onError={handleProgressError}
-      />
+      {/* Real-time order notifications are now handled by useOrderNotifications hook */}
     </div>
   );
 }
