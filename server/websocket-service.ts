@@ -3,6 +3,7 @@ import { Server } from 'http';
 import { storage } from './storage';
 import { decryptApiCredentials } from './encryption';
 import { BotCycle, CycleOrder } from '@shared/schema';
+import crypto from 'crypto';
 
 interface UserConnection {
   ws: WebSocket;
@@ -3010,65 +3011,63 @@ export class WebSocketService {
   }
 
   private async placeOrderOnExchange(exchange: any, orderParams: any): Promise<any> {
-    return new Promise((resolve, reject) => {
-      try {
-        const { decryptApiCredentials } = require('./encryption');
-        const crypto = require('crypto');
-        
-        // Decrypt API credentials
-        const { apiKey, apiSecret } = decryptApiCredentials(
-          exchange.encryptedApiKey,
-          exchange.encryptedApiSecret,
-          exchange.encryptionIv
-        );
+    try {
+      // Decrypt API credentials
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.encryptedApiKey,
+        exchange.encryptedApiSecret,
+        exchange.encryptionIv
+      );
 
-        // Generate unique request ID
-        const requestId = crypto.randomUUID();
-        
-        // Prepare order parameters for WebSocket API
-        const timestamp = Date.now();
-        const params: any = {
-          symbol: orderParams.symbol,
-          side: orderParams.side,
-          type: orderParams.type,
-          quantity: orderParams.quantity,
-          apiKey: apiKey,
-          timestamp: timestamp
-        };
+      // Generate unique request ID
+      const requestId = crypto.randomUUID();
+      
+      // Prepare order parameters for WebSocket API
+      const timestamp = Date.now();
+      const params: any = {
+        symbol: orderParams.symbol,
+        side: orderParams.side,
+        type: orderParams.type,
+        quantity: orderParams.quantity,
+        apiKey: apiKey,
+        timestamp: timestamp
+      };
 
-        // For MARKET orders, we don't need price or timeInForce
-        if (orderParams.type === 'LIMIT') {
-          params.price = orderParams.price;
-          params.timeInForce = 'GTC';
-        }
+      // For MARKET orders, we don't need price or timeInForce
+      if (orderParams.type === 'LIMIT') {
+        params.price = orderParams.price;
+        params.timeInForce = 'GTC';
+      }
 
-        // Create signature string for WebSocket API
-        const paramString = Object.keys(params)
-          .sort()
-          .map(key => `${key}=${params[key]}`)
-          .join('&');
+      // Create signature string for WebSocket API
+      const paramString = Object.keys(params)
+        .sort()
+        .map(key => `${key}=${params[key]}`)
+        .join('&');
 
-        const signature = crypto
-          .createHmac('sha256', apiSecret)
-          .update(paramString)
-          .digest('hex');
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(paramString)
+        .digest('hex');
 
-        params.signature = signature;
+      params.signature = signature;
 
-        // Create WebSocket order message
-        const orderMessage = {
-          id: requestId,
-          method: "order.place",
-          params: params
-        };
+      // Create WebSocket order message
+      const orderMessage = {
+        id: requestId,
+        method: "order.place",
+        params: params
+      };
 
-        console.log(`[WS ORDER] Placing order via WebSocket:`, {
-          symbol: orderParams.symbol,
-          side: orderParams.side,
-          type: orderParams.type,
-          quantity: orderParams.quantity
-        });
+      console.log(`[WS ORDER] Placing order via WebSocket:`, {
+        symbol: orderParams.symbol,
+        side: orderParams.side,
+        type: orderParams.type,
+        quantity: orderParams.quantity
+      });
 
+      // Return a promise that resolves when the order response is received
+      return new Promise((resolve, reject) => {
         // Store the resolve/reject functions for this request
         this.pendingOrderRequests.set(requestId, { resolve, reject, timestamp: Date.now() });
 
@@ -3085,12 +3084,12 @@ export class WebSocketService {
           this.pendingOrderRequests.delete(requestId);
           reject(new Error('Failed to send order via WebSocket'));
         }
+      });
 
-      } catch (error) {
-        console.error('[WS ORDER] Error preparing order:', error);
-        reject(error);
-      }
-    });
+    } catch (error) {
+      console.error('[WS ORDER] Error preparing order:', error);
+      throw error;
+    }
   }
 
   public async placeInitialBaseOrder(botId: number, cycleId: number) {

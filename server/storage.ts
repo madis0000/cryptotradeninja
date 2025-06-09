@@ -246,9 +246,23 @@ export class DatabaseStorage implements IStorage {
 
   // Bot Cycle Management
   async createBotCycle(cycle: InsertBotCycle): Promise<BotCycle> {
+    // Get the highest cycle number for this bot
+    const [lastCycle] = await db
+      .select({ cycleNumber: botCycles.cycleNumber })
+      .from(botCycles)
+      .where(eq(botCycles.botId, cycle.botId))
+      .orderBy(desc(botCycles.cycleNumber))
+      .limit(1);
+
+    // Calculate next cycle number (start at 1 for first cycle)
+    const nextCycleNumber = lastCycle ? lastCycle.cycleNumber + 1 : 1;
+
     const [newCycle] = await db
       .insert(botCycles)
-      .values(cycle)
+      .values({
+        ...cycle,
+        cycleNumber: nextCycleNumber
+      })
       .returning();
     return newCycle;
   }

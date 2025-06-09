@@ -1,0 +1,35 @@
+[MARTINGALE] Starting new bot cycle for bot 4
+[MARTINGALE] Created initial cycle 4 for bot 4
+
+[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====
+[MARTINGALE STRATEGY] Bot ID: 4, Cycle ID: 4
+[MARTINGALE STRATEGY] ✓ Bot loaded: Martingale Bot - ICPUSDT (ICPUSDT, long)
+[MARTINGALE STRATEGY] ✓ Strategy: martingale, Exchange ID: 1
+[MARTINGALE STRATEGY] ✓ Exchange loaded: binance (testnet) (binance)
+[MARTINGALE STRATEGY] 📡 Fetching current price for ICPUSDT from Binance API...
+[MARTINGALE STRATEGY] ✓ Fetched price for ICPUSDT: $5.90200000
+[MARTINGALE STRATEGY] ✓ Market price for ICPUSDT: $5.902000
+[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:
+[MARTINGALE STRATEGY]    Investment Amount: $7.5
+[MARTINGALE STRATEGY]    Current Price: $5.902000
+[MARTINGALE STRATEGY]    Calculated Quantity: 1.27075568 ICP
+[MARTINGALE STRATEGY] ✓ Created base order record in database (ID: 1)
+[MARTINGALE STRATEGY] 🚀 Placing order on binance (testnet)...
+[MARTINGALE STRATEGY]    Order Type: MARKET BUY
+[MARTINGALE STRATEGY]    Symbol: ICPUSDT
+[MARTINGALE STRATEGY]    Quantity: 1.27075568
+[WS ORDER] Error preparing order: ReferenceError: require is not defined
+    at <anonymous> (/home/runner/workspace/server/websocket-service.ts:3015:43)
+    at new Promise (<anonymous>)
+    at WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3013:12)
+    at WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3163:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:305:11)
+[MARTINGALE STRATEGY] ❌ Error placing base order for bot 4: ReferenceError: require is not defined
+    at <anonymous> (/home/runner/workspace/server/websocket-service.ts:3015:43)
+    at new Promise (<anonymous>)
+    at WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3013:12)
+    at WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3163:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:305:11)
+[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====
