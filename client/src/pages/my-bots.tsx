@@ -64,6 +64,203 @@ export function MyBotsPage() {
   const activeBots = Array.isArray(bots) ? bots.filter((bot: any) => bot.isActive || bot.is_active) : [];
   const inactiveBots = Array.isArray(bots) ? bots.filter((bot: any) => !(bot.isActive || bot.is_active)) : [];
 
+  const renderBotDetails = () => {
+    const activeCycles = botCycles?.filter((cycle: any) => cycle.status === 'active') || [];
+    const completedCycles = botCycles?.filter((cycle: any) => cycle.status === 'completed') || [];
+    const currentCycle = activeCycles[0];
+
+    return (
+      <div className="min-h-screen bg-crypto-dark text-white">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center gap-4 mb-6">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedBot(null)}
+              className="border-gray-600 hover:border-crypto-accent text-white"
+            >
+              <ArrowLeft size={16} className="mr-2" />
+              Back to Bots
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-white">{selectedBot.name}</h1>
+              <p className="text-crypto-light">{selectedBot.tradingPair || selectedBot.trading_pair}</p>
+            </div>
+            <Badge className={`ml-auto ${(selectedBot.isActive || selectedBot.is_active) ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
+              {(selectedBot.isActive || selectedBot.is_active) ? 'Running' : 'Stopped'}
+            </Badge>
+          </div>
+
+          {/* Bot Info Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card className="bg-crypto-darker border-gray-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-crypto-light">Exchange</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-lg font-medium text-white">Binance Testnet</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-crypto-darker border-gray-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-crypto-light">Strategy</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-lg font-medium text-white capitalize">{selectedBot.strategy}</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-crypto-darker border-gray-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-crypto-light">Total Investment</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-lg font-medium text-white">${selectedBot.totalInvested || selectedBot.total_invested || '0.00'}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Cycle Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <Card className="bg-crypto-darker border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-white">Current Cycle</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {currentCycle ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-crypto-light">Cycle Number:</span>
+                      <span className="text-white font-medium">#{currentCycle.cycleNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-crypto-light">Safety Orders Filled:</span>
+                      <span className="text-white font-medium">{currentCycle.filledSafetyOrders}/{currentCycle.maxSafetyOrders}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-crypto-light">Total Invested:</span>
+                      <span className="text-white font-medium">${currentCycle.totalInvested || '0.00'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-crypto-light">Average Price:</span>
+                      <span className="text-white font-medium">${currentCycle.currentAveragePrice || 'N/A'}</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-crypto-light text-center py-4">No active cycle</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-crypto-darker border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-white">Performance Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-crypto-light">Completed Cycles:</span>
+                  <span className="text-white font-medium">{completedCycles.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-crypto-light">Total PnL:</span>
+                  <span className={`font-medium ${parseFloat(selectedBot.totalPnl || selectedBot.total_pnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${selectedBot.totalPnl || selectedBot.total_pnl || '0.00'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-crypto-light">Total Trades:</span>
+                  <span className="text-white font-medium">{selectedBot.totalTrades || selectedBot.total_trades || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-crypto-light">Win Rate:</span>
+                  <span className="text-white font-medium">{selectedBot.winRate || selectedBot.win_rate || '0.00'}%</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Chart Placeholder */}
+          <Card className="bg-crypto-darker border-gray-800 mb-6">
+            <CardHeader>
+              <CardTitle className="text-white">Price Chart</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64 bg-crypto-dark rounded-lg border border-gray-700 flex items-center justify-center">
+                <p className="text-crypto-light">Chart will be implemented here</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Orders Table */}
+          <Card className="bg-crypto-darker border-gray-800">
+            <CardHeader>
+              <CardTitle className="text-white">Orders History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {ordersLoading ? (
+                <div className="text-center py-8">
+                  <div className="text-crypto-light">Loading orders...</div>
+                </div>
+              ) : botOrders.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-crypto-light">No orders found for this bot</div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-700">
+                        <th className="text-left py-3 px-4 text-crypto-light">Order Type</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Side</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Quantity</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Price</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Status</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {botOrders.map((order: any, index: number) => (
+                        <tr key={index} className="border-b border-gray-800">
+                          <td className="py-3 px-4 text-white capitalize">
+                            {order.orderType || order.order_type}
+                            {order.safetyOrderLevel && ` (Level ${order.safetyOrderLevel || order.safety_order_level})`}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`font-medium ${order.side === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>
+                              {order.side}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-white">{order.quantity}</td>
+                          <td className="py-3 px-4 text-white">${order.price}</td>
+                          <td className="py-3 px-4">
+                            <Badge className={`${
+                              order.status === 'filled' 
+                                ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                                : order.status === 'pending'
+                                ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                                : 'bg-red-500/10 text-red-400 border-red-500/20'
+                            }`}>
+                              {order.status}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-crypto-light">
+                            {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  };
+
   // If bot is selected, show bot details
   if (selectedBot) {
     return renderBotDetails();
