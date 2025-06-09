@@ -717,7 +717,7 @@ export class WebSocketService {
     
     // Close existing connection if any
     if (this.binancePublicWs) {
-      console.log('[BINANCE STREAM] Closing existing connection');
+      // Closing existing connection
       this.binancePublicWs.close();
     }
     

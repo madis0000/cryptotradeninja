@@ -20,8 +20,8 @@ export function MyBotsPage() {
     { id: 'bot-settings', label: 'Bot Settings', icon: 'fas fa-cog' },
   ];
 
-  const activeBots = bots.filter((bot: any) => bot.isActive);
-  const inactiveBots = bots.filter((bot: any) => !bot.isActive);
+  const activeBots = Array.isArray(bots) ? bots.filter((bot: any) => bot.isActive) : [];
+  const inactiveBots = Array.isArray(bots) ? bots.filter((bot: any) => !bot.isActive) : [];
 
   const renderActiveBots = () => (
     <div className="space-y-6">
