@@ -380,6 +380,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Enhanced stop bot endpoint with order cancellation and liquidation
+  app.post("/api/bots/:id/stop", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      // Verify bot ownership
+      const bot = await storage.getTradingBot(botId);
+      if (!bot || bot.userId !== userId) {
+        return res.status(404).json({ error: "Bot not found" });
+      }
+
+      console.log(`[BOT STOP] Starting enhanced stop process for bot ${botId}`);
+      
+      // Get active cycle and pending orders
+      const activeCycle = await storage.getActiveBotCycle(botId);
+      const pendingOrders = await storage.getPendingCycleOrders(botId);
+      
+      let cancelledOrders = 0;
+      let liquidated = false;
+      
+      // Step 1: Cancel all pending safety orders
+      if (pendingOrders.length > 0) {
+        console.log(`[BOT STOP] Cancelling ${pendingOrders.length} pending orders for bot ${botId}`);
+        
+        for (const order of pendingOrders) {
+          if (order.exchangeOrderId && order.status === 'placed') {
+            try {
+              // Cancel order on exchange
+              await wsService.cancelOrder(bot.exchangeId, order.exchangeOrderId, bot.tradingPair);
+              
+              // Update order status in database
+              await storage.updateCycleOrder(order.id, { 
+                status: 'cancelled',
+                filledAt: new Date()
+              });
+              
+              cancelledOrders++;
+              console.log(`[BOT STOP] Cancelled order ${order.exchangeOrderId}`);
+            } catch (cancelError) {
+              console.error(`[BOT STOP] Failed to cancel order ${order.exchangeOrderId}:`, cancelError);
+            }
+          }
+        }
+      }
+      
+      // Step 2: Calculate total position to liquidate
+      if (activeCycle && activeCycle.totalQuantity && parseFloat(activeCycle.totalQuantity) > 0) {
+        const totalQuantity = parseFloat(activeCycle.totalQuantity);
+        console.log(`[BOT STOP] Liquidating position: ${totalQuantity} ${bot.tradingPair?.replace('USDT', '')}`);
+        
+        try {
+          // Place market sell order to liquidate position
+          const liquidationOrder = await wsService.placeLiquidationOrder(
+            bot.exchangeId,
+            bot.tradingPair,
+            totalQuantity,
+            activeCycle.id
+          );
+          
+          if (liquidationOrder) {
+            liquidated = true;
+            console.log(`[BOT STOP] Liquidation order placed: ${liquidationOrder.orderId}`);
+            
+            // Complete the cycle
+            await storage.completeBotCycle(activeCycle.id);
+          }
+        } catch (liquidationError) {
+          console.error(`[BOT STOP] Failed to liquidate position:`, liquidationError);
+        }
+      }
+      
+      // Step 3: Deactivate bot
+      await storage.updateTradingBot(botId, {
+        isActive: false,
+        status: 'inactive'
+      });
+      
+      console.log(`[BOT STOP] Bot ${botId} stopped successfully. Cancelled: ${cancelledOrders} orders, Liquidated: ${liquidated}`);
+      
+      res.json({
+        success: true,
+        cancelledOrders,
+        liquidated,
+        message: `Bot stopped. ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}.`
+      });
+      
+    } catch (error) {
+      console.error('Error stopping trading bot:', error);
+      res.status(500).json({ error: "Failed to stop trading bot" });
+    }
+  });
+
   app.delete("/api/bots/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const id = parseInt(req.params.id);

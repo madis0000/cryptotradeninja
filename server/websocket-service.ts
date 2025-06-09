@@ -3418,6 +3418,187 @@ export class WebSocketService {
     console.log(`[MARTINGALE VALIDATION] ===== VALIDATION COMPLETE =====\n`);
   }
 
+  // Helper method to get exchange credentials
+  private async getExchangeCredentials(exchangeId: number) {
+    const exchanges = await storage.getExchangesByUserId(1); // Get for user 1 - TODO: pass userId
+    const exchange = exchanges.find(ex => ex.id === exchangeId);
+    
+    if (!exchange) {
+      return null;
+    }
+
+    try {
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.encryptedApiKey,
+        exchange.encryptedApiSecret,
+        exchange.encryptionIv
+      );
+
+      return {
+        ...exchange,
+        apiKey,
+        apiSecret
+      };
+    } catch (error) {
+      console.error('Failed to decrypt API credentials:', error);
+      return null;
+    }
+  }
+
+  // Helper method to create HMAC SHA256 signature
+  private createSignature(queryString: string, secret: string): string {
+    const crypto = require('crypto');
+    return crypto.createHmac('sha256', secret).update(queryString).digest('hex');
+  }
+
+  // Cancel order on exchange
+  async cancelOrder(exchangeId: number, exchangeOrderId: string, symbol: string): Promise<boolean> {
+    try {
+      console.log(`[ORDER CANCEL] Cancelling order ${exchangeOrderId} on exchange ${exchangeId}`);
+      
+      // Get exchange credentials
+      const exchange = await this.getExchangeCredentials(exchangeId);
+      if (!exchange) {
+        throw new Error(`Exchange ${exchangeId} not found`);
+      }
+
+      // For Binance testnet, use REST API to cancel order
+      const orderParams = new URLSearchParams({
+        symbol: symbol,
+        orderId: exchangeOrderId,
+        timestamp: Date.now().toString()
+      });
+
+      const signature = this.createSignature(orderParams.toString(), exchange.apiSecret);
+      orderParams.append('signature', signature);
+
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-MBX-APIKEY': exchange.apiKey
+        },
+        body: orderParams
+      });
+
+      if (response.ok) {
+        const cancelResult = await response.json();
+        console.log(`[ORDER CANCEL] ✅ Order ${exchangeOrderId} cancelled successfully:`, cancelResult);
+        return true;
+      } else {
+        const errorData = await response.json();
+        console.error(`[ORDER CANCEL] ❌ Failed to cancel order ${exchangeOrderId}:`, errorData);
+        return false;
+      }
+    } catch (error) {
+      console.error(`[ORDER CANCEL] ❌ Error cancelling order ${exchangeOrderId}:`, error);
+      return false;
+    }
+  }
+
+  // Place liquidation order (market sell)
+  async placeLiquidationOrder(exchangeId: number, symbol: string, quantity: number, cycleId: number): Promise<any> {
+    try {
+      console.log(`[LIQUIDATION] Placing market sell order for ${quantity} ${symbol.replace('USDT', '')} on exchange ${exchangeId}`);
+      
+      // Get exchange credentials
+      const exchange = await this.getExchangeCredentials(exchangeId);
+      if (!exchange) {
+        throw new Error(`Exchange ${exchangeId} not found`);
+      }
+
+      // Apply lot size filters for ICPUSDT
+      const minQuantity = 0.1;
+      const stepSize = 0.1;
+      let adjustedQuantity = Math.floor(quantity / stepSize) * stepSize;
+      
+      if (adjustedQuantity < minQuantity) {
+        adjustedQuantity = minQuantity;
+      }
+      
+      adjustedQuantity = Math.round(adjustedQuantity * 10) / 10;
+
+      console.log(`[LIQUIDATION] Adjusted quantity: ${adjustedQuantity} (from ${quantity})`);
+
+      // Create liquidation order record first
+      const liquidationOrder = await storage.createCycleOrder({
+        cycleId: cycleId,
+        botId: 0, // Will be updated when we have bot context
+        userId: exchange.userId,
+        exchangeOrderId: null,
+        clientOrderId: `LIQUIDATION_${Date.now()}`,
+        orderType: 'liquidation',
+        safetyOrderLevel: null,
+        side: 'SELL',
+        orderCategory: 'MARKET',
+        price: '0', // Market order
+        quantity: adjustedQuantity.toString(),
+        filledQuantity: '0',
+        filledPrice: null,
+        status: 'pending',
+        pnl: '0',
+        fee: '0',
+        feeAsset: 'USDT'
+      });
+
+      // Place market sell order on exchange
+      const orderParams = new URLSearchParams({
+        symbol: symbol,
+        side: 'SELL',
+        type: 'MARKET',
+        quantity: adjustedQuantity.toString(),
+        timestamp: Date.now().toString()
+      });
+
+      const signature = this.createSignature(orderParams.toString(), exchange.apiSecret);
+      orderParams.append('signature', signature);
+
+      console.log(`[LIQUIDATION] Placing order with params:`, Object.fromEntries(orderParams));
+
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-MBX-APIKEY': exchange.apiKey
+        },
+        body: orderParams
+      });
+
+      if (response.ok) {
+        const orderResult = await response.json();
+        console.log(`[LIQUIDATION] ✅ Liquidation order placed successfully:`, orderResult);
+
+        // Update order with exchange response
+        await storage.updateCycleOrder(liquidationOrder.id, {
+          exchangeOrderId: orderResult.orderId.toString(),
+          status: 'placed',
+          filledQuantity: orderResult.executedQty || '0',
+          filledPrice: orderResult.price || orderResult.fills?.[0]?.price,
+          filledAt: new Date()
+        });
+
+        return {
+          orderId: orderResult.orderId,
+          status: orderResult.status,
+          executedQty: orderResult.executedQty
+        };
+      } else {
+        const errorData = await response.json();
+        console.error(`[LIQUIDATION] ❌ Failed to place liquidation order:`, errorData);
+        
+        // Update order as failed
+        await storage.updateCycleOrder(liquidationOrder.id, {
+          status: 'failed'
+        });
+        
+        throw new Error(`Liquidation order failed: ${errorData.msg || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error(`[LIQUIDATION] ❌ Error placing liquidation order:`, error);
+      throw error;
+    }
+  }
+
   private async placeTakeProfitOrder(botId: number, cycleId: number, basePrice: number, quantity: number) {
     console.log(`\n[MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====`);
     

@@ -51,16 +51,16 @@ export function MyBotsPage() {
     }
   });
 
-  // Stop bot mutation
+  // Stop bot mutation with order cancellation and liquidation
   const stopBotMutation = useMutation({
     mutationFn: async (botId: number) => {
-      await apiRequest(`/api/bots/${botId}`, 'PUT', { isActive: false });
+      await apiRequest(`/api/bots/${botId}/stop`, 'POST');
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
       toast({
-        title: "Bot Stopped",
-        description: "Trading bot has been successfully stopped.",
+        title: "Bot Stopped Successfully",
+        description: `Bot stopped. ${data?.cancelledOrders || 0} orders cancelled, ${data?.liquidated ? 'assets liquidated' : 'no assets to liquidate'}.`,
       });
     },
     onError: (error: any) => {
