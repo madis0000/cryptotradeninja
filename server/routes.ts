@@ -357,6 +357,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bot Cycles API - Secured
+  app.get("/api/bot-cycles/:botId", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const botId = parseInt(req.params.botId);
+      
+      // Verify bot belongs to user
+      const bot = await storage.getTradingBot(botId);
+      if (!bot || bot.userId !== userId) {
+        return res.status(404).json({ error: "Trading bot not found" });
+      }
+      
+      const cycles = await storage.getBotCyclesByBotId(botId);
+      res.json(cycles);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch bot cycles" });
+    }
+  });
+
+  // Bot Orders API - Secured  
+  app.get("/api/bot-orders/:botId", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const botId = parseInt(req.params.botId);
+      
+      // Verify bot belongs to user
+      const bot = await storage.getTradingBot(botId);
+      if (!bot || bot.userId !== userId) {
+        return res.status(404).json({ error: "Trading bot not found" });
+      }
+      
+      const orders = await storage.getCycleOrdersByBotId(botId);
+      res.json(orders);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch bot orders" });
+    }
+  });
+
   // Trades API - Secured
   app.get("/api/trades", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {

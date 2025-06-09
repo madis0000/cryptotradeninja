@@ -33,9 +33,7 @@ export function MyBotsPage() {
   // Delete bot mutation
   const deleteBotMutation = useMutation({
     mutationFn: async (botId: number) => {
-      await apiRequest(`/api/bots/${botId}`, {
-        method: 'DELETE'
-      });
+      await apiRequest(`/api/bots/${botId}`, 'DELETE');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
@@ -65,6 +63,11 @@ export function MyBotsPage() {
 
   const activeBots = Array.isArray(bots) ? bots.filter((bot: any) => bot.isActive || bot.is_active) : [];
   const inactiveBots = Array.isArray(bots) ? bots.filter((bot: any) => !(bot.isActive || bot.is_active)) : [];
+
+  // If bot is selected, show bot details
+  if (selectedBot) {
+    return renderBotDetails();
+  }
 
   const renderActiveBots = () => (
     <div className="space-y-6">

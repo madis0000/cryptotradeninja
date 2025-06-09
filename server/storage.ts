@@ -55,6 +55,7 @@ export interface IStorage {
   getActiveBotCycle(botId: number): Promise<BotCycle | undefined>;
   updateBotCycle(cycleId: number, updates: Partial<InsertBotCycle>): Promise<BotCycle>;
   completeBotCycle(cycleId: number): Promise<void>;
+  getBotCyclesByBotId(botId: number): Promise<BotCycle[]>;
 
   // Cycle Order Management
   createCycleOrder(order: InsertCycleOrder): Promise<CycleOrder>;
@@ -62,6 +63,7 @@ export interface IStorage {
   updateCycleOrder(orderId: number, updates: Partial<InsertCycleOrder> & { filledAt?: Date }): Promise<CycleOrder>;
   getCycleOrderByExchangeId(exchangeOrderId: string): Promise<CycleOrder | undefined>;
   getPendingCycleOrders(botId: number): Promise<CycleOrder[]>;
+  getCycleOrdersByBotId(botId: number): Promise<CycleOrder[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -323,6 +325,22 @@ export class DatabaseStorage implements IStorage {
         eq(cycleOrders.botId, botId),
         eq(cycleOrders.status, 'pending')
       ))
+      .orderBy(desc(cycleOrders.createdAt));
+  }
+
+  async getBotCyclesByBotId(botId: number): Promise<BotCycle[]> {
+    return await db
+      .select()
+      .from(botCycles)
+      .where(eq(botCycles.botId, botId))
+      .orderBy(desc(botCycles.createdAt));
+  }
+
+  async getCycleOrdersByBotId(botId: number): Promise<CycleOrder[]> {
+    return await db
+      .select()
+      .from(cycleOrders)
+      .where(eq(cycleOrders.botId, botId))
       .orderBy(desc(cycleOrders.createdAt));
   }
 }
