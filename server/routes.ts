@@ -281,7 +281,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const botData = insertTradingBotSchema.parse({ ...req.body, userId });
       
-      // Create the bot in database
+      // For Martingale bots, validate order placement first before creating the bot
+      if (botData.strategy === 'martingale' && botData.isActive) {
+        console.log(`[MARTINGALE] Validating order placement before creating bot`);
+        
+        try {
+          // Validate order placement without creating the bot yet
+          await wsService.validateMartingaleOrderPlacement(botData);
+          console.log(`[MARTINGALE] Order placement validation successful`);
+          
+        } catch (validationError) {
+          console.error(`[MARTINGALE] Order placement validation failed:`, validationError);
+          const errorMessage = validationError instanceof Error ? validationError.message : 'Order placement validation failed';
+          return res.status(400).json({ 
+            error: `Bot creation failed: ${errorMessage}`,
+            details: errorMessage
+          });
+        }
+      }
+      
+      // Create the bot in database only after validation succeeds
       const bot = await storage.createTradingBot(botData);
       
       // If it's a Martingale bot and active, start the first cycle
@@ -306,11 +325,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
         } catch (cycleError) {
           console.error(`[MARTINGALE] Error creating initial cycle for bot ${bot.id}:`, cycleError);
-          // Return specific error message for order placement failures
+          
+          // Delete the bot since order placement failed
+          await storage.deleteTradingBot(bot.id);
+          console.log(`[MARTINGALE] Deleted bot ${bot.id} due to order placement failure`);
+          
           const errorMessage = cycleError instanceof Error ? cycleError.message : 'Failed to place initial order';
           return res.status(500).json({ 
-            error: `Bot created but order placement failed: ${errorMessage}`,
-            botId: bot.id,
+            error: `Bot creation failed: ${errorMessage}`,
             details: errorMessage
           });
         }

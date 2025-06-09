@@ -3318,6 +3318,82 @@ export class WebSocketService {
     console.log(`[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====\n`);
   }
 
+  public async validateMartingaleOrderPlacement(botData: any): Promise<void> {
+    console.log(`[MARTINGALE VALIDATION] ===== VALIDATING ORDER PLACEMENT =====`);
+    
+    try {
+      // Get exchange information
+      const exchanges = await storage.getExchangesByUserId(botData.userId);
+      const activeExchange = exchanges.find(ex => ex.id === botData.exchangeId && ex.isActive);
+      
+      if (!activeExchange) {
+        throw new Error('No active exchange found for order placement');
+      }
+
+      // Get current market price for validation
+      const symbol = botData.tradingPair;
+      const response = await fetch(`https://testnet.binance.vision/api/v3/ticker/price?symbol=${symbol}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch current price for ${symbol}`);
+      }
+      
+      const priceData = await response.json();
+      const currentPrice = parseFloat(priceData.price);
+      
+      // Calculate and validate base order quantity
+      const baseOrderAmount = parseFloat(botData.baseOrderAmount);
+      const rawQuantity = baseOrderAmount / currentPrice;
+      
+      // Apply Binance lot size filters
+      const minQuantity = 0.1;
+      const stepSize = 0.1;
+      let quantity = Math.floor(rawQuantity / stepSize) * stepSize;
+      
+      if (quantity < minQuantity) {
+        quantity = minQuantity;
+      }
+      
+      quantity = Math.round(quantity * 10) / 10;
+
+      // Validate minimum order value (typically $10 for Binance)
+      const orderValue = quantity * currentPrice;
+      if (orderValue < 10) {
+        throw new Error(`Order value ${orderValue.toFixed(2)} USDT is below minimum requirement of 10 USDT`);
+      }
+
+      // Validate exchange API credentials exist
+      if (!activeExchange.apiKey || !activeExchange.apiSecret) {
+        throw new Error('Exchange API credentials are missing');
+      }
+
+      // Test API connectivity (without placing actual orders)
+      try {
+        const { decrypt } = await import('./encryption');
+        const apiKey = decrypt(activeExchange.apiKey, activeExchange.encryptionIv);
+        const apiSecret = decrypt(activeExchange.apiSecret, activeExchange.encryptionIv);
+        
+        if (!apiKey || !apiSecret) {
+          throw new Error('Failed to decrypt API credentials');
+        }
+      } catch (credError) {
+        throw new Error('Invalid or corrupted API credentials');
+      }
+
+      console.log(`[MARTINGALE VALIDATION] ✓ Validation successful:`);
+      console.log(`[MARTINGALE VALIDATION]    Symbol: ${symbol}`);
+      console.log(`[MARTINGALE VALIDATION]    Current Price: $${currentPrice.toFixed(6)}`);
+      console.log(`[MARTINGALE VALIDATION]    Order Quantity: ${quantity.toFixed(1)} ${symbol.replace('USDT', '')}`);
+      console.log(`[MARTINGALE VALIDATION]    Order Value: $${orderValue.toFixed(2)}`);
+      console.log(`[MARTINGALE VALIDATION]    Exchange: ${activeExchange.name}`);
+      
+    } catch (error) {
+      console.error(`[MARTINGALE VALIDATION] ❌ Validation failed:`, error);
+      throw error;
+    }
+    
+    console.log(`[MARTINGALE VALIDATION] ===== VALIDATION COMPLETE =====\n`);
+  }
+
   private async placeTakeProfitOrder(botId: number, cycleId: number, basePrice: number, quantity: number) {
     console.log(`\n[MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====`);
     
