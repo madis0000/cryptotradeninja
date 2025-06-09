@@ -8,7 +8,7 @@ export function MyBotsPage() {
   const [activeSection, setActiveSection] = useState('active-bots');
 
   // Fetch bots data
-  const { data: bots = [], isLoading: botsLoading } = useQuery({
+  const { data: bots = [], isLoading: botsLoading } = useQuery<any[]>({
     queryKey: ['/api/bots']
   });
 
