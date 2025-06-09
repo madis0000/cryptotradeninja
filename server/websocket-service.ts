@@ -2278,12 +2278,30 @@ export class WebSocketService {
     try {
       const marketData = this.marketData.get(symbol);
       if (marketData && marketData.price) {
+        console.log(`[MARTINGALE STRATEGY] ✓ Using cached price for ${symbol}: $${marketData.price}`);
         return parseFloat(marketData.price);
       }
       
-      // Fetch current price from Binance API if not available in cache
-      const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+      console.log(`[MARTINGALE STRATEGY] 📡 Fetching current price for ${symbol} from Binance API...`);
+      
+      // Try testnet first, then fallback to mainnet for price data
+      let response;
+      try {
+        response = await fetch(`https://testnet.binance.vision/api/v3/ticker/price?symbol=${symbol}`);
+        if (!response.ok) {
+          throw new Error(`Testnet API failed with status ${response.status}`);
+        }
+      } catch (testnetError) {
+        console.log(`[MARTINGALE STRATEGY] Testnet API failed, using mainnet for price data`);
+        response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+      }
+      
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+      
       const data = await response.json();
+      console.log(`[MARTINGALE STRATEGY] ✓ Fetched price for ${symbol}: $${data.price}`);
       return parseFloat(data.price);
       
     } catch (error) {
