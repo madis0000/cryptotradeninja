@@ -167,7 +167,7 @@ export function MyBotsPage() {
             </Card>
           </div>
 
-          {/* Cycle Information */}
+          {/* Current Cycle with Dynamic P&L */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <Card className="bg-crypto-darker border-gray-800">
               <CardHeader>
@@ -181,17 +181,33 @@ export function MyBotsPage() {
                       <span className="text-white font-medium">#{currentCycle.cycleNumber}</span>
                     </div>
                     <div className="flex justify-between">
+                      <span className="text-crypto-light">Status:</span>
+                      <span className={`font-medium capitalize ${
+                        currentCycle.status === 'active' ? 'text-blue-400' :
+                        currentCycle.status === 'completed' ? 'text-green-400' :
+                        'text-gray-400'
+                      }`}>
+                        {currentCycle.status}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-crypto-light">Safety Orders Filled:</span>
                       <span className="text-white font-medium">{currentCycle.filledSafetyOrders}/{currentCycle.maxSafetyOrders}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-crypto-light">Total Invested:</span>
-                      <span className="text-white font-medium">${currentCycle.totalInvested || '0.00'}</span>
+                      <span className="text-white font-medium">${parseFloat(currentCycle.totalInvested || '0').toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-crypto-light">Average Price:</span>
-                      <span className="text-white font-medium">${currentCycle.currentAveragePrice || 'N/A'}</span>
+                      <span className="text-white font-medium">${parseFloat(currentCycle.currentAveragePrice || '0').toFixed(3)}</span>
                     </div>
+                    {currentCycle.totalQuantity && (
+                      <div className="flex justify-between">
+                        <span className="text-crypto-light">Total Quantity:</span>
+                        <span className="text-white font-medium">{parseFloat(currentCycle.totalQuantity).toFixed(3)} {selectedBot.tradingPair?.replace('USDT', '')}</span>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <p className="text-crypto-light text-center py-4">No active cycle</p>
@@ -205,43 +221,125 @@ export function MyBotsPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex justify-between">
+                  <span className="text-crypto-light">Total Cycles:</span>
+                  <span className="text-white font-medium">{botCycles.length}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-crypto-light">Completed Cycles:</span>
                   <span className="text-white font-medium">{completedCycles.length}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-crypto-light">Total Invested:</span>
+                  <span className="text-white font-medium">${parseFloat(selectedBot.totalInvested || '0').toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-crypto-light">Total PnL:</span>
-                  <span className={`font-medium ${parseFloat(selectedBot.totalPnl || selectedBot.total_pnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    ${selectedBot.totalPnl || selectedBot.total_pnl || '0.00'}
+                  <span className={`font-medium ${parseFloat(selectedBot.totalPnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${parseFloat(selectedBot.totalPnl || '0').toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-crypto-light">Total Trades:</span>
-                  <span className="text-white font-medium">{selectedBot.totalTrades || selectedBot.total_trades || 0}</span>
+                  <span className="text-white font-medium">{selectedBot.totalTrades || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-crypto-light">Win Rate:</span>
-                  <span className="text-white font-medium">{selectedBot.winRate || selectedBot.win_rate || '0.00'}%</span>
+                  <span className="text-white font-medium">{parseFloat(selectedBot.winRate || '0').toFixed(1)}%</span>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Chart Placeholder */}
+          {/* Strategy Orders */}
           <Card className="bg-crypto-darker border-gray-800 mb-6">
             <CardHeader>
-              <CardTitle className="text-white">Price Chart</CardTitle>
+              <CardTitle className="text-white">Strategy Orders</CardTitle>
+              <p className="text-sm text-crypto-light">All orders for this bot with their current status</p>
             </CardHeader>
             <CardContent>
-              <div className="h-64 bg-crypto-dark rounded-lg border border-gray-700 flex items-center justify-center">
-                <p className="text-crypto-light">Chart will be implemented here</p>
-              </div>
+              {ordersLoading ? (
+                <div className="text-center py-8">
+                  <div className="text-crypto-light">Loading orders...</div>
+                </div>
+              ) : botOrders.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-crypto-light">No orders found for this bot</div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-700">
+                        <th className="text-left py-3 px-4 text-crypto-light">Order Type</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Side</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Price</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Quantity</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Filled</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Status</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Exchange ID</th>
+                        <th className="text-left py-3 px-4 text-crypto-light">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {botOrders.map((order: any, index: number) => (
+                        <tr key={index} className="border-b border-gray-800 hover:bg-gray-800/50">
+                          <td className="py-3 px-4 text-white">
+                            <div className="flex flex-col">
+                              <span className="font-medium capitalize">
+                                {order.orderType?.replace('_', ' ') || order.order_type?.replace('_', ' ')}
+                              </span>
+                              {order.safetyOrderLevel && (
+                                <span className="text-xs text-crypto-light">Level {order.safetyOrderLevel || order.safety_order_level}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`text-sm font-medium ${
+                              order.side === 'BUY' ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                              {order.side}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-white font-mono">
+                            ${parseFloat(order.price || '0').toFixed(3)}
+                          </td>
+                          <td className="py-3 px-4 text-white font-mono">
+                            {parseFloat(order.quantity || '0').toFixed(3)}
+                          </td>
+                          <td className="py-3 px-4 text-white font-mono">
+                            {order.filledQuantity ? parseFloat(order.filledQuantity).toFixed(3) : '0.000'}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              order.status === 'placed' || order.status === 'filled' ? 'bg-green-500/10 text-green-400' :
+                              order.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400' :
+                              order.status === 'failed' ? 'bg-red-500/10 text-red-400' :
+                              'bg-gray-500/10 text-gray-400'
+                            }`}>
+                              {order.status || 'unknown'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-crypto-light font-mono text-xs">
+                            {order.exchangeOrderId || order.exchange_order_id || 'N/A'}
+                          </td>
+                          <td className="py-3 px-4 text-crypto-light text-xs">
+                            {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 
+                             order.created_at ? new Date(order.created_at).toLocaleDateString() : 'N/A'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Orders Table */}
           <Card className="bg-crypto-darker border-gray-800">
             <CardHeader>
-              <CardTitle className="text-white">Orders History</CardTitle>
+              <CardTitle className="text-white">Orders History (Filled)</CardTitle>
+              <p className="text-sm text-crypto-light">Completed trades and filled orders for this bot</p>
             </CardHeader>
             <CardContent>
               {ordersLoading ? (
