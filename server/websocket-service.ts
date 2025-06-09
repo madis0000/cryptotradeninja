@@ -3015,10 +3015,26 @@ export class WebSocketService {
       await this.updateTakeProfitOrder(cycle, newAveragePrice);
 
       // Check if we need to place the next safety order
-      if (currentSafetyOrders < bot.maxSafetyOrders) {
+      // First, check for existing pending safety orders to avoid duplicates
+      const pendingSafetyOrders = await storage.getCycleOrders(cycle.id);
+      const activeSafetyOrders = pendingSafetyOrders.filter(order => 
+        order.orderType === 'safety_order' && 
+        (order.status === 'pending' || order.status === 'placed')
+      );
+
+      const totalSafetyOrdersInProgress = currentSafetyOrders + activeSafetyOrders.length;
+
+      console.log(`[MARTINGALE STRATEGY] 📊 SAFETY ORDER STATUS CHECK:`);
+      console.log(`[MARTINGALE STRATEGY]    Filled Safety Orders: ${currentSafetyOrders}`);
+      console.log(`[MARTINGALE STRATEGY]    Pending Safety Orders: ${activeSafetyOrders.length}`);
+      console.log(`[MARTINGALE STRATEGY]    Total In Progress: ${totalSafetyOrdersInProgress}`);
+      console.log(`[MARTINGALE STRATEGY]    Maximum Allowed: ${bot.maxSafetyOrders}`);
+
+      if (totalSafetyOrdersInProgress < bot.maxSafetyOrders) {
+        console.log(`[MARTINGALE STRATEGY] ✅ Placing next safety order (${totalSafetyOrdersInProgress + 1}/${bot.maxSafetyOrders})`);
         await this.placeNextSafetyOrder(bot, cycle, newAveragePrice, currentSafetyOrders);
       } else {
-        console.log(`[MARTINGALE STRATEGY] ⚠️ Maximum safety orders reached (${bot.maxSafetyOrders})`);
+        console.log(`[MARTINGALE STRATEGY] ⚠️ All safety orders are already placed or filled (${totalSafetyOrdersInProgress}/${bot.maxSafetyOrders})`);
         console.log(`[MARTINGALE STRATEGY] ⚠️ Bot will wait for take profit to trigger or manual intervention`);
       }
 
@@ -3359,12 +3375,25 @@ export class WebSocketService {
       try {
         console.log(`[MARTINGALE STRATEGY] 🚀 Placing updated take profit order on ${activeExchange.name}...`);
         
+        // Apply price filter compliance for take profit order
+        // For ICPUSDT: PRICE_FILTER requires 4 decimal places maximum
+        const adjustedTakeProfitPrice = Math.round(newTakeProfitPrice * 10000) / 10000;
+        
+        // For ICPUSDT: LOT_SIZE requires 0.1 step size
+        const adjustedQuantity = Math.round(totalQuantity * 10) / 10;
+
+        console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT ORDER ADJUSTMENTS:`);
+        console.log(`[MARTINGALE STRATEGY]    Raw Price: $${newTakeProfitPrice.toFixed(8)}`);
+        console.log(`[MARTINGALE STRATEGY]    Adjusted Price: $${adjustedTakeProfitPrice.toFixed(4)} (PRICE_FILTER compliant)`);
+        console.log(`[MARTINGALE STRATEGY]    Raw Quantity: ${totalQuantity.toFixed(8)}`);
+        console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${adjustedQuantity.toFixed(1)} (LOT_SIZE compliant)`);
+
         const orderResult = await this.placeOrderOnExchange(activeExchange, {
           symbol: bot.tradingPair,
           side: bot.direction === 'long' ? 'SELL' : 'BUY',
           type: 'LIMIT',
-          quantity: totalQuantity.toFixed(8),
-          price: newTakeProfitPrice.toFixed(8),
+          quantity: adjustedQuantity.toFixed(1),
+          price: adjustedTakeProfitPrice.toFixed(4),
           timeInForce: 'GTC'
         });
 
