@@ -306,6 +306,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
         } catch (cycleError) {
           console.error(`[MARTINGALE] Error creating initial cycle for bot ${bot.id}:`, cycleError);
+          // Return specific error message for order placement failures
+          const errorMessage = cycleError instanceof Error ? cycleError.message : 'Failed to place initial order';
+          return res.status(500).json({ 
+            error: `Bot created but order placement failed: ${errorMessage}`,
+            botId: bot.id,
+            details: errorMessage
+          });
         }
       }
       

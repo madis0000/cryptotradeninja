@@ -2079,9 +2079,10 @@ export class WebSocketService {
       
     } catch (error) {
       console.error(`[MARTINGALE STRATEGY] ❌ Error starting bot:`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       ws.send(JSON.stringify({
         type: 'martingale_error',
-        error: error.message
+        error: errorMessage
       }));
     }
   }
@@ -2149,10 +2150,11 @@ export class WebSocketService {
       
     } catch (error) {
       console.error(`[MARTINGALE STRATEGY] ❌ Cycle execution error:`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Cycle execution failed';
       ws.send(JSON.stringify({
         type: 'martingale_error',
         botId: bot.id,
-        error: error.message
+        error: errorMessage
       }));
     }
   }

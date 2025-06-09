@@ -104,8 +104,6 @@ export function MartingaleProgressDialog({
         if (cycleResponse.ok) {
           const cycles = await cycleResponse.json();
           if (cycles.length > 0) {
-            const latestCycle = cycles[0];
-            
             // Check if base order was placed successfully
             const ordersResponse = await fetch(`/api/bot-orders/${botId}`);
             if (ordersResponse.ok) {
@@ -142,6 +140,7 @@ export function MartingaleProgressDialog({
       throw error;
     }
   };
+
 
   // Create bot and place orders via API
   const createBotWithOrders = async () => {
@@ -333,7 +332,10 @@ export function MartingaleProgressDialog({
                   )}
                   
                   {step.errorMessage && (
-                    <p className="text-xs text-red-400 mt-1">{step.errorMessage}</p>
+                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+                      <p className="text-xs text-red-700 font-medium">Error Details:</p>
+                      <p className="text-xs text-red-600 mt-1">{step.errorMessage}</p>
+                    </div>
                   )}
                 </div>
               </div>
