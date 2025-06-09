@@ -79,9 +79,9 @@ export default function Trading() {
   }, [selectedSymbol, publicWs.status]);
   return (
     <div className="min-h-screen bg-crypto-darker">
-      <div className="flex h-screen">
+      <div className="flex h-screen overflow-hidden">
         {/* Left Column */}
-        <div className="flex flex-col flex-1">
+        <div className="flex flex-col flex-1 min-h-0">
           {/* Header Section using shared component */}
           <TradingHeader 
             selectedSymbol={selectedSymbol}
@@ -89,25 +89,29 @@ export default function Trading() {
           />
 
           {/* Main Content Row */}
-          <div className="flex flex-1">
+          <div className="flex flex-1 min-h-0">
             {/* Left Panel - Order Book */}
             <OrderBook className="w-80 border-r border-gray-800" />
 
             {/* Center Panel - Chart & Trading Interface */}
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-h-0">
               {/* Chart Section */}
               <TradingChart 
-                className="flex-1 border-b border-gray-800" 
+                className="flex-1 border-b border-gray-800 min-h-0" 
                 symbol={selectedSymbol}
               />
 
-              {/* Order Form Section - Full Width */}
-              <OrderForm className="h-64 border-b border-gray-800" symbol={selectedSymbol} />
+              {/* Order Form Section - Fixed Height */}
+              <div className="h-64 border-b border-gray-800">
+                <OrderForm className="h-full" symbol={selectedSymbol} />
+              </div>
             </div>
           </div>
 
-          {/* Orders & History Section - Full Screen Width */}
-          <OrdersHistory className="h-64 border-t border-gray-800" />
+          {/* Orders & History Section - Fixed Height at Bottom */}
+          <div className="h-64 border-t border-gray-800">
+            <OrdersHistory className="h-full" />
+          </div>
         </div>
 
         {/* Right Panel - Markets using shared component */}
