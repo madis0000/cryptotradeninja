@@ -93,24 +93,24 @@ export default function Trading() {
             {/* Left Panel - Order Book */}
             <OrderBook className="w-80 border-r border-gray-800" />
 
-            {/* Center Panel - Chart & Trading Interface */}
+            {/* Center Panel - Chart Only */}
             <div className="flex-1 flex flex-col min-h-0">
               {/* Chart Section */}
               <TradingChart 
                 className="flex-1 border-b border-gray-800 min-h-0" 
                 symbol={selectedSymbol}
               />
-
-              {/* Order Form Section - Fixed Height */}
-              <div className="h-64 border-b border-gray-800">
-                <OrderForm className="h-full" symbol={selectedSymbol} />
-              </div>
             </div>
           </div>
 
-          {/* Orders & History Section - Fixed Height at Bottom */}
-          <div className="h-64 border-t border-gray-800">
-            <OrdersHistory className="h-full" />
+          {/* Order Form Section - Dynamic Height */}
+          <div className="border-b border-gray-800">
+            <OrderForm className="min-h-[16rem]" symbol={selectedSymbol} />
+          </div>
+
+          {/* Orders & History Section - Dynamic Height at Bottom */}
+          <div className="border-t border-gray-800">
+            <OrdersHistory className="min-h-[16rem]" />
           </div>
         </div>
 
