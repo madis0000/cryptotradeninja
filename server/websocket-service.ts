@@ -2081,7 +2081,7 @@ export class WebSocketService {
       console.error(`[MARTINGALE STRATEGY] ❌ Error starting bot:`, error);
       ws.send(JSON.stringify({
         type: 'martingale_error',
-        error: error.message
+        error: (error as Error).message
       }));
     }
   }
@@ -2152,27 +2152,12 @@ export class WebSocketService {
       ws.send(JSON.stringify({
         type: 'martingale_error',
         botId: bot.id,
-        error: error.message
+        error: (error as Error).message
       }));
     }
   }
 
-  private async placeTakeProfitOrder(ws: WebSocket, bot: any, cycleId: number, baseOrder: any, currentPrice: number) {
-    console.log(`[MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====`);
-    
-    const takeProfitPercentage = parseFloat(bot.takeProfitPercentage);
-    const takeProfitPrice = bot.direction === 'long' 
-      ? currentPrice * (1 + takeProfitPercentage / 100)
-      : currentPrice * (1 - takeProfitPercentage / 100);
-    
-    console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:`);
-    console.log(`[MARTINGALE STRATEGY]    Take Profit %: ${takeProfitPercentage}%`);
-    console.log(`[MARTINGALE STRATEGY]    Target Price: $${takeProfitPrice.toFixed(4)}`);
-    console.log(`[MARTINGALE STRATEGY]    Expected Profit: $${(parseFloat(baseOrder.quantity) * (takeProfitPrice - currentPrice)).toFixed(4)}`);
-    
-    const takeProfitOrder = await this.placeMartingaleOrder(ws, bot, cycleId, {
-      side: bot.direction === 'long' ? 'SELL' : 'BUY',
-      quantity: baseOrder.quantity,
+
       orderType: 'take_profit',
       price: takeProfitPrice.toFixed(4),
       type: 'LIMIT'
@@ -3172,91 +3157,6 @@ export class WebSocketService {
     
     console.log(`[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====\n`);
   }
-
-  private async placeTakeProfitOrder(botId: number, cycleId: number, basePrice: number, quantity: number) {
-    console.log(`\n[MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====`);
-    
-    try {
-      const bot = await storage.getTradingBot(botId);
-      if (!bot) {
-        console.error(`[MARTINGALE STRATEGY] ❌ Bot ${botId} not found for take profit order`);
-        return;
-      }
-
-      const exchange = await storage.getExchangesByUserId(bot.userId);
-      const activeExchange = exchange.find(ex => ex.id === bot.exchangeId && ex.isActive);
-      
-      if (!activeExchange) {
-        console.error(`[MARTINGALE STRATEGY] ❌ No active exchange found for take profit order`);
-        return;
-      }
-
-      // Calculate take profit price
-      const takeProfitPercentage = parseFloat(bot.takeProfitPercentage || '1.5');
-      const takeProfitPrice = bot.direction === 'long' 
-        ? basePrice * (1 + takeProfitPercentage / 100)
-        : basePrice * (1 - takeProfitPercentage / 100);
-
-      console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:`);
-      console.log(`[MARTINGALE STRATEGY]    Base Price: $${basePrice.toFixed(6)}`);
-      console.log(`[MARTINGALE STRATEGY]    Take Profit %: ${takeProfitPercentage}%`);
-      console.log(`[MARTINGALE STRATEGY]    Take Profit Price: $${takeProfitPrice.toFixed(6)}`);
-      console.log(`[MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(8)}`);
-
-      // Create take profit order record
-      const takeProfitOrder = await storage.createCycleOrder({
-        cycleId: cycleId,
-        botId: botId,
-        userId: bot.userId,
-        orderType: 'take_profit',
-        side: bot.direction === 'long' ? 'SELL' : 'BUY',
-        orderCategory: 'LIMIT',
-        symbol: bot.tradingPair,
-        quantity: quantity.toFixed(8),
-        price: takeProfitPrice.toFixed(8),
-        status: 'pending'
-      });
-
-      console.log(`[MARTINGALE STRATEGY] ✓ Created take profit order record (ID: ${takeProfitOrder.id})`);
-
-      try {
-        console.log(`[MARTINGALE STRATEGY] 🚀 Placing take profit order on ${activeExchange.name}...`);
-        console.log(`[MARTINGALE STRATEGY]    Order Type: LIMIT ${bot.direction === 'long' ? 'SELL' : 'BUY'}`);
-        console.log(`[MARTINGALE STRATEGY]    Symbol: ${bot.tradingPair}`);
-        console.log(`[MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(8)}`);
-        console.log(`[MARTINGALE STRATEGY]    Price: $${takeProfitPrice.toFixed(6)}`);
-
-        const orderResult = await this.placeOrderOnExchange(activeExchange, {
-          symbol: bot.tradingPair,
-          side: bot.direction === 'long' ? 'SELL' : 'BUY',
-          type: 'LIMIT',
-          quantity: quantity.toFixed(8),
-          price: takeProfitPrice.toFixed(8),
-          timeInForce: 'GTC'
-        });
-
-        if (orderResult && orderResult.orderId) {
-          await storage.updateCycleOrder(takeProfitOrder.id, {
-            exchangeOrderId: orderResult.orderId.toString(),
-            status: 'placed'
-          });
-
-          console.log(`[MARTINGALE STRATEGY] ✅ TAKE PROFIT ORDER SUCCESSFULLY PLACED!`);
-          console.log(`[MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
-          console.log(`[MARTINGALE STRATEGY]    Target Price: $${takeProfitPrice.toFixed(6)}`);
-          console.log(`[MARTINGALE STRATEGY]    Expected Profit: ${takeProfitPercentage}%`);
-
-        } else {
-          console.error(`[MARTINGALE STRATEGY] ❌ Failed to place take profit order - No order ID returned`);
-          await storage.updateCycleOrder(takeProfitOrder.id, { status: 'failed' });
-        }
-
-      } catch (orderError) {
-        console.error(`[MARTINGALE STRATEGY] ❌ Error placing take profit order:`, orderError);
-        await storage.updateCycleOrder(takeProfitOrder.id, { status: 'failed' });
-      }
-
-    } catch (error) {
       console.error(`[MARTINGALE STRATEGY] ❌ Critical error in placeTakeProfitOrder:`, error);
     }
     
