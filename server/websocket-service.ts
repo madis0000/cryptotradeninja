@@ -2586,8 +2586,8 @@ export class WebSocketService {
       const pendingOrders = await storage.getPendingCycleOrders(botId);
       
       for (const order of pendingOrders) {
-        // Simulate order fill detection (in production, this would check exchange API)
-        const isFilled = this.simulateOrderFill(order);
+        // Check real order status via API
+        const isFilled = await this.checkOrderFillsViaAPI(order);
         
         if (isFilled) {
           await this.handleOrderFill(order, activeCycle);
@@ -2598,10 +2598,61 @@ export class WebSocketService {
     }
   }
 
-  private simulateOrderFill(order: CycleOrder): boolean {
-    // Simulate random order fills for demonstration (5% chance per check)
-    // In production, this would query the exchange API for actual order status
-    return Math.random() < 0.05;
+  // Real-time order monitoring via Binance User Data Stream
+  private userDataStreams = new Map<number, WebSocket>(); // exchangeId -> WebSocket
+  private userListenKeys = new Map<number, string>(); // exchangeId -> listenKey
+
+  private async checkOrderFillsViaAPI(order: CycleOrder): Promise<boolean> {
+    try {
+      // Get exchange credentials
+      const exchanges = await storage.getExchangesByUserId(order.userId);
+      const exchange = exchanges.find(ex => ex.id && order.botId);
+      
+      if (!exchange || !order.exchangeOrderId) {
+        return false;
+      }
+
+      const bot = await storage.getTradingBot(order.botId);
+      if (!bot) return false;
+
+      // Query order status from Binance API
+      const orderParams = new URLSearchParams({
+        symbol: order.symbol,
+        orderId: order.exchangeOrderId,
+        timestamp: Date.now().toString()
+      });
+
+      const signature = this.createSignature(orderParams.toString(), exchange.apiSecret);
+      orderParams.append('signature', signature);
+
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order?${orderParams}`, {
+        headers: {
+          'X-MBX-APIKEY': exchange.apiKey
+        }
+      });
+
+      if (response.ok) {
+        const orderData = await response.json();
+        console.log(`[ORDER MONITOR] Order ${order.exchangeOrderId} status: ${orderData.status}`);
+        
+        // Check if order is filled
+        if (orderData.status === 'FILLED') {
+          // Update order with actual fill data
+          await storage.updateCycleOrder(order.id, {
+            status: 'filled',
+            filledQuantity: orderData.executedQty,
+            filledPrice: orderData.avgPrice || orderData.price,
+            filledAt: new Date()
+          });
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error(`[ORDER MONITOR] Error checking order ${order.id}:`, error);
+      return false;
+    }
   }
 
   private async handleOrderFill(order: CycleOrder, cycle: BotCycle) {
