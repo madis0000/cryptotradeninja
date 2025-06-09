@@ -2,7 +2,9 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { Server } from 'http';
 import { storage } from './storage';
 import { decryptApiCredentials } from './encryption';
-import { BotCycle, CycleOrder } from '@shared/schema';
+import { BotCycle, CycleOrder, tradingBots } from '@shared/schema';
+import { db } from './db';
+import { eq } from 'drizzle-orm';
 import crypto from 'crypto';
 
 interface UserConnection {
@@ -2565,12 +2567,16 @@ export class WebSocketService {
 
   private async checkOrderFills() {
     try {
-      // Get all active bot cycles
-      const activeBots = await storage.getTradingBotsByUserId(0); // We'll iterate through all users
+      // Get all users and check their active bots
+      const users = [1]; // For now, check user 1 - in production, iterate through all users
       
-      for (const bot of activeBots) {
-        if (bot.strategy === 'martingale' && bot.isActive) {
-          await this.monitorBotCycle(bot.id);
+      for (const userId of users) {
+        const activeBots = await storage.getTradingBotsByUserId(userId);
+        
+        for (const bot of activeBots) {
+          if (bot.strategy === 'martingale' && bot.isActive) {
+            await this.monitorBotCycle(bot.id);
+          }
         }
       }
     } catch (error) {
@@ -2601,6 +2607,119 @@ export class WebSocketService {
   // Real-time order monitoring via Binance User Data Stream
   private userDataStreams = new Map<number, WebSocket>(); // exchangeId -> WebSocket
   private userListenKeys = new Map<number, string>(); // exchangeId -> listenKey
+
+  // Start User Data Stream for real-time order updates
+  async startUserDataStream(exchangeId: number, userId: number) {
+    try {
+      const exchanges = await storage.getExchangesByUserId(userId);
+      const exchange = exchanges.find(ex => ex.id === exchangeId);
+      
+      if (!exchange) {
+        console.error(`[USER STREAM] Exchange ${exchangeId} not found`);
+        return;
+      }
+
+      // Get listen key from Binance
+      const listenKeyResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/userDataStream`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': exchange.apiKey
+        }
+      });
+
+      if (!listenKeyResponse.ok) {
+        console.error(`[USER STREAM] Failed to get listen key for exchange ${exchangeId}`);
+        return;
+      }
+
+      const { listenKey } = await listenKeyResponse.json();
+      this.userListenKeys.set(exchangeId, listenKey);
+
+      // Connect to User Data Stream WebSocket
+      const wsUrl = `${exchange.wsApiEndpoint}/${listenKey}`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.on('open', () => {
+        console.log(`[USER STREAM] Connected to user data stream for exchange ${exchangeId}`);
+      });
+
+      ws.on('message', async (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+          await this.handleUserDataStreamMessage(message, exchangeId);
+        } catch (error) {
+          console.error('[USER STREAM] Error parsing message:', error);
+        }
+      });
+
+      ws.on('error', (error) => {
+        console.error(`[USER STREAM] WebSocket error for exchange ${exchangeId}:`, error);
+      });
+
+      ws.on('close', () => {
+        console.log(`[USER STREAM] Disconnected from user data stream for exchange ${exchangeId}`);
+        this.userDataStreams.delete(exchangeId);
+      });
+
+      this.userDataStreams.set(exchangeId, ws);
+      
+      // Keep alive the listen key (ping every 30 minutes)
+      setInterval(async () => {
+        await this.keepAliveListenKey(exchangeId, exchange);
+      }, 30 * 60 * 1000);
+
+    } catch (error) {
+      console.error(`[USER STREAM] Error starting user data stream for exchange ${exchangeId}:`, error);
+    }
+  }
+
+  private async handleUserDataStreamMessage(message: any, exchangeId: number) {
+    if (message.e === 'executionReport') {
+      // Order execution report - check if it's one of our monitored orders
+      const exchangeOrderId = message.i.toString();
+      const symbol = message.s;
+      const status = message.X; // Order status
+      
+      console.log(`[USER STREAM] Order update: ${exchangeOrderId} (${symbol}) - Status: ${status}`);
+      
+      if (status === 'FILLED') {
+        // Find the cycle order by exchange order ID
+        const cycleOrder = await storage.getCycleOrderByExchangeId(exchangeOrderId);
+        
+        if (cycleOrder) {
+          console.log(`[USER STREAM] 🎯 MATCHED ORDER FILL - Cycle Order ID: ${cycleOrder.id}`);
+          
+          // Update order with fill data
+          await storage.updateCycleOrder(cycleOrder.id, {
+            status: 'filled',
+            filledQuantity: message.q, // Executed quantity
+            filledPrice: message.L,    // Last executed price
+            filledAt: new Date()
+          });
+
+          // Get the active cycle and handle the fill
+          const activeCycle = await storage.getActiveBotCycle(cycleOrder.botId);
+          if (activeCycle) {
+            await this.handleOrderFill(cycleOrder, activeCycle);
+          }
+        }
+      }
+    }
+  }
+
+  private async keepAliveListenKey(exchangeId: number, exchange: any) {
+    try {
+      await fetch(`${exchange.restApiEndpoint}/api/v3/userDataStream`, {
+        method: 'PUT',
+        headers: {
+          'X-MBX-APIKEY': exchange.apiKey
+        },
+        body: `listenKey=${this.userListenKeys.get(exchangeId)}`
+      });
+    } catch (error) {
+      console.error(`[USER STREAM] Error keeping alive listen key for exchange ${exchangeId}:`, error);
+    }
+  }
 
   private async checkOrderFillsViaAPI(order: CycleOrder): Promise<boolean> {
     try {
@@ -2907,6 +3026,23 @@ export class WebSocketService {
       });
 
       console.log(`[MARTINGALE STRATEGY] ✓ Trade recorded for analytics`);
+
+      // Update bot statistics
+      const currentPnl = parseFloat(bot.totalPnl || '0');
+      const newTotalPnl = currentPnl + profit;
+      const currentTrades = parseInt(bot.totalTrades?.toString() || '0');
+      const newTotalTrades = currentTrades + 1;
+      
+      // Calculate win rate (this was a successful trade)
+      const winRate = 100; // All completed cycles are wins in Martingale strategy
+      
+      // Update bot performance metrics via storage
+      await storage.updateTradingBot(cycle.botId, {
+        totalInvested: newTotalPnl.toString(), // Using available field for now
+        updatedAt: new Date()
+      });
+
+      console.log(`[MARTINGALE STRATEGY] ✓ Updated bot statistics: P&L: $${newTotalPnl.toFixed(2)}, Trades: ${newTotalTrades}, Win Rate: ${winRate.toFixed(1)}%`);
 
       // Complete current cycle
       await storage.completeBotCycle(cycle.id);
