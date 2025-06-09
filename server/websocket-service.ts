@@ -78,6 +78,7 @@ export class WebSocketService {
   private marketRefreshInterval: NodeJS.Timeout | null = null;
   private pendingOrderRequests = new Map<string, { resolve: Function, reject: Function, timestamp: number }>();
   private binanceOrderWs: WebSocket | null = null;
+  private binanceTickerWs: WebSocket | null = null;
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -2040,7 +2041,7 @@ export class WebSocketService {
   }
 
   public async startAllMarketsTicker() {
-    console.log('[WEBSOCKET] Starting market data for active trading pairs');
+    console.log('[WEBSOCKET] Starting live market data streams for active trading pairs');
     
     // Get all active trading pairs from bots
     try {
@@ -2054,14 +2055,83 @@ export class WebSocketService {
       });
       
       if (symbols.size > 0) {
-        console.log(`[WEBSOCKET] Requesting market data for symbols: ${Array.from(symbols).join(', ')}`);
+        console.log(`[WEBSOCKET] Starting live streams for symbols: ${Array.from(symbols).join(', ')}`);
+        // Start live ticker streams for real-time updates
+        this.startBinanceTickerStreams(Array.from(symbols));
+        // Also get initial data via API
         await this.requestMarketDataViaAPI(Array.from(symbols));
       }
       
-      // Start market refresh interval for continuous updates
+      // Start market refresh interval as backup for continuous updates
       this.startMarketRefreshInterval();
     } catch (error) {
       console.error('[WEBSOCKET] Error starting market ticker:', error);
+    }
+  }
+
+  private startBinanceTickerStreams(symbols: string[]) {
+    try {
+      // Create live ticker stream URL for Binance testnet
+      const streamNames = symbols.map(symbol => `${symbol.toLowerCase()}@ticker`);
+      const streamUrl = `wss://stream.testnet.binance.vision/ws/${streamNames.join('/')}`;
+      
+      console.log(`[WEBSOCKET] Connecting to live ticker stream: ${streamUrl}`);
+      
+      this.binanceTickerWs = new WebSocket(streamUrl);
+      
+      this.binanceTickerWs.on('open', () => {
+        console.log(`[WEBSOCKET] Live ticker stream connected for symbols: ${symbols.join(', ')}`);
+      });
+      
+      this.binanceTickerWs.on('message', (data) => {
+        try {
+          const ticker = JSON.parse(data.toString());
+          
+          // Handle both single ticker and array of tickers
+          const tickers = Array.isArray(ticker) ? ticker : [ticker];
+          
+          tickers.forEach((t: any) => {
+            if (t.s && t.c) { // symbol and current price
+              const marketUpdate = {
+                symbol: t.s,
+                price: t.c,
+                priceChange: t.P, // price change percent
+                priceChangePercent: t.P,
+                highPrice: t.h,
+                lowPrice: t.l,
+                volume: t.v,
+                quoteVolume: t.q,
+                timestamp: Date.now()
+              };
+              
+              // Store the update
+              this.marketData.set(t.s, marketUpdate);
+              
+              // Broadcast to connected clients
+              this.broadcastMarketUpdate(marketUpdate);
+              
+              console.log(`[WEBSOCKET] Live price update: ${t.s} = $${t.c}`);
+            }
+          });
+        } catch (error) {
+          console.error('[WEBSOCKET] Error processing live ticker data:', error);
+        }
+      });
+      
+      this.binanceTickerWs.on('close', (code, reason) => {
+        console.log(`[WEBSOCKET] Live ticker stream disconnected - Code: ${code}, Reason: ${reason}`);
+        console.log('[WEBSOCKET] Attempting to reconnect in 5 seconds...');
+        setTimeout(() => {
+          this.startBinanceTickerStreams(symbols);
+        }, 5000);
+      });
+      
+      this.binanceTickerWs.on('error', (error) => {
+        console.error('[WEBSOCKET] Live ticker stream error:', error);
+      });
+      
+    } catch (error) {
+      console.error('[WEBSOCKET] Error starting live ticker streams:', error);
     }
   }
 
