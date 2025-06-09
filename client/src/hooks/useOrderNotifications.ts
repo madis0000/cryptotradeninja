@@ -94,6 +94,11 @@ export function useOrderNotifications() {
       queryClient.invalidateQueries({ queryKey: ['/api/bot-orders', data.botId] });
       queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles', data.botId] });
       queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
+      
+      // Force refetch of all bot-related data to ensure synchronization
+      queryClient.refetchQueries({ queryKey: ['/api/bots', data.botId] });
+      queryClient.refetchQueries({ queryKey: ['/api/bot-orders', data.botId] });
+      queryClient.refetchQueries({ queryKey: ['/api/bot-cycles', data.botId] });
 
       // Log for debugging
       console.log(`[ORDER NOTIFICATIONS] ${title}: ${description}`);
