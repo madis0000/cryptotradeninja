@@ -1,0 +1,92 @@
+[MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====
+[MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:
+[MARTINGALE STRATEGY]    Base Price: $5.875000
+[MARTINGALE STRATEGY]    Take Profit %: 1.5%
+[MARTINGALE STRATEGY]    Take Profit Price: $5.963125
+[MARTINGALE STRATEGY]    Quantity: 3.40000000
+[MARTINGALE STRATEGY] ✓ Created take profit order record (ID: 9)
+[MARTINGALE STRATEGY] 🚀 Placing take profit order on binance (testnet)...
+[MARTINGALE STRATEGY]    Order Type: LIMIT SELL
+[MARTINGALE STRATEGY]    Symbol: ICPUSDT
+[MARTINGALE STRATEGY]    Quantity: 3.40000000
+[MARTINGALE STRATEGY]    Price: $5.963125
+[REST ORDER] Placing order via REST API: {
+  symbol: 'ICPUSDT',
+  side: 'SELL',
+  type: 'LIMIT',
+  quantity: '3.40000000'
+}
+[REST ORDER] ❌ Order failed: {"code":-1013,"msg":"Filter failure: PRICE_FILTER"}
+[REST ORDER] Error placing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: PRICE_FILTER"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3094:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeTakeProfitOrder (/home/runner/workspace/server/websocket-service.ts:3460:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3295:11)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[ORDER] Error preparing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: PRICE_FILTER"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3094:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeTakeProfitOrder (/home/runner/workspace/server/websocket-service.ts:3460:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3295:11)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ❌ Error placing take profit order: Error: Order failed: {"code":-1013,"msg":"Filter failure: PRICE_FILTER"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3094:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeTakeProfitOrder (/home/runner/workspace/server/websocket-service.ts:3460:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3295:11)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== TAKE PROFIT ORDER COMPLETE =====
+
+
+[MARTINGALE STRATEGY] ===== PLACING NEXT SAFETY ORDER =====
+[MARTINGALE STRATEGY] 📊 SAFETY ORDER 1 CALCULATION:
+[MARTINGALE STRATEGY]    Current Average Price: $5.875000
+[MARTINGALE STRATEGY]    Base Deviation: 1%
+[MARTINGALE STRATEGY]    Deviation Multiplier: 1.5x
+[MARTINGALE STRATEGY]    Adjusted Deviation: 1.00%
+[MARTINGALE STRATEGY]    Safety Order Price: $5.816250
+[MARTINGALE STRATEGY]    Base Amount: $7.5
+[MARTINGALE STRATEGY]    Size Multiplier: 2x
+[MARTINGALE STRATEGY]    Adjusted Amount: $7.50
+[MARTINGALE STRATEGY]    Calculated Quantity: 1.28949065
+[MARTINGALE STRATEGY] ✓ Created safety order record (ID: 10)
+[MARTINGALE STRATEGY] 🚀 Placing safety order on binance (testnet)...
+[REST ORDER] Placing order via REST API: {
+  symbol: 'ICPUSDT',
+  side: 'BUY',
+  type: 'LIMIT',
+  quantity: '1.28949065'
+}
+[REST ORDER] ❌ Order failed: {"code":-1013,"msg":"Filter failure: PRICE_FILTER"}
+[REST ORDER] Error placing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: PRICE_FILTER"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3094:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:2768:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3301:13)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[ORDER] Error preparing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: PRICE_FILTER"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3094:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:2768:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3301:13)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ❌ Error placing safety order: Error: Order failed: {"code":-1013,"msg":"Filter failure: PRICE_FILTER"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3094:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:2768:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3301:13)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== SAFETY ORDER PLACEMENT COMPLETE =====
+
+[MARTINGALE STRATEGY] 📡 Broadcasting order fill to clients:
+[MARTINGALE STRATEGY]    Order Type: base_order
+[MARTINGALE STRATEGY]    Symbol: ICPUSDT
+[MARTINGALE STRATEGY]    Status: pending
+[MARTINGALE STRATEGY] ✓ Broadcasted to 0 connected clients
+[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====
