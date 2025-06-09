@@ -390,110 +390,302 @@ export function MyBotsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {botOrders.map((order: any, index: number) => (
-                        <tr key={index} className="border-b border-gray-800 hover:bg-gray-800/50">
-                          <td className="py-3 px-4 text-white">
-                            <div className="flex flex-col">
-                              <span className="font-medium capitalize">
-                                {order.orderType?.replace('_', ' ') || order.order_type?.replace('_', ' ')}
+                      {botOrders.map((order: any, index: number) => {
+                        const currentPrice = parseFloat(marketData?.price || '0');
+                        const orderPrice = parseFloat(order.price || '0');
+                        const distance = currentPrice > 0 ? ((orderPrice - currentPrice) / currentPrice) * 100 : 0;
+                        const isCloseToFill = Math.abs(distance) < 2; // Within 2% of current price
+                        
+                        return (
+                          <tr key={index} className={`border-b border-gray-800 hover:bg-gray-800/50 ${
+                            isCloseToFill && order.status === 'placed' ? 'bg-yellow-500/5 border-yellow-500/20' : ''
+                          }`}>
+                            <td className="py-3 px-4 text-white">
+                              <div className="flex flex-col">
+                                <span className="font-medium capitalize">
+                                  {order.orderType?.replace('_', ' ') || order.order_type?.replace('_', ' ')}
+                                </span>
+                                {order.safetyOrderLevel && (
+                                  <span className="text-xs text-crypto-light">Level {order.safetyOrderLevel || order.safety_order_level}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`text-sm font-medium ${
+                                order.side === 'BUY' ? 'text-green-400' : 'text-red-400'
+                              }`}>
+                                {order.side}
                               </span>
-                              {order.safetyOrderLevel && (
-                                <span className="text-xs text-crypto-light">Level {order.safetyOrderLevel || order.safety_order_level}</span>
+                            </td>
+                            <td className="py-3 px-4 text-white font-mono">
+                              ${parseFloat(order.price || '0').toFixed(3)}
+                            </td>
+                            <td className="py-3 px-4">
+                              {currentPrice > 0 ? (
+                                <div className="flex flex-col">
+                                  <span className={`text-sm font-mono ${
+                                    Math.abs(distance) < 1 ? 'text-red-400 font-bold' :
+                                    Math.abs(distance) < 2 ? 'text-yellow-400' :
+                                    'text-crypto-light'
+                                  }`}>
+                                    {distance > 0 ? '+' : ''}{distance.toFixed(2)}%
+                                  </span>
+                                  {isCloseToFill && order.status === 'placed' && (
+                                    <span className="text-xs text-yellow-400">Near fill</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-crypto-light text-sm">-</span>
                               )}
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className={`text-sm font-medium ${
-                              order.side === 'BUY' ? 'text-green-400' : 'text-red-400'
-                            }`}>
-                              {order.side}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-white font-mono">
-                            ${parseFloat(order.price || '0').toFixed(3)}
-                          </td>
-                          <td className="py-3 px-4 text-white font-mono">
-                            {parseFloat(order.quantity || '0').toFixed(3)}
-                          </td>
-                          <td className="py-3 px-4 text-white font-mono">
-                            {order.filledQuantity ? parseFloat(order.filledQuantity).toFixed(3) : '0.000'}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              order.status === 'placed' || order.status === 'filled' ? 'bg-green-500/10 text-green-400' :
-                              order.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400' :
-                              order.status === 'failed' ? 'bg-red-500/10 text-red-400' :
-                              'bg-gray-500/10 text-gray-400'
-                            }`}>
-                              {order.status || 'unknown'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-crypto-light font-mono text-xs">
-                            {order.exchangeOrderId || order.exchange_order_id || 'N/A'}
-                          </td>
-                          <td className="py-3 px-4 text-crypto-light text-xs">
-                            {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 
-                             order.created_at ? new Date(order.created_at).toLocaleDateString() : 'N/A'}
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="py-3 px-4 text-white font-mono">
+                              {parseFloat(order.quantity || '0').toFixed(3)}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                order.status === 'filled' ? 'bg-green-500/10 text-green-400' :
+                                order.status === 'placed' ? 'bg-blue-500/10 text-blue-400' :
+                                order.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400' :
+                                order.status === 'cancelled' ? 'bg-gray-500/10 text-gray-400' :
+                                'bg-red-500/10 text-red-400'
+                              }`}>
+                                {order.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-crypto-light text-xs">
+                              {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               )}
             </CardContent>
           </Card>
+        ) : (
+          <div className="space-y-6">
+            {/* Dashboard Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-lg">Total Portfolio</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-400">${botData?.totalBalance || '0.00'}</div>
+                  <p className="text-sm text-crypto-light mt-2">Current value across all bots</p>
+                </CardContent>
+              </Card>
 
-          {/* Orders Table */}
-          <Card className="bg-crypto-darker border-gray-800">
-            <CardHeader>
-              <CardTitle className="text-white">Orders History (Filled)</CardTitle>
-              <p className="text-sm text-crypto-light">Completed trades and filled orders for this bot</p>
-            </CardHeader>
-            <CardContent>
-              {ordersLoading ? (
-                <div className="text-center py-8">
-                  <div className="text-crypto-light">Loading orders...</div>
-                </div>
-              ) : botOrders.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-crypto-light mb-4">Bot Status: {botData.status?.toUpperCase() || 'INACTIVE'}</div>
-                  {!botData.isActive ? (
-                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 max-w-md mx-auto">
-                      <div className="text-blue-400 font-medium mb-2">Ready to Start Trading</div>
-                      <div className="text-crypto-light text-sm">
-                        Click "Start Bot" to begin automated Martingale trading on {botData.tradingPair}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 max-w-md mx-auto">
-                      <div className="text-yellow-400 font-medium mb-2">Waiting for Market Conditions</div>
-                      <div className="text-crypto-light text-sm">
-                        Bot is active and monitoring {botData.tradingPair} for entry opportunities
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-700">
-                        <th className="text-left py-3 px-4 text-crypto-light">Order Type</th>
-                        <th className="text-left py-3 px-4 text-crypto-light">Side</th>
-                        <th className="text-left py-3 px-4 text-crypto-light">Quantity</th>
-                        <th className="text-left py-3 px-4 text-crypto-light">Price</th>
-                        <th className="text-left py-3 px-4 text-crypto-light">Status</th>
-                        <th className="text-left py-3 px-4 text-crypto-light">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {botOrders.map((order: any, index: number) => (
-                        <tr key={index} className="border-b border-gray-800">
-                          <td className="py-3 px-4 text-white capitalize">
-                            {order.orderType || order.order_type}
-                            {order.safetyOrderLevel && ` (Level ${order.safetyOrderLevel || order.safety_order_level})`}
-                          </td>
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-lg">Total P&L</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${parseFloat(botData?.totalPnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${botData?.totalPnl || '0.00'}
+                  </div>
+                  <p className="text-sm text-crypto-light mt-2">Profit and loss</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-lg">Active Bots</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-400">{botData?.activeBots || 0}</div>
+                  <p className="text-sm text-crypto-light mt-2">Currently running</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Bot Sections */}
+            <div className="flex space-x-4 border-b border-gray-800">
+              <button
+                onClick={() => setActiveSection('active-bots')}
+                className={`pb-4 px-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeSection === 'active-bots'
+                    ? 'border-crypto-primary text-crypto-primary'
+                    : 'border-transparent text-crypto-light hover:text-white'
+                }`}
+              >
+                Active Bots ({activeBots.length})
+              </button>
+              <button
+                onClick={() => setActiveSection('inactive-bots')}
+                className={`pb-4 px-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeSection === 'inactive-bots'
+                    ? 'border-crypto-primary text-crypto-primary'
+                    : 'border-transparent text-crypto-light hover:text-white'
+                }`}
+              >
+                Inactive Bots ({inactiveBots.length})
+              </button>
+            </div>
+
+            {/* Active Bots */}
+            {activeSection === 'active-bots' && (
+              <div className="space-y-4">
+                {botsLoading ? (
+                  <div className="text-center py-8">
+                    <div className="text-crypto-light">Loading bots...</div>
+                  </div>
+                ) : activeBots.length === 0 ? (
+                  <Card className="bg-crypto-darker border-gray-800">
+                    <CardContent className="text-center py-8">
+                      <div className="text-crypto-light">No active bots found</div>
+                      <p className="text-sm text-crypto-light mt-2">
+                        Create your first bot to start automated trading
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  activeBots.map((bot: any) => (
+                    <Card key={bot.id} className="bg-crypto-darker border-gray-800">
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="text-white">{bot.name}</CardTitle>
+                            <p className="text-sm text-crypto-light mt-1">
+                              {bot.tradingPair} • {bot.strategy} • {bot.direction}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Badge className="bg-green-500/10 text-green-400 border-green-500/20">
+                              Active
+                            </Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedBot(bot)}
+                              className="text-crypto-light border-gray-700 hover:bg-gray-800"
+                            >
+                              View Details
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => stopBotMutation.mutate(bot.id)}
+                              disabled={stopBotMutation.isPending}
+                              className="text-red-400 border-red-600 hover:bg-red-600/10"
+                            >
+                              Stop
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => deleteBotMutation.mutate(bot.id)}
+                              disabled={deleteBotMutation.isPending}
+                              className="text-red-400 border-red-600 hover:bg-red-600/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <span className="text-crypto-light">Base Amount:</span>
+                            <div className="text-white font-mono">${bot.baseOrderAmount}</div>
+                          </div>
+                          <div>
+                            <span className="text-crypto-light">Safety Amount:</span>
+                            <div className="text-white font-mono">${bot.safetyOrderAmount}</div>
+                          </div>
+                          <div>
+                            <span className="text-crypto-light">Max Safety Orders:</span>
+                            <div className="text-white">{bot.maxSafetyOrders}</div>
+                          </div>
+                          <div>
+                            <span className="text-crypto-light">Price Deviation:</span>
+                            <div className="text-white">{bot.priceDeviation}%</div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Inactive Bots */}
+            {activeSection === 'inactive-bots' && (
+              <div className="space-y-4">
+                {inactiveBots.length === 0 ? (
+                  <Card className="bg-crypto-darker border-gray-800">
+                    <CardContent className="text-center py-8">
+                      <div className="text-crypto-light">No inactive bots found</div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  inactiveBots.map((bot: any) => (
+                    <Card key={bot.id} className="bg-crypto-darker border-gray-800">
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="text-white">{bot.name}</CardTitle>
+                            <p className="text-sm text-crypto-light mt-1">
+                              {bot.tradingPair} • {bot.strategy} • {bot.direction}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Badge className="bg-gray-500/10 text-gray-400 border-gray-500/20">
+                              Inactive
+                            </Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedBot(bot)}
+                              className="text-crypto-light border-gray-700 hover:bg-gray-800"
+                            >
+                              View Details
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => deleteBotMutation.mutate(bot.id)}
+                              disabled={deleteBotMutation.isPending}
+                              className="text-red-400 border-red-600 hover:bg-red-600/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <span className="text-crypto-light">Base Amount:</span>
+                            <div className="text-white font-mono">${bot.baseOrderAmount}</div>
+                          </div>
+                          <div>
+                            <span className="text-crypto-light">Safety Amount:</span>
+                            <div className="text-white font-mono">${bot.safetyOrderAmount}</div>
+                          </div>
+                          <div>
+                            <span className="text-crypto-light">Max Safety Orders:</span>
+                            <div className="text-white">{bot.maxSafetyOrders}</div>
+                          </div>
+                          <div>
+                            <span className="text-crypto-light">Price Deviation:</span>
+                            <div className="text-white">{bot.priceDeviation}%</div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
                           <td className="py-3 px-4">
                             <span className={`font-medium ${order.side === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>
                               {order.side}
