@@ -191,6 +191,10 @@ export class WebSocketService {
             await this.handleOrderPlacement(ws, message as OrderRequest);
           }
           
+          if (message.type === 'start_martingale_bot') {
+            await this.handleMartingaleBotStart(ws, message);
+          }
+          
           if (message.type === 'unsubscribe_balance') {
             this.unsubscribeFromBalance(ws, message.userId, message.exchangeId, message.symbol);
           }
@@ -2046,6 +2050,245 @@ export class WebSocketService {
 
   public getUserConnections(): Map<number, UserConnection> {
     return this.userConnections;
+  }
+
+  // Martingale Strategy Execution Handler
+  private async handleMartingaleBotStart(ws: WebSocket, message: any) {
+    try {
+      const { botId, userId } = message;
+      
+      console.log(`[MARTINGALE STRATEGY] ===== STARTING BOT EXECUTION =====`);
+      console.log(`[MARTINGALE STRATEGY] Bot ID: ${botId}, User ID: ${userId}`);
+      
+      // Get bot configuration
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        console.log(`[MARTINGALE STRATEGY] ❌ Bot ${botId} not found`);
+        ws.send(JSON.stringify({
+          type: 'martingale_error',
+          botId,
+          error: 'Bot not found'
+        }));
+        return;
+      }
+      
+      console.log(`[MARTINGALE STRATEGY] ✓ Bot loaded: ${bot.name} (${bot.tradingPair}, ${bot.direction})`);
+      
+      // Start Martingale cycle execution
+      await this.executeMartingaleCycle(ws, bot);
+      
+    } catch (error) {
+      console.error(`[MARTINGALE STRATEGY] ❌ Error starting bot:`, error);
+      ws.send(JSON.stringify({
+        type: 'martingale_error',
+        error: error.message
+      }));
+    }
+  }
+
+  private async executeMartingaleCycle(ws: WebSocket, bot: any) {
+    try {
+      console.log(`[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====`);
+      
+      // Create new bot cycle
+      const cycle = await storage.createBotCycle({
+        botId: bot.id,
+        status: 'active',
+        targetProfitAmount: '0',
+        currentPnl: '0',
+        totalInvestment: bot.baseOrderAmount
+      });
+      
+      console.log(`[MARTINGALE STRATEGY] Bot ID: ${bot.id}, Cycle ID: ${cycle.id}`);
+      
+      // Get current market price
+      const currentPrice = await this.getCurrentPrice(bot.tradingPair);
+      if (!currentPrice) {
+        throw new Error(`Unable to fetch current price for ${bot.tradingPair}`);
+      }
+      
+      console.log(`[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Investment Amount: $${bot.baseOrderAmount}`);
+      console.log(`[MARTINGALE STRATEGY]    Current Price: $${currentPrice}`);
+      
+      const baseQuantity = parseFloat(bot.baseOrderAmount) / currentPrice;
+      console.log(`[MARTINGALE STRATEGY]    Calculated Quantity: ${baseQuantity.toFixed(8)} ${bot.tradingPair.replace('USDT', '')}`);
+      
+      // Place base order
+      const baseOrder = await this.placeMartingaleOrder(ws, bot, cycle.id, {
+        side: bot.direction === 'long' ? 'BUY' : 'SELL',
+        quantity: baseQuantity.toFixed(8),
+        orderType: 'base',
+        price: currentPrice.toString()
+      });
+      
+      if (baseOrder.success) {
+        console.log(`[MARTINGALE STRATEGY] ✅ BASE ORDER SUCCESSFULLY PLACED!`);
+        console.log(`[MARTINGALE STRATEGY]    Order ID: ${baseOrder.orderId}`);
+        console.log(`[MARTINGALE STRATEGY]    Quantity: ${baseOrder.quantity}`);
+        console.log(`[MARTINGALE STRATEGY]    Price: $${baseOrder.price}`);
+        
+        // Calculate and place take profit order
+        await this.placeTakeProfitOrder(ws, bot, cycle.id, baseOrder, currentPrice);
+        
+        // Set up safety orders monitoring
+        await this.setupSafetyOrderMonitoring(ws, bot, cycle.id, currentPrice);
+        
+        // Send progress update to frontend
+        ws.send(JSON.stringify({
+          type: 'martingale_progress',
+          botId: bot.id,
+          cycleId: cycle.id,
+          status: 'base_order_placed',
+          baseOrder: baseOrder
+        }));
+        
+      } else {
+        throw new Error(`Base order placement failed: ${baseOrder.error}`);
+      }
+      
+    } catch (error) {
+      console.error(`[MARTINGALE STRATEGY] ❌ Cycle execution error:`, error);
+      ws.send(JSON.stringify({
+        type: 'martingale_error',
+        botId: bot.id,
+        error: error.message
+      }));
+    }
+  }
+
+  private async placeTakeProfitOrder(ws: WebSocket, bot: any, cycleId: number, baseOrder: any, currentPrice: number) {
+    console.log(`[MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====`);
+    
+    const takeProfitPercentage = parseFloat(bot.takeProfitPercentage);
+    const takeProfitPrice = bot.direction === 'long' 
+      ? currentPrice * (1 + takeProfitPercentage / 100)
+      : currentPrice * (1 - takeProfitPercentage / 100);
+    
+    console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:`);
+    console.log(`[MARTINGALE STRATEGY]    Take Profit %: ${takeProfitPercentage}%`);
+    console.log(`[MARTINGALE STRATEGY]    Target Price: $${takeProfitPrice.toFixed(4)}`);
+    console.log(`[MARTINGALE STRATEGY]    Expected Profit: $${(parseFloat(baseOrder.quantity) * (takeProfitPrice - currentPrice)).toFixed(4)}`);
+    
+    const takeProfitOrder = await this.placeMartingaleOrder(ws, bot, cycleId, {
+      side: bot.direction === 'long' ? 'SELL' : 'BUY',
+      quantity: baseOrder.quantity,
+      orderType: 'take_profit',
+      price: takeProfitPrice.toFixed(4),
+      type: 'LIMIT'
+    });
+    
+    if (takeProfitOrder.success) {
+      console.log(`[MARTINGALE STRATEGY] ✅ TAKE PROFIT ORDER PLACED!`);
+      console.log(`[MARTINGALE STRATEGY]    Order ID: ${takeProfitOrder.orderId}`);
+    }
+  }
+
+  private async setupSafetyOrderMonitoring(ws: WebSocket, bot: any, cycleId: number, basePrice: number) {
+    console.log(`[MARTINGALE STRATEGY] ===== SETTING UP SAFETY ORDER MONITORING =====`);
+    
+    const maxSafetyOrders = parseInt(bot.maxSafetyOrders);
+    const priceDeviation = parseFloat(bot.priceDeviation);
+    const deviationMultiplier = parseFloat(bot.priceDeviationMultiplier);
+    
+    console.log(`[MARTINGALE STRATEGY] 📊 SAFETY ORDER CONFIGURATION:`);
+    console.log(`[MARTINGALE STRATEGY]    Max Safety Orders: ${maxSafetyOrders}`);
+    console.log(`[MARTINGALE STRATEGY]    Price Deviation: ${priceDeviation}%`);
+    console.log(`[MARTINGALE STRATEGY]    Deviation Multiplier: ${deviationMultiplier}x`);
+    
+    for (let i = 1; i <= maxSafetyOrders; i++) {
+      const deviationPercent = priceDeviation * Math.pow(deviationMultiplier, i - 1);
+      const triggerPrice = bot.direction === 'long' 
+        ? basePrice * (1 - deviationPercent / 100)
+        : basePrice * (1 + deviationPercent / 100);
+      
+      console.log(`[MARTINGALE STRATEGY]    Safety Order ${i}: Trigger at $${triggerPrice.toFixed(4)} (${deviationPercent.toFixed(2)}% deviation)`);
+    }
+    
+    ws.send(JSON.stringify({
+      type: 'martingale_progress',
+      botId: bot.id,
+      cycleId: cycleId,
+      status: 'safety_orders_configured',
+      maxSafetyOrders: maxSafetyOrders
+    }));
+  }
+
+  private async placeMartingaleOrder(ws: WebSocket, bot: any, cycleId: number, orderParams: any) {
+    try {
+      // Get exchange configuration
+      const exchanges = await storage.getExchangesByUserId(bot.userId);
+      const exchange = exchanges.find(ex => ex.id === bot.exchangeId);
+      
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+      
+      // Create cycle order record
+      const cycleOrder = await storage.createCycleOrder({
+        cycleId: cycleId,
+        orderType: orderParams.orderType,
+        side: orderParams.side,
+        amount: orderParams.quantity,
+        price: orderParams.price,
+        status: 'pending'
+      });
+      
+      // Place actual order through Binance API
+      const orderRequest = {
+        type: 'place_order',
+        userId: bot.userId,
+        exchangeId: bot.exchangeId,
+        symbol: bot.tradingPair,
+        side: orderParams.side,
+        quantity: orderParams.quantity,
+        orderType: orderParams.type || 'MARKET',
+        price: orderParams.price,
+        clientOrderId: `martingale_${cycleId}_${orderParams.orderType}_${Date.now()}`
+      };
+      
+      const orderResult = await this.handleOrderPlacement(ws, orderRequest);
+      
+      if (orderResult) {
+        // Update cycle order with exchange order ID
+        await storage.updateCycleOrder(cycleOrder.id, {
+          exchangeOrderId: orderResult.orderId,
+          status: 'filled',
+          filledAt: new Date()
+        });
+        
+        return {
+          success: true,
+          orderId: orderResult.orderId,
+          quantity: orderParams.quantity,
+          price: orderParams.price
+        };
+      }
+      
+      return { success: false, error: 'Order placement failed' };
+      
+    } catch (error) {
+      console.error(`[MARTINGALE STRATEGY] Order placement error:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  private async getCurrentPrice(symbol: string): Promise<number | null> {
+    try {
+      const marketData = this.marketData.get(symbol);
+      if (marketData && marketData.price) {
+        return parseFloat(marketData.price);
+      }
+      
+      // Fetch current price from Binance API if not available in cache
+      const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+      const data = await response.json();
+      return parseFloat(data.price);
+      
+    } catch (error) {
+      console.error(`[MARTINGALE STRATEGY] Error fetching price for ${symbol}:`, error);
+      return null;
+    }
   }
 
   public stopBinanceStreams(deactivate: boolean = true) {
