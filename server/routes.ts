@@ -302,7 +302,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`[MARTINGALE] Created initial cycle ${cycle.id} for bot ${bot.id}`);
           
           // Place the initial base order to start the cycle
-          await wsService.placeInitialBaseOrder(bot.id, cycle.id);
+          await wsService.placeInitialBaseOrder(bot.id);
           
         } catch (cycleError) {
           console.error(`[MARTINGALE] Error creating initial cycle for bot ${bot.id}:`, cycleError);
@@ -437,7 +437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid stream configuration" });
       }
 
-      await wsService.connectConfigurableStream(dataType, symbolsArray, interval, depth);
+      await wsService.connectConfigurableStream(symbolsArray, interval);
       res.json({ 
         message: "Stream configured successfully",
         configuration: { dataType, symbols: symbolsArray, interval, depth }

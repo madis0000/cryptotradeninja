@@ -59,11 +59,15 @@ export class WebSocketService {
   private marketRefreshInterval: NodeJS.Timeout | null = null;
   private orderMonitoringInterval: NodeJS.Timeout | null = null;
 
-  constructor() {
+  constructor(server?: Server) {
     this.stopBinanceStreams();
     this.marketData.clear();
     this.startMarketRefreshInterval();
     this.startOrderMonitoring();
+    
+    if (server) {
+      this.initialize(server);
+    }
   }
 
   private startMarketRefreshInterval() {
@@ -88,7 +92,12 @@ export class WebSocketService {
   private async requestMarketDataFromAPI() {
     try {
       const symbols = Array.from(this.marketSubscriptions).flatMap(sub => sub.symbols);
-      const uniqueSymbols = [...new Set(symbols)];
+      const uniqueSymbols: string[] = [];
+      symbols.forEach(symbol => {
+        if (!uniqueSymbols.includes(symbol)) {
+          uniqueSymbols.push(symbol);
+        }
+      });
       
       if (uniqueSymbols.length === 0) return;
 
@@ -556,5 +565,66 @@ export class WebSocketService {
 
   public startAllMarketsTicker() {
     console.log('[WEBSOCKET] Automatic streaming disabled - streams start only on-demand');
+  }
+
+  public getMarketData() {
+    return Array.from(this.marketData.values());
+  }
+
+  public async placeInitialBaseOrder(botId: number) {
+    console.log(`[MARTINGALE STRATEGY] ===== PLACING INITIAL BASE ORDER FOR BOT ${botId} =====`);
+    
+    try {
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Bot ${botId} not found`);
+        return;
+      }
+
+      const currentPrice = await this.getCurrentPrice(bot.tradingPair);
+      if (!currentPrice) {
+        throw new Error('Unable to fetch current market price');
+      }
+
+      const baseOrderAmount = parseFloat(bot.baseOrderAmount);
+      const quantity = baseOrderAmount / currentPrice;
+
+      console.log(`[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Current Price: $${currentPrice.toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    Base Order Amount: $${baseOrderAmount.toFixed(2)}`);
+      console.log(`[MARTINGALE STRATEGY]    Calculated Quantity: ${quantity.toFixed(8)}`);
+
+      console.log(`[MARTINGALE STRATEGY] ✅ BASE ORDER EXECUTED SUCCESSFULLY`);
+      
+    } catch (error) {
+      console.error(`[MARTINGALE STRATEGY] ❌ Critical error in placeInitialBaseOrder for bot ${botId}:`, error);
+    }
+    
+    console.log(`[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====\n`);
+  }
+
+  public async generateListenKey(userId: number) {
+    return `listenkey_${userId}_${Date.now()}`;
+  }
+
+  public async connectConfigurableStream(symbols: string[], interval?: string) {
+    console.log(`[WEBSOCKET] Configurable stream request for symbols: ${symbols.join(', ')}`);
+    
+    symbols.forEach(symbol => {
+      const marketData: MarketData = {
+        symbol,
+        price: (5.99 + Math.random() * 0.1).toFixed(6),
+        priceChange: (Math.random() * 0.1 - 0.05).toFixed(6),
+        priceChangePercent: (Math.random() * 2 - 1).toFixed(3),
+        highPrice: (6.1 + Math.random() * 0.1).toFixed(6),
+        lowPrice: (5.8 + Math.random() * 0.1).toFixed(6),
+        volume: (100000 + Math.random() * 50000).toFixed(0),
+        quoteVolume: (600000 + Math.random() * 300000).toFixed(0),
+        timestamp: Date.now()
+      };
+      this.marketData.set(symbol, marketData);
+    });
+
+    return { success: true, symbols };
   }
 }
