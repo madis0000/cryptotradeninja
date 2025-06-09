@@ -56,7 +56,10 @@ export function MarketOverview() {
     }).format(price);
   };
 
-  const formatChange = (change: number) => {
+  const formatChange = (change: number | undefined) => {
+    if (change === undefined || change === null || isNaN(change)) {
+      return '0.00%';
+    }
     const sign = change >= 0 ? '+' : '';
     return `${sign}${change.toFixed(2)}%`;
   };
