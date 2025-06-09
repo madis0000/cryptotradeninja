@@ -24,10 +24,12 @@ export function MyBotsPage() {
       if (!selectedBot?.tradingPair) return null;
       const response = await fetch('/api/market');
       const data = await response.json();
-      return data.find((item: any) => item.symbol === selectedBot.tradingPair);
+      const found = data.find((item: any) => item.symbol === selectedBot.tradingPair);
+      return found || null;
     },
     enabled: !!selectedBot?.tradingPair,
     refetchInterval: 5000, // Refresh every 5 seconds
+    retry: false, // Don't retry on failure
   });
 
   // Fetch bots data
@@ -50,6 +52,38 @@ export function MyBotsPage() {
   // Filter bots by status
   const activeBots = bots.filter(bot => bot.status === 'active');
   const inactiveBots = bots.filter(bot => bot.status !== 'active');
+
+  // Calculate average entry price and position size from filled buy orders
+  const calculatePositionMetrics = () => {
+    if (!botOrders || botOrders.length === 0) return { averageEntryPrice: 0, totalPositionSize: 0, totalInvested: 0 };
+    
+    const filledBuyOrders = botOrders.filter((order: any) => 
+      order.status === 'filled' && 
+      order.side === 'BUY' && 
+      (order.orderType === 'base_order' || order.orderType === 'safety_order')
+    );
+    
+    if (filledBuyOrders.length === 0) return { averageEntryPrice: 0, totalPositionSize: 0, totalInvested: 0 };
+    
+    let totalValue = 0;
+    let totalQuantity = 0;
+    
+    filledBuyOrders.forEach((order: any) => {
+      const price = parseFloat(order.price || '0');
+      const quantity = parseFloat(order.filledQuantity || order.quantity || '0');
+      const orderValue = price * quantity;
+      totalValue += orderValue;
+      totalQuantity += quantity;
+    });
+    
+    return {
+      averageEntryPrice: totalQuantity > 0 ? totalValue / totalQuantity : 0,
+      totalPositionSize: totalQuantity,
+      totalInvested: totalValue
+    };
+  };
+
+  const { averageEntryPrice, totalPositionSize, totalInvested } = calculatePositionMetrics();
 
   // Stop bot mutation
   const stopBotMutation = useMutation({
@@ -130,7 +164,7 @@ export function MyBotsPage() {
             </div>
 
             {/* Bot Configuration */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
               <Card className="bg-crypto-darker border-gray-800">
                 <CardHeader>
                   <CardTitle className="text-white text-sm">Base Order</CardTitle>
@@ -168,6 +202,51 @@ export function MyBotsPage() {
                 <CardContent>
                   <div className="text-xl font-bold text-purple-400">{selectedBot.priceDeviation}%</div>
                   <p className="text-xs text-crypto-light mt-1">DCA trigger</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-sm">Position Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div>
+                      <div className="text-lg font-bold text-orange-400">
+                        {averageEntryPrice > 0 ? `$${averageEntryPrice.toFixed(4)}` : 'N/A'}
+                      </div>
+                      <p className="text-xs text-crypto-light">Average entry price</p>
+                    </div>
+                    
+                    {totalPositionSize > 0 && (
+                      <div>
+                        <div className="text-sm font-mono text-white">
+                          {totalPositionSize.toFixed(6)} {selectedBot.tradingPair?.replace('USDT', '')}
+                        </div>
+                        <p className="text-xs text-crypto-light">Position size</p>
+                      </div>
+                    )}
+
+                    {totalInvested > 0 && (
+                      <div>
+                        <div className="text-sm font-mono text-white">
+                          ${totalInvested.toFixed(2)}
+                        </div>
+                        <p className="text-xs text-crypto-light">Total invested</p>
+                      </div>
+                    )}
+
+                    {averageEntryPrice > 0 && marketData && (
+                      <div className="pt-1 border-t border-gray-700">
+                        <div className={`text-xs font-medium ${
+                          parseFloat(marketData.price || '0') > averageEntryPrice ? 'text-green-400' : 'text-red-400'
+                        }`}>
+                          P&L: {parseFloat(marketData.price || '0') > averageEntryPrice ? '+' : ''}
+                          {(((parseFloat(marketData.price || '0') - averageEntryPrice) / averageEntryPrice) * 100).toFixed(2)}%
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>
