@@ -1,19 +1,59 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { Trash2, ArrowLeft } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export function MyBotsPage() {
   const [activeSection, setActiveSection] = useState('active-bots');
+  const [selectedBot, setSelectedBot] = useState<any>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Fetch bots data
   const { data: bots = [], isLoading: botsLoading } = useQuery<any[]>({
     queryKey: ['/api/bots']
   });
 
-  // Debug logging to check the bot data structure
-  console.log('[BOTS DEBUG] Raw bots data:', bots);
+  // Fetch bot cycles for selected bot
+  const { data: botCycles = [], isLoading: cyclesLoading } = useQuery<any[]>({
+    queryKey: ['/api/bot-cycles', selectedBot?.id],
+    enabled: !!selectedBot
+  });
+
+  // Fetch bot orders for selected bot
+  const { data: botOrders = [], isLoading: ordersLoading } = useQuery<any[]>({
+    queryKey: ['/api/bot-orders', selectedBot?.id],
+    enabled: !!selectedBot
+  });
+
+  // Delete bot mutation
+  const deleteBotMutation = useMutation({
+    mutationFn: async (botId: number) => {
+      await apiRequest(`/api/bots/${botId}`, {
+        method: 'DELETE'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      toast({
+        title: "Bot Deleted",
+        description: "Trading bot has been successfully deleted.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete trading bot.",
+        variant: "destructive",
+      });
+    }
+  });
+
+
 
   const sidebarItems = [
     { id: 'active-bots', label: 'Active Bots', icon: 'fas fa-play-circle' },
@@ -23,8 +63,8 @@ export function MyBotsPage() {
     { id: 'bot-settings', label: 'Bot Settings', icon: 'fas fa-cog' },
   ];
 
-  const activeBots = Array.isArray(bots) ? bots.filter((bot: any) => bot.isActive) : [];
-  const inactiveBots = Array.isArray(bots) ? bots.filter((bot: any) => !bot.isActive) : [];
+  const activeBots = Array.isArray(bots) ? bots.filter((bot: any) => bot.isActive || bot.is_active) : [];
+  const inactiveBots = Array.isArray(bots) ? bots.filter((bot: any) => !(bot.isActive || bot.is_active)) : [];
 
   const renderActiveBots = () => (
     <div className="space-y-6">
@@ -62,7 +102,7 @@ export function MyBotsPage() {
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="text-crypto-light">Pair:</span>
-                      <div className="text-white font-medium">{bot.tradingPair}</div>
+                      <div className="text-white font-medium">{bot.tradingPair || bot.trading_pair}</div>
                     </div>
                     <div>
                       <span className="text-crypto-light">Strategy:</span>
@@ -78,15 +118,26 @@ export function MyBotsPage() {
                     </div>
                     <div>
                       <span className="text-crypto-light">Base Amount:</span>
-                      <div className="text-white font-medium">${bot.baseOrderAmount}</div>
+                      <div className="text-white font-medium">${bot.baseOrderAmount || bot.base_order_amount}</div>
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <Button size="sm" variant="outline" className="flex-1 text-xs border-gray-600 hover:border-crypto-accent text-white">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="flex-1 text-xs border-gray-600 hover:border-crypto-accent text-white"
+                      onClick={() => setSelectedBot(bot)}
+                    >
                       View Details
                     </Button>
-                    <Button size="sm" variant="outline" className="flex-1 text-xs border-red-600 hover:border-red-500 text-red-400">
-                      Stop Bot
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="px-2 text-xs border-red-600 hover:border-red-500 text-red-400"
+                      onClick={() => deleteBotMutation.mutate(bot.id)}
+                      disabled={deleteBotMutation.isPending}
+                    >
+                      <Trash2 size={14} />
                     </Button>
                   </div>
                 </CardContent>

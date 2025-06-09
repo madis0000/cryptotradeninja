@@ -1,0 +1,49 @@
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749384000000, closeTime: 1749398399999, open: 5.388, …}
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749398400000, closeTime: 1749412799999, open: 5.575, …}
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749412800000, closeTime: 1749427199999, open: 5.645, …}
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749427200000, closeTime: 1749441599999, open: 5.546, …}
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749441600000, closeTime: 1749455999999, open: 5.611, …}
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749456000000, closeTime: 1749470399999, open: 5.651, …}
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749470400000, closeTime: 1749484799999, open: 5.892, …}
+[CHART] Auto-scaling chart for new symbol data
+[CLIENT WS] ===== CONNECTED TO BACKEND SERVER =====
+[CLIENT WS] Connected to: wss://8cce9cbf-b7e9-4807-8bc5-dd1393984f85-00-265aunw5zg44y.spock.replit.dev:8080
+[BOTS] Connected to WebSocket for ICPUSDT ticker
+[CLIENT WS] Sending configured symbols to backend: 
+Object {type: "subscribe", symbols: Array(1)}
+[CLIENT WS] Received message: 
+Object {type: "connected", clientId: "ambmbtinz", message: "Connected to backend WebSocket server"}
+[BOTS] Changing subscription to ICPUSDT
+[CLIENT WS] Received message: 
+Object {type: "market_update", data: {…}}
+[CHART] Received message: 
+Object {type: "kline_update", data: {…}}
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749470400000, closeTime: 1749484799999, open: 5.892, …}
+[CLIENT WS] Received message: 
+Object {type: "market_update", data: {…}}
+[CHART] Received message: 
+Object {type: "kline_update", data: {…}}
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749470400000, closeTime: 1749484799999, open: 5.892, …}
+[CLIENT WS] Received message: 
+Object {type: "market_update", data: {…}}
+[CHART] Received message: 
+Object {type: "kline_update", data: {…}}
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749470400000, closeTime: 1749484799999, open: 5.892, …}
+[CLIENT WS] Received message: 
+Object {type: "market_update", data: {…}}
+[CHART] Received message: 
+Object {type: "kline_update", data: {…}}
+[CHART] Processing kline data: 
+Object {symbol: "ICPUSDT", interval: "4h", openTime: 1749470400000, closeTime: 1749484799999, open: 5.892, …}
+[CLIENT WS] Received message: 
+Object {type: "market_update", data: {…}}
