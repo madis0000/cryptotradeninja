@@ -338,8 +338,15 @@ export function MyBotsPage() {
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-white text-sm font-medium">{bot.name}</CardTitle>
-                    <Badge className="bg-green-500/10 text-green-400 border-green-500/20">
-                      Running
+                    <Badge className={`${
+                      bot.status === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+                      bot.status === 'failed' || bot.status === 'error' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                      'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                    }`}>
+                      {bot.status === 'active' ? 'Running' :
+                       bot.status === 'failed' ? 'Failed' :
+                       bot.status === 'error' ? 'Error' :
+                       'Stopped'}
                     </Badge>
                   </div>
                 </CardHeader>
