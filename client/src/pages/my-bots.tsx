@@ -428,7 +428,22 @@ export function MyBotsPage() {
                 </div>
               ) : botOrders.length === 0 ? (
                 <div className="text-center py-8">
-                  <div className="text-crypto-light">No orders found for this bot</div>
+                  <div className="text-crypto-light mb-4">Bot Status: {botData.status?.toUpperCase() || 'INACTIVE'}</div>
+                  {!botData.isActive ? (
+                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 max-w-md mx-auto">
+                      <div className="text-blue-400 font-medium mb-2">Ready to Start Trading</div>
+                      <div className="text-crypto-light text-sm">
+                        Click "Start Bot" to begin automated Martingale trading on {botData.tradingPair}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 max-w-md mx-auto">
+                      <div className="text-yellow-400 font-medium mb-2">Waiting for Market Conditions</div>
+                      <div className="text-crypto-light text-sm">
+                        Bot is active and monitoring {botData.tradingPair} for entry opportunities
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
