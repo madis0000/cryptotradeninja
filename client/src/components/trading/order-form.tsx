@@ -110,7 +110,7 @@ export function OrderForm({ symbol, className }: OrderFormProps) {
   };
 
   return (
-    <div className={className}>
+    <div className={`${className} relative z-20`}>
       <Card className="bg-crypto-dark border-0 h-full rounded-none">
         <CardHeader className="py-3 px-4 border-b border-gray-800">
           <div className="flex items-center justify-between">

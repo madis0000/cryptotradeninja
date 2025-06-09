@@ -102,10 +102,10 @@ export default function Trading() {
               />
 
               {/* Order Form Section */}
-              <OrderForm className="h-64 border-b border-gray-800" symbol={selectedSymbol} />
+              <OrderForm className="h-80 border-b border-gray-800" symbol={selectedSymbol} />
 
               {/* Orders & History Section - Below Order Form */}
-              <OrdersHistory className="h-64 border-b border-gray-800" />
+              <OrdersHistory className="h-48 border-b border-gray-800" />
             </div>
           </div>
         </div>

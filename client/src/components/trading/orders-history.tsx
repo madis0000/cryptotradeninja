@@ -6,7 +6,7 @@ interface OrdersHistoryProps {
 
 export function OrdersHistory({ className }: OrdersHistoryProps) {
   return (
-    <div className={className}>
+    <div className={`${className} relative z-10`}>
       <Card className="bg-crypto-dark border-0 h-full rounded-none">
         <CardHeader className="py-3 px-4 border-b border-gray-800">
           <div className="flex space-x-4 text-xs">
