@@ -122,36 +122,16 @@ export function MyBotsPage() {
   // Get current active cycle
   const currentCycle = botCycles.find((cycle: any) => cycle.status === 'active') || botCycles[0];
 
-  // Group orders by cycle
-  const ordersByCycle = botOrders.reduce((acc: any, order: any) => {
-    const cycleId = order.cycleId;
-    if (!acc[cycleId]) {
-      acc[cycleId] = [];
-    }
-    acc[cycleId].push(order);
-    return acc;
-  }, {});
+  // Filter orders for current cycle and history
+  const currentCycleOrders = botOrders.filter((order: any) => {
+    if (!currentCycle) return false;
+    return order.cycleId === currentCycle.id;
+  });
 
-  // Calculate cycle profits
-  const calculateCycleProfit = (cycleOrders: any[], cycleData: any) => {
-    const filledOrders = cycleOrders.filter(order => order.status === 'filled');
-    let totalBought = 0;
-    let totalSold = 0;
-
-    filledOrders.forEach(order => {
-      const price = parseFloat(order.filledPrice || order.price || '0');
-      const quantity = parseFloat(order.filledQuantity || order.quantity || '0');
-      const value = price * quantity;
-
-      if (order.side === 'BUY') {
-        totalBought += value;
-      } else if (order.side === 'SELL') {
-        totalSold += value;
-      }
-    });
-
-    return totalSold - totalBought;
-  };
+  const historyOrders = botOrders.filter((order: any) => {
+    if (!currentCycle) return order.status === 'filled';
+    return order.cycleId !== currentCycle.id && order.status === 'filled';
+  });
 
   // Fetch general stats for dashboard overview
   const { data: botData } = useQuery({
@@ -507,337 +487,134 @@ export function MyBotsPage() {
               </Card>
             </div>
 
-            {/* Orders by Cycle */}
-            <div className="space-y-6">
-              {ordersLoading ? (
-                <Card className="bg-crypto-darker border-gray-800">
-                  <CardContent className="text-center py-8">
+            {/* Current Cycle Orders */}
+            <Card className="bg-crypto-darker border-gray-800 mb-6">
+              <CardHeader>
+                <CardTitle className="text-white">Current Cycle Orders</CardTitle>
+                <p className="text-sm text-crypto-light">
+                  Active orders for cycle #{currentCycle?.cycleNumber || 'N/A'}
+                </p>
+              </CardHeader>
+              <CardContent>
+                {ordersLoading ? (
+                  <div className="text-center py-8">
                     <div className="text-crypto-light">Loading orders...</div>
-                  </CardContent>
-                </Card>
-              ) : Object.keys(ordersByCycle).length === 0 ? (
-                <Card className="bg-crypto-darker border-gray-800">
-                  <CardContent className="text-center py-8">
-                    <div className="text-crypto-light">No orders found for this bot</div>
-                  </CardContent>
-                </Card>
-              ) : (
-                // Sort cycles by cycle number (descending - newest first)
-                Object.entries(ordersByCycle)
-                  .sort(([, ordersA], [, ordersB]) => {
-                    const cycleA = botCycles.find(c => c.id === (ordersA as any[])[0]?.cycleId);
-                    const cycleB = botCycles.find(c => c.id === (ordersB as any[])[0]?.cycleId);
-                    return (cycleB?.cycleNumber || 0) - (cycleA?.cycleNumber || 0);
-                  })
-                  .map(([cycleId, cycleOrders]) => {
-                    const cycleData = botCycles.find(cycle => cycle.id === parseInt(cycleId));
-                    const cycleProfit = calculateCycleProfit(cycleOrders as any[], cycleData);
-                    const isActiveCycle = currentCycle?.id === parseInt(cycleId);
-                    
-                    return (
-                      <Card key={cycleId} className={`bg-crypto-darker border-gray-800 ${
-                        isActiveCycle ? 'ring-2 ring-crypto-primary/30' : ''
-                      }`}>
-                        <CardHeader>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <CardTitle className="text-white flex items-center gap-2">
-                                Cycle #{cycleData?.cycleNumber || 'Unknown'}
-                                {isActiveCycle && (
-                                  <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-                                    Active
-                                  </Badge>
-                                )}
-                                {cycleData?.status === 'completed' && (
-                                  <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
-                                    Completed
-                                  </Badge>
-                                )}
-                              </CardTitle>
-                              <p className="text-sm text-crypto-light">
-                                {(cycleOrders as any[]).length} orders • 
-                                {(cycleOrders as any[]).filter(o => o.status === 'filled').length} filled • 
-                                {(cycleOrders as any[]).filter(o => o.status === 'placed').length} pending
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <div className={`text-lg font-bold ${
-                                cycleProfit > 0 ? 'text-green-400' : 
-                                cycleProfit < 0 ? 'text-red-400' : 'text-gray-400'
-                              }`}>
-                                {cycleProfit > 0 ? '+' : ''}${cycleProfit.toFixed(4)}
-                              </div>
-                              <div className="text-xs text-crypto-light">Cycle P&L</div>
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b border-gray-700">
-                                  <th className="text-left py-3 px-4 text-crypto-light">Order Type</th>
-                                  <th className="text-left py-3 px-4 text-crypto-light">Side</th>
-                                  <th className="text-left py-3 px-4 text-crypto-light">Price</th>
-                                  <th className="text-left py-3 px-4 text-crypto-light">Distance</th>
-                                  <th className="text-left py-3 px-4 text-crypto-light">Quantity</th>
-                                  <th className="text-left py-3 px-4 text-crypto-light">Status</th>
-                                  <th className="text-left py-3 px-4 text-crypto-light">Date Time</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(cycleOrders as any[]).map((order: any, index: number) => {
-                                  const currentPrice = parseFloat(marketData?.price || '0');
-                                  const orderPrice = parseFloat(order.filledPrice || order.price || '0');
-                                  const isUnfilled = order.status !== 'filled' && order.status !== 'cancelled';
-                                  const distance = currentPrice > 0 && isUnfilled ? ((orderPrice - currentPrice) / currentPrice) * 100 : 0;
-                                  const isCloseToFill = isUnfilled && Math.abs(distance) < 2;
-                                  
-                                  return (
-                                    <tr key={index} className={`border-b border-gray-800 hover:bg-gray-800/50 ${
-                                      isCloseToFill && order.status === 'placed' ? 'bg-yellow-500/5 border-yellow-500/20' : ''
+                  </div>
+                ) : currentCycleOrders.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="text-crypto-light">No active orders for current cycle</div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-700">
+                          <th className="text-left py-3 px-4 text-crypto-light">Order Type</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Side</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Price</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Distance</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Quantity</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Status</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Date Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentCycleOrders.map((order: any, index: number) => {
+                          const currentPrice = parseFloat(marketData?.price || '0');
+                          const orderPrice = parseFloat(order.price || '0');
+                          const isUnfilled = order.status !== 'filled' && order.status !== 'cancelled';
+                          const distance = currentPrice > 0 && isUnfilled ? ((orderPrice - currentPrice) / currentPrice) * 100 : 0;
+                          const isCloseToFill = isUnfilled && Math.abs(distance) < 2; // Within 2% of current price
+                          
+                          return (
+                            <tr key={index} className={`border-b border-gray-800 hover:bg-gray-800/50 ${
+                              isCloseToFill && order.status === 'placed' ? 'bg-yellow-500/5 border-yellow-500/20' : ''
+                            }`}>
+                              <td className="py-3 px-4 text-white">
+                                <div className="flex flex-col">
+                                  <span className="font-medium capitalize">
+                                    {order.orderType?.replace('_', ' ') || order.order_type?.replace('_', ' ')}
+                                  </span>
+                                  {order.safetyOrderLevel && (
+                                    <span className="text-xs text-crypto-light">Level {order.safetyOrderLevel || order.safety_order_level}</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`text-sm font-medium ${
+                                  order.side === 'BUY' ? 'text-green-400' : 'text-red-400'
+                                }`}>
+                                  {order.side}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-white font-mono">
+                                ${parseFloat(order.price || '0').toFixed(4)}
+                              </td>
+                              <td className="py-3 px-4">
+                                {isUnfilled && currentPrice > 0 ? (
+                                  <div className="flex flex-col">
+                                    <span className={`text-sm font-mono ${
+                                      Math.abs(distance) < 1 ? 'text-red-400 font-bold' :
+                                      Math.abs(distance) < 2 ? 'text-yellow-400' :
+                                      'text-crypto-light'
                                     }`}>
-                                      <td className="py-3 px-4 text-white">
-                                        <div className="flex flex-col">
-                                          <span className="font-medium capitalize">
-                                            {order.orderType?.replace('_', ' ') || order.order_type?.replace('_', ' ')}
-                                          </span>
-                                          {order.safetyOrderLevel && (
-                                            <span className="text-xs text-crypto-light">Level {order.safetyOrderLevel}</span>
-                                          )}
-                                        </div>
-                                      </td>
-                                      <td className="py-3 px-4">
-                                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                          order.side === 'BUY' 
-                                            ? 'bg-green-500/20 text-green-400' 
-                                            : 'bg-red-500/20 text-red-400'
-                                        }`}>
-                                          {order.side}
-                                        </span>
-                                      </td>
-                                      <td className="py-3 px-4 text-white font-mono">
-                                        ${orderPrice.toFixed(4)}
-                                      </td>
-                                      <td className="py-3 px-4">
-                                        {isUnfilled && distance !== 0 && (
-                                          <span className={`text-xs font-medium ${
-                                            distance > 0 ? 'text-green-400' : 'text-red-400'
-                                          }`}>
-                                            {distance > 0 ? '+' : ''}{distance.toFixed(2)}%
-                                          </span>
-                                        )}
-                                      </td>
-                                      <td className="py-3 px-4 text-white font-mono">
-                                        {parseFloat(order.filledQuantity || order.quantity || '0').toFixed(1)}
-                                      </td>
-                                      <td className="py-3 px-4">
-                                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                          order.status === 'filled' 
-                                            ? 'bg-green-500/10 text-green-400' : 
-                                          order.status === 'placed' 
-                                            ? 'bg-blue-500/10 text-blue-400' : 
-                                          order.status === 'cancelled' 
-                                            ? 'bg-gray-500/10 text-gray-400' :
-                                          'bg-red-500/10 text-red-400'
-                                        }`}>
-                                          {order.status}
-                                        </span>
-                                      </td>
-                                      <td className="py-3 px-4 text-crypto-light text-xs">
-                                        {order.filledAt ? new Date(order.filledAt).toLocaleString() :
-                                         order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })
-              )}
-            </div>
+                                      {distance > 0 ? '+' : ''}{distance.toFixed(2)}%
+                                    </span>
+                                    {isCloseToFill && order.status === 'placed' && (
+                                      <span className="text-xs text-yellow-400">Near fill</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-crypto-light text-sm">-</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-white font-mono">
+                                {parseFloat(order.quantity || '0').toFixed(6)}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  order.status === 'filled' ? 'bg-green-500/10 text-green-400' :
+                                  order.status === 'placed' ? 'bg-blue-500/10 text-blue-400' :
+                                  order.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400' :
+                                  order.status === 'cancelled' ? 'bg-gray-500/10 text-gray-400' :
+                                  'bg-red-500/10 text-red-400'
+                                }`}>
+                                  {order.status}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-crypto-light text-xs">
+                                {order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-            {/* Bot List Section */}
-            <div className="mt-8">
-              <div className="flex space-x-4 mb-6">
-                <button
-                  onClick={() => setActiveSection('active')}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    activeSection === 'active'
-                      ? 'bg-crypto-primary text-white'
-                      : 'bg-crypto-dark text-crypto-light hover:bg-gray-700'
-                  }`}
-                >
-                  Active Bots ({activeBots.length})
-                </button>
-                <button
-                  onClick={() => setActiveSection('inactive')}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    activeSection === 'inactive'
-                      ? 'bg-crypto-primary text-white'
-                      : 'bg-crypto-dark text-crypto-light hover:bg-gray-700'
-                  }`}
-                >
-                  Inactive Bots ({inactiveBots.length})
-                </button>
-              </div>
-
-              {activeSection === 'active' && (
-                <div>
-                  {botsLoading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {[...Array(3)].map((_, i) => (
-                        <Card key={i} className="bg-crypto-darker border-gray-800">
-                          <CardContent className="p-6">
-                            <div className="animate-pulse space-y-4">
-                              <div className="h-4 bg-gray-700 rounded w-3/4"></div>
-                              <div className="h-3 bg-gray-700 rounded w-1/2"></div>
-                              <div className="h-3 bg-gray-700 rounded w-2/3"></div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : activeBots.length === 0 ? (
-                    <Card className="bg-crypto-darker border-gray-800">
-                      <CardContent className="text-center py-12">
-                        <div className="text-crypto-light">No active bots found</div>
-                        <p className="text-sm text-gray-500 mt-2">Create a new bot to get started</p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {activeBots.map((bot: any) => (
-                        <BotCard
-                          key={bot.id}
-                          bot={bot}
-                          onView={() => setSelectedBot(bot)}
-                          onStop={() => {
-                            setSelectedBot(bot);
-                            stopBotMutation.mutate(bot.id);
-                          }}
-                          onDelete={() => {
-                            setSelectedBot(bot);
-                            deleteBotMutation.mutate(bot.id);
-                          }}
-                          isActive={true}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeSection === 'inactive' && (
-                <div>
-                  {inactiveBots.length === 0 ? (
-                    <Card className="bg-crypto-darker border-gray-800">
-                      <CardContent className="text-center py-12">
-                        <div className="text-crypto-light">No inactive bots found</div>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {inactiveBots.map((bot: any) => (
-                        <BotCard
-                          key={bot.id}
-                          bot={bot}
-                          onView={() => setSelectedBot(bot)}
-                          onDelete={() => {
-                            setSelectedBot(bot);
-                            deleteBotMutation.mutate(bot.id);
-                          }}
-                          isActive={false}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// BotCard component
-function BotCard({ 
-  bot, 
-  onView, 
-  onStop, 
-  onDelete, 
-  isActive 
-}: { 
-  bot: any; 
-  onView: () => void; 
-  onStop?: () => void; 
-  onDelete: () => void; 
-  isActive: boolean; 
-}) {
-  return (
-    <Card className="bg-crypto-darker border-gray-800 hover:border-crypto-primary/30 transition-all cursor-pointer">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="text-white font-semibold text-lg">{bot.name}</h3>
-            <p className="text-crypto-light text-sm">{bot.tradingPair}</p>
-          </div>
-          <div className={`px-2 py-1 rounded text-xs font-medium ${
-            bot.status === 'active' 
-              ? 'bg-green-500/20 text-green-400' 
-              : 'bg-gray-500/20 text-gray-400'
-          }`}>
-            {bot.status}
-          </div>
-        </div>
-        
-        <div className="space-y-2 mb-4">
-          <div className="flex justify-between text-sm">
-            <span className="text-crypto-light">Strategy:</span>
-            <span className="text-white capitalize">{bot.strategy}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-crypto-light">Base Order:</span>
-            <span className="text-white">${bot.baseOrderAmount}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-crypto-light">Safety Orders:</span>
-            <span className="text-white">{bot.maxSafetyOrders}</span>
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={onView}
-            className="flex-1 bg-crypto-primary hover:bg-crypto-primary/80 text-white px-3 py-2 rounded text-sm font-medium transition-colors"
-          >
-            View Details
-          </button>
-          {isActive && onStop && (
-            <button
-              onClick={onStop}
-              className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm font-medium transition-colors"
-            >
-              Stop
-            </button>
-          )}
-          <button
-            onClick={onDelete}
-            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm font-medium transition-colors"
-          >
-            Delete
-          </button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+            {/* Bot Orders History */}
+            <Card className="bg-crypto-darker border-gray-800 mb-6">
+              <CardHeader>
+                <CardTitle className="text-white">Bot Orders History</CardTitle>
+                <p className="text-sm text-crypto-light">
+                  Completed orders from previous cycles ({historyOrders.length} orders)
+                </p>
+              </CardHeader>
+              <CardContent>
+                {historyOrders.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="text-crypto-light">No completed orders from previous cycles</div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-700">
+                          <th className="text-left py-3 px-4 text-crypto-light">Cycle</th>
+                          <th className="text-left py-3 px-4 text-crypto-light">Order Type</th>
                           <th className="text-left py-3 px-4 text-crypto-light">Side</th>
                           <th className="text-left py-3 px-4 text-crypto-light">Filled Price</th>
                           <th className="text-left py-3 px-4 text-crypto-light">Filled Qty</th>
