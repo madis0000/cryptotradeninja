@@ -100,7 +100,7 @@ export function MartingaleProgressDialog({
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Check bot cycles and orders
-        const token = localStorage.getItem('auth_token');
+        const token = localStorage.getItem('token');
         const cycleResponse = await fetch(`/api/bot-cycles/${botId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -157,7 +157,7 @@ export function MartingaleProgressDialog({
     
     try {
       // Call the actual bot creation API
-      const token = localStorage.getItem('auth_token');
+      const token = localStorage.getItem('token');
       const response = await fetch('/api/bots', {
         method: 'POST',
         headers: {

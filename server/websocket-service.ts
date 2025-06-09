@@ -3051,6 +3051,12 @@ export class WebSocketService {
         timestamp: timestamp.toString()
       });
 
+      // Add required parameters for LIMIT orders
+      if (orderParams.type === 'LIMIT') {
+        params.append('price', orderParams.price);
+        params.append('timeInForce', 'GTC'); // Good Till Cancelled
+      }
+
       const signature = crypto
         .createHmac('sha256', apiSecret)
         .update(params.toString())
@@ -3288,11 +3294,15 @@ export class WebSocketService {
           // Now place take profit order
           await this.placeTakeProfitOrder(botId, cycleId, currentPrice, quantity);
           
-          // Place the first safety order
-          await this.placeNextSafetyOrder(bot, await storage.updateBotCycle(cycleId, {}), currentPrice, 0);
+          // Get current cycle for safety order placement
+          const currentCycle = await storage.getActiveBotCycle(botId);
+          if (currentCycle) {
+            // Place the first safety order
+            await this.placeNextSafetyOrder(bot, currentCycle, currentPrice, 0);
+          }
           
           // Broadcast order fill
-          this.broadcastOrderFill(await storage.updateCycleOrder(baseOrder.id, {}));
+          this.broadcastOrderFill(baseOrder);
 
         } else {
           console.error(`[MARTINGALE STRATEGY] ❌ Failed to place base order for bot ${botId} - No order ID returned`);

@@ -1,0 +1,50 @@
+[MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====
+[MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:
+[MARTINGALE STRATEGY]    Base Price: $5.848000
+[MARTINGALE STRATEGY]    Take Profit %: 1.5%
+[MARTINGALE STRATEGY]    Take Profit Price: $5.935720
+[MARTINGALE STRATEGY]    Quantity: 8.50000000
+[MARTINGALE STRATEGY] ✓ Created take profit order record (ID: 7)
+[MARTINGALE STRATEGY] 🚀 Placing take profit order on binance (testnet)...
+[MARTINGALE STRATEGY]    Order Type: LIMIT SELL
+[MARTINGALE STRATEGY]    Symbol: ICPUSDT
+[MARTINGALE STRATEGY]    Quantity: 8.50000000
+[MARTINGALE STRATEGY]    Price: $5.935720
+[REST ORDER] Placing order via REST API: {
+  symbol: 'ICPUSDT',
+  side: 'SELL',
+  type: 'LIMIT',
+  quantity: '8.50000000'
+}
+[REST ORDER] ❌ Order failed: {"code":-1102,"msg":"Mandatory parameter 'timeInForce' was not sent, was empty/null, or malformed."}
+[REST ORDER] Error placing order: Error: Order failed: {"code":-1102,"msg":"Mandatory parameter 'timeInForce' was not sent, was empty/null, or malformed."}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3088:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeTakeProfitOrder (/home/runner/workspace/server/websocket-service.ts:3450:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3289:11)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[ORDER] Error preparing order: Error: Order failed: {"code":-1102,"msg":"Mandatory parameter 'timeInForce' was not sent, was empty/null, or malformed."}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3088:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeTakeProfitOrder (/home/runner/workspace/server/websocket-service.ts:3450:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3289:11)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ❌ Error placing take profit order: Error: Order failed: {"code":-1102,"msg":"Mandatory parameter 'timeInForce' was not sent, was empty/null, or malformed."}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3088:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeTakeProfitOrder (/home/runner/workspace/server/websocket-service.ts:3450:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3289:11)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== TAKE PROFIT ORDER COMPLETE =====
+
+[MARTINGALE STRATEGY] ❌ Error placing base order for bot 9: Error: No values to set
+    at mapUpdateSet (/home/runner/workspace/node_modules/src/utils.ts:125:9)
+    at PgUpdateBuilder.set (/home/runner/workspace/node_modules/src/pg-core/query-builders/update.ts:96:4)
+    at DatabaseStorage.updateBotCycle (/home/runner/workspace/server/storage.ts:281:8)
+    at WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3292:62)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====
