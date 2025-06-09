@@ -254,10 +254,15 @@ export function MartingaleProgressDialog({
   // Start order placement process
   const startOrderPlacement = async () => {
     try {
-      await createBotWithOrders();
+      if (botId) {
+        // Monitor existing bot instead of creating new one
+        await monitorOrderPlacementProgress(botId);
+      } else {
+        throw new Error('No bot ID provided for monitoring');
+      }
     } catch (error) {
-      console.error('Error in bot creation:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Bot creation failed';
+      console.error('Error in bot monitoring:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Bot monitoring failed';
       updateStepStatus('base_order', 'error', undefined, undefined, undefined, errorMessage);
       onError?.(errorMessage);
     }

@@ -163,6 +163,9 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     setConfig(prev => ({ ...prev, [field]: newValue.toString() }));
   };
 
+  // Store created bot ID for progress dialog
+  const [createdBotId, setCreatedBotId] = useState<string | null>(null);
+
   // Create bot mutation
   const createBotMutation = useMutation({
     mutationFn: async (botData: any) => {
@@ -184,7 +187,8 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     },
     onSuccess: (botData) => {
       console.log('Bot created successfully:', botData);
-      // Open progress dialog to handle order placement
+      // Store bot ID and open progress dialog to monitor order placement
+      setCreatedBotId(botData.id.toString());
       setProgressDialogOpen(true);
     },
     onError: (error: any) => {
@@ -697,6 +701,7 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
       <MartingaleProgressDialog
         open={progressDialogOpen}
         onOpenChange={setProgressDialogOpen}
+        botId={createdBotId || undefined}
         botConfig={{
           symbol: selectedSymbol,
           baseOrderSize: config.baseOrderSize,
