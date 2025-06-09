@@ -3267,7 +3267,11 @@ export class WebSocketService {
         console.log(`[MARTINGALE STRATEGY] ⏱️ Applying cooldown: ${cooldownSeconds}s`);
         
         setTimeout(async () => {
-          await this.startNewMartingaleCycle(cycle.botId, (cycle.cycleNumber || 1) + 1);
+          try {
+            await this.startNewMartingaleCycle(cycle.botId, (cycle.cycleNumber || 1) + 1);
+          } catch (error) {
+            console.error(`[MARTINGALE STRATEGY] ❌ Error starting new cycle after cooldown:`, error);
+          }
         }, cooldown);
 
       } else {
