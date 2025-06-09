@@ -12,6 +12,9 @@ export function MyBotsPage() {
     queryKey: ['/api/bots']
   });
 
+  // Debug logging to check the bot data structure
+  console.log('[BOTS DEBUG] Raw bots data:', bots);
+
   const sidebarItems = [
     { id: 'active-bots', label: 'Active Bots', icon: 'fas fa-play-circle' },
     { id: 'bot-templates', label: 'Bot Templates', icon: 'fas fa-template' },
