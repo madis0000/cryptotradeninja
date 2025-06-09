@@ -245,19 +245,29 @@ export function MyBotsPage() {
                 </Button>
                 <div>
                   <h1 className="text-2xl font-bold text-white">{selectedBot.name}</h1>
-                  <p className="text-crypto-light">
-                    {selectedBot.tradingPair} • {selectedBot.strategy} • {selectedBot.direction}
-                  </p>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-crypto-light">
+                      {selectedBot.tradingPair} • {selectedBot.strategy} • {selectedBot.direction}
+                    </p>
+                    <Badge className={`${
+                      selectedBot.status === 'active' 
+                        ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                        : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                    }`}>
+                      {selectedBot.status || 'inactive'}
+                    </Badge>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center space-x-4">
-                <Badge className={`${
-                  selectedBot.status === 'active' 
-                    ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                    : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
-                }`}>
-                  {selectedBot.status || 'inactive'}
-                </Badge>
+                {marketData && (
+                  <div className="text-right">
+                    <div className="text-lg font-mono text-green-400">
+                      ${parseFloat(marketData.price || '0').toFixed(4)}
+                    </div>
+                    <div className="text-xs text-crypto-light">Live Price</div>
+                  </div>
+                )}
               </div>
             </div>
 
