@@ -7,15 +7,26 @@ import { Trash2, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
+import { useWebSocket } from "@/hooks/use-websocket";
 
 export function MyBotsPage() {
   const [activeSection, setActiveSection] = useState('active-bots');
   const [selectedBot, setSelectedBot] = useState<any>(null);
+  const [liveMarketData, setLiveMarketData] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Initialize order notifications
   useOrderNotifications();
+
+  // WebSocket for live market data
+  const { connect, subscribeToMarket, unsubscribeFromMarket } = useWebSocket({
+    onMarketUpdate: (data) => {
+      if (selectedBot && data.symbol === selectedBot.tradingPair) {
+        setLiveMarketData(data);
+      }
+    }
+  });
 
   // Fetch bots data
   const { data: bots = [], isLoading: botsLoading } = useQuery<any[]>({

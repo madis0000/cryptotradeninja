@@ -3693,7 +3693,6 @@ export class WebSocketService {
 
   // Helper method to create HMAC SHA256 signature
   private createSignature(queryString: string, secret: string): string {
-    const crypto = require('crypto');
     return crypto.createHmac('sha256', secret).update(queryString).digest('hex');
   }
 
