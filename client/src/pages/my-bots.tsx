@@ -39,7 +39,17 @@ export function MyBotsPage() {
 
   // Fetch bot orders for selected bot
   const { data: botOrders = [], isLoading: ordersLoading } = useQuery<any[]>({
-    queryKey: ['/api/orders', selectedBot?.id],
+    queryKey: ['/api/bot-orders', selectedBot?.id],
+    queryFn: async () => {
+      if (!selectedBot?.id) return [];
+      const response = await fetch(`/api/bot-orders/${selectedBot.id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch orders');
+      return response.json();
+    },
     enabled: !!selectedBot?.id
   });
 
@@ -55,13 +65,21 @@ export function MyBotsPage() {
 
   // Calculate average entry price and position size from filled buy orders
   const calculatePositionMetrics = () => {
-    if (!botOrders || botOrders.length === 0) return { averageEntryPrice: 0, totalPositionSize: 0, totalInvested: 0 };
+    if (!botOrders || botOrders.length === 0) {
+      return { averageEntryPrice: 0, totalPositionSize: 0, totalInvested: 0 };
+    }
     
-    const filledBuyOrders = botOrders.filter((order: any) => 
-      order.status === 'filled' && 
-      order.side === 'BUY' && 
-      (order.orderType === 'base_order' || order.orderType === 'safety_order')
-    );
+    const filledBuyOrders = botOrders.filter((order: any) => {
+      const status = order.status?.toLowerCase();
+      const side = order.side?.toUpperCase();
+      const orderType = (order.orderType || order.order_type)?.toLowerCase();
+      
+      const isFilled = status === 'filled';
+      const isBuy = side === 'BUY';
+      const isValidType = orderType === 'base_order' || orderType === 'safety_order';
+      
+      return isFilled && isBuy && isValidType;
+    });
     
     if (filledBuyOrders.length === 0) return { averageEntryPrice: 0, totalPositionSize: 0, totalInvested: 0 };
     
@@ -69,9 +87,11 @@ export function MyBotsPage() {
     let totalQuantity = 0;
     
     filledBuyOrders.forEach((order: any) => {
-      const price = parseFloat(order.price || '0');
+      // Use filledPrice and filledQuantity from cycleOrders table
+      const price = parseFloat(order.filledPrice || order.price || '0');
       const quantity = parseFloat(order.filledQuantity || order.quantity || '0');
       const orderValue = price * quantity;
+      
       totalValue += orderValue;
       totalQuantity += quantity;
     });
