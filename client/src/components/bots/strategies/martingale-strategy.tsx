@@ -28,6 +28,14 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
   const { user } = useAuth();
   const [localDirection, setLocalDirection] = useState<"long" | "short">("long");
   const [realtimeBalance, setRealtimeBalance] = useState<string | null>(null);
+  
+  // Exchange-specific minimum order amounts (in USDT)
+  const getMinimumOrderAmount = (exchangeId?: number) => {
+    // Binance minimum order amount is typically $5-10 USDT
+    // Setting to $5 to ensure orders pass exchange validation
+    return "5.0";
+  };
+
   const [config, setConfig] = useState({
     // Price Settings
     priceDeviation: "1",
@@ -35,9 +43,9 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     takeProfitType: "fix",
     trailingProfit: "0.5",
     
-    // Investment
-    baseOrderSize: "7.5",
-    safetyOrderSize: "7.5",
+    // Investment (set to exchange minimum)
+    baseOrderSize: getMinimumOrderAmount(selectedExchangeId),
+    safetyOrderSize: getMinimumOrderAmount(selectedExchangeId),
     maxSafetyOrders: "8",
     activeSafetyOrdersEnabled: false,
     activeSafetyOrders: "1",
@@ -149,7 +157,8 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
 
   const adjustAmountValue = (field: string, increment: number) => {
     const currentValue = parseFloat(config[field as keyof typeof config] as string) || 0;
-    const newValue = Math.max(0, currentValue + increment);
+    const minAmount = parseFloat(getMinimumOrderAmount(selectedExchangeId));
+    const newValue = Math.max(minAmount, currentValue + increment);
     setConfig(prev => ({ ...prev, [field]: newValue.toFixed(2) }));
   };
 
