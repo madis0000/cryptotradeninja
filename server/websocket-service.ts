@@ -3070,14 +3070,13 @@ export class WebSocketService {
 
       // Get current market price
       const symbol = bot.tradingPair;
-      const marketData = this.marketData.get(symbol);
+      const currentPrice = await this.getCurrentPrice(symbol);
       
-      if (!marketData) {
-        console.error(`[MARTINGALE STRATEGY] ❌ No market data available for ${symbol}`);
+      if (!currentPrice || currentPrice <= 0) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Unable to fetch market price for ${symbol}`);
         return;
       }
-
-      const currentPrice = marketData.price;
+      
       console.log(`[MARTINGALE STRATEGY] ✓ Market price for ${symbol}: $${currentPrice.toFixed(6)}`);
 
       // Calculate base order quantity

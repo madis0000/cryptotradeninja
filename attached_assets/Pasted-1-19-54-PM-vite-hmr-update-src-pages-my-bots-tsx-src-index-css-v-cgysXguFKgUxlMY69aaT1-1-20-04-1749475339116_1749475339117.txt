@@ -1,0 +1,36 @@
+1:19:54 PM [vite] hmr update /src/pages/my-bots.tsx, /src/index.css?v=cgysXguFKgUxlMY69aaT1
+1:20:04 PM [vite] hmr update /src/pages/my-bots.tsx, /src/index.css?v=cgysXguFKgUxlMY69aaT1 (x2)
+1:20:26 PM [express] DELETE /api/bots/1 200 in 100ms :: {"success":true}
+1:20:26 PM [express] GET /api/bots 200 in 35ms :: []
+1:20:45 PM [express] GET /api/exchanges/1/balance/ICPUSDT 304 in 37ms :: {"asset":"","free":"0.00000…
+[BINANCE STREAM] WebSocket error: Error: WebSocket was closed before the connection was established
+    at WebSocket.close (/home/runner/workspace/node_modules/ws/lib/websocket.js:299:7)
+    at WebSocketService.connectWithSubscription (/home/runner/workspace/server/websocket-service.ts:721:28)
+    at WebSocketService.createNewBinanceConnection (/home/runner/workspace/server/websocket-service.ts:546:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.updateBinanceSubscription (/home/runner/workspace/server/websocket-service.ts:556:7)
+    at async WebSocket.<anonymous> (/home/runner/workspace/server/websocket-service.ts:162:15)
+[BINANCE STREAM] Attempting reconnection in 5 seconds...
+[BALANCE] Started balance update interval
+(node:13626) [DEP0106] DeprecationWarning: crypto.createDecipher is deprecated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[BINANCE STREAM] Attempting reconnection in 5 seconds...
+[MARTINGALE] Starting new bot cycle for bot 2
+[MARTINGALE] Created initial cycle 2 for bot 2
+
+[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====
+[MARTINGALE STRATEGY] Bot ID: 2, Cycle ID: 2
+[MARTINGALE STRATEGY] ✓ Bot loaded: Martingale Bot - ICPUSDT (ICPUSDT, long)
+[MARTINGALE STRATEGY] ✓ Strategy: martingale, Exchange ID: 1
+[MARTINGALE STRATEGY] ✓ Exchange loaded: binance (testnet) (binance)
+[MARTINGALE STRATEGY] ❌ Critical error in placeInitialBaseOrder for bot 2: TypeError: currentPrice.toFixed is not a function
+    at WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3081:88)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:305:11)
+[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====
+
+1:20:53 PM [express] POST /api/bots 200 in 138ms :: {"id":2,"userId":1,"exchangeId":1,"name":"Martin…
+[WEBSOCKET] Stopping all Binance streams
+[WEBSOCKET] Clearing cached market data
+[WEBSOCKET] Closing Binance public stream
+[WEBSOCKET] All Binance streams stopped
