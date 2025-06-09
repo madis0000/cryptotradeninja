@@ -1858,16 +1858,18 @@ export class WebSocketService {
         await storage.createTrade({
           userId: orderRequest.userId,
           botId: null, // Manual trade
-          exchangeId: orderRequest.exchangeId,
-          symbol: orderRequest.symbol,
+          tradingPair: orderRequest.symbol,
           side: orderRequest.side,
-          quantity: orderRequest.quantity,
+          orderType: orderRequest.orderType,
+          orderCategory: "manual",
+          amount: orderRequest.quantity,
+          quoteAmount: "0",
           price: orderResult.price || '0',
+          status: orderResult.status || 'FILLED',
+          pnl: "0",
           fee: orderResult.fee || '0',
           feeAsset: orderResult.feeAsset || 'USDT',
-          orderId: orderResult.orderId || '',
-          status: orderResult.status || 'FILLED',
-          orderType: orderRequest.orderType
+          exchangeOrderId: orderResult.orderId || ''
         });
 
         const successResponse: OrderResponse = {

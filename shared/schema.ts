@@ -82,7 +82,7 @@ export const tradingBots = pgTable("trading_bots", {
 
 export const trades = pgTable("trades", {
   id: serial("id").primaryKey(),
-  botId: integer("bot_id").notNull(),
+  botId: integer("bot_id"), // Optional for manual trades
   userId: integer("user_id").notNull(),
   exchangeOrderId: text("exchange_order_id"), // Binance order ID
   tradingPair: text("trading_pair").notNull(),

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useOrderWebSocket } from "@/hooks/useOrderWebSocket";
+import { usePublicWebSocket } from "@/hooks/useWebSocketService";
 import { useQuery } from "@tanstack/react-query";
 
 interface OrderFormProps {
@@ -38,18 +38,8 @@ export function OrderForm({ className, symbol = "ICPUSDT" }: OrderFormProps) {
   const [orderStatus, setOrderStatus] = useState<string>("");
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
-  // WebSocket for real-time market data and order placement
-  const { lastMessage, sendMessage, isConnected } = useOrderWebSocket(
-    `wss://${window.location.host.replace(':5000', ':8080')}`,
-    {
-      onOpen: () => {
-        sendMessage({
-          type: 'subscribe',
-          symbols: [symbol]
-        });
-      }
-    }
-  );
+  // WebSocket for real-time market data
+  const publicWs = usePublicWebSocket();
 
   // Fetch user balances
   const { data: exchangeBalances } = useQuery({
@@ -63,20 +53,36 @@ export function OrderForm({ className, symbol = "ICPUSDT" }: OrderFormProps) {
 
   // Process WebSocket market data
   useEffect(() => {
-    if (lastMessage) {
+    if (publicWs.lastMessage) {
       try {
-        const data = JSON.parse(lastMessage.data);
+        const data = JSON.parse(publicWs.lastMessage.data);
         if (data.type === 'market_update' && data.data.symbol === symbol) {
           setMarketPrice(data.data.price);
           if (orderType === 'market') {
             setPrice(data.data.price);
           }
         }
+        
+        // Handle order placement responses
+        if (data.type === 'order_result') {
+          setIsPlacingOrder(false);
+          if (data.success) {
+            setOrderStatus(`Order placed successfully: ${data.orderId}`);
+            // Clear form on successful order
+            setAmount('');
+            setTotal('');
+          } else {
+            setOrderStatus(`Order failed: ${data.error}`);
+          }
+          
+          // Clear status after 5 seconds
+          setTimeout(() => setOrderStatus(''), 5000);
+        }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
       }
     }
-  }, [lastMessage, symbol, orderType]);
+  }, [publicWs.lastMessage, symbol, orderType]);
 
   // Calculate total when price or amount changes
   useEffect(() => {
