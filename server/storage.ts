@@ -357,6 +357,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(cycleOrders.botId, botId))
       .orderBy(desc(cycleOrders.createdAt));
   }
+
+  async getPendingCycleOrders(botId: number): Promise<CycleOrder[]> {
+    return await db
+      .select()
+      .from(cycleOrders)
+      .where(and(
+        eq(cycleOrders.botId, botId),
+        eq(cycleOrders.status, 'placed')
+      ))
+      .orderBy(desc(cycleOrders.createdAt));
+  }
 }
 
 export const storage = new DatabaseStorage();

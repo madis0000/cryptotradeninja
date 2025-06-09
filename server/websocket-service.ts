@@ -3429,8 +3429,8 @@ export class WebSocketService {
 
     try {
       const { apiKey, apiSecret } = decryptApiCredentials(
-        exchange.encryptedApiKey,
-        exchange.encryptedApiSecret,
+        exchange.apiKey,
+        exchange.apiSecret,
         exchange.encryptionIv
       );
 
@@ -3531,14 +3531,12 @@ export class WebSocketService {
         safetyOrderLevel: null,
         side: 'SELL',
         orderCategory: 'MARKET',
+        symbol: symbol,
         price: '0', // Market order
         quantity: adjustedQuantity.toString(),
         filledQuantity: '0',
         filledPrice: null,
-        status: 'pending',
-        pnl: '0',
-        fee: '0',
-        feeAsset: 'USDT'
+        status: 'pending'
       });
 
       // Place market sell order on exchange
