@@ -59,7 +59,7 @@ export interface IStorage {
   // Cycle Order Management
   createCycleOrder(order: InsertCycleOrder): Promise<CycleOrder>;
   getCycleOrders(cycleId: number): Promise<CycleOrder[]>;
-  updateCycleOrder(orderId: number, updates: Partial<InsertCycleOrder>): Promise<CycleOrder>;
+  updateCycleOrder(orderId: number, updates: Partial<InsertCycleOrder> & { filledAt?: Date }): Promise<CycleOrder>;
   getCycleOrderByExchangeId(exchangeOrderId: string): Promise<CycleOrder | undefined>;
   getPendingCycleOrders(botId: number): Promise<CycleOrder[]>;
 }
@@ -295,10 +295,13 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(cycleOrders.createdAt));
   }
 
-  async updateCycleOrder(orderId: number, updates: Partial<InsertCycleOrder>): Promise<CycleOrder> {
+  async updateCycleOrder(orderId: number, updates: Partial<InsertCycleOrder> & { filledAt?: Date }): Promise<CycleOrder> {
     const [updatedOrder] = await db
       .update(cycleOrders)
-      .set(updates)
+      .set({
+        ...updates,
+        ...(updates.filledAt && { filledAt: updates.filledAt })
+      })
       .where(eq(cycleOrders.id, orderId))
       .returning();
     return updatedOrder;

@@ -209,31 +209,38 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
 
     setIsCreatingBot(true);
 
-    // Prepare bot data
+    // Prepare bot data to match backend schema
     const botData = {
       name: `Martingale Bot - ${selectedSymbol}`,
       strategy: 'martingale',
-      symbol: selectedSymbol,
+      tradingPair: selectedSymbol,
+      direction: localDirection,
       exchangeId: selectedExchangeId,
       isActive: true,
-      configuration: {
-        direction: localDirection,
-        baseOrderSize: parseFloat(config.baseOrderSize),
-        safetyOrderSize: parseFloat(config.safetyOrderSize),
-        maxSafetyOrders: parseInt(config.maxSafetyOrders),
-        activeSafetyOrders: config.activeSafetyOrdersEnabled ? parseInt(config.activeSafetyOrders) : undefined,
-        takeProfit: parseFloat(config.takeProfit),
-        priceDeviation: parseFloat(config.priceDeviation),
-        priceDeviationMultiplier: config.priceDeviationMultiplier[0],
-        safetyOrderSizeMultiplier: config.safetyOrderSizeMultiplier[0],
-        cooldownBetweenRounds: parseInt(config.cooldownBetweenRounds),
-        takeProfitType: config.takeProfitType,
-        trailingProfit: parseFloat(config.trailingProfit),
-        triggerType: config.triggerType,
-        triggerPrice: config.triggerPrice ? parseFloat(config.triggerPrice) : undefined,
-        lowerPrice: config.lowerPrice ? parseFloat(config.lowerPrice) : undefined,
-        upperPrice: config.upperPrice ? parseFloat(config.upperPrice) : undefined
-      }
+      
+      // Investment Settings
+      baseOrderAmount: config.baseOrderSize,
+      safetyOrderAmount: config.safetyOrderSize,
+      maxSafetyOrders: parseInt(config.maxSafetyOrders),
+      activeSafetyOrdersEnabled: config.activeSafetyOrdersEnabled,
+      activeSafetyOrders: config.activeSafetyOrdersEnabled ? parseInt(config.activeSafetyOrders) : 1,
+      
+      // Price Settings
+      priceDeviation: config.priceDeviation,
+      takeProfitPercentage: config.takeProfit,
+      takeProfitType: config.takeProfitType,
+      trailingProfitPercentage: config.trailingProfit,
+      
+      // Advanced Settings
+      triggerType: config.triggerType,
+      triggerPrice: config.triggerPrice || null,
+      priceDeviationMultiplier: config.priceDeviationMultiplier[0].toString(),
+      safetyOrderSizeMultiplier: config.safetyOrderSizeMultiplier[0].toString(),
+      cooldownBetweenRounds: parseInt(config.cooldownBetweenRounds),
+      
+      // Risk Management
+      lowerPriceLimit: config.lowerPrice || null,
+      upperPriceLimit: config.upperPrice || null
     };
 
     createBotMutation.mutate(botData);

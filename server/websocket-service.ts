@@ -2472,6 +2472,61 @@ export class WebSocketService {
     }
   }
 
+  private async placeOrderOnExchange(exchange: any, orderParams: any) {
+    try {
+      const { decryptApiCredentials } = require('./encryption');
+      const crypto = require('crypto');
+      
+      // Decrypt API credentials
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.encryptedApiKey,
+        exchange.encryptedApiSecret,
+        exchange.encryptionIv
+      );
+
+      // Prepare order parameters
+      const params = new URLSearchParams({
+        symbol: orderParams.symbol,
+        side: orderParams.side,
+        type: orderParams.type,
+        quantity: orderParams.quantity,
+        timestamp: Date.now().toString()
+      });
+
+      // Create signature
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(params.toString())
+        .digest('hex');
+      
+      params.append('signature', signature);
+
+      // Make API request to place order
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString()
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`[ORDER] Successfully placed order:`, result);
+        return result;
+      } else {
+        const error = await response.text();
+        console.error(`[ORDER] Failed to place order:`, error);
+        return null;
+      }
+
+    } catch (error) {
+      console.error('[ORDER] Error placing order on exchange:', error);
+      return null;
+    }
+  }
+
   public async placeInitialBaseOrder(botId: number, cycleId: number) {
     try {
       const bot = await storage.getTradingBot(botId);
