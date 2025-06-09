@@ -2728,7 +2728,7 @@ export class WebSocketService {
         : averagePrice * (1 + adjustedDeviation / 100);
 
       // Apply Binance PRICE_FILTER requirements for ICPUSDT
-      const tickSize = 0.00001;
+      const tickSize = 0.001;
       const safetyOrderPrice = Math.round(rawSafetyOrderPrice / tickSize) * tickSize;
 
       // Calculate safety order quantity
@@ -2749,7 +2749,7 @@ export class WebSocketService {
       console.log(`[MARTINGALE STRATEGY]    Deviation Multiplier: ${deviationMultiplier}x`);
       console.log(`[MARTINGALE STRATEGY]    Adjusted Deviation: ${adjustedDeviation.toFixed(2)}%`);
       console.log(`[MARTINGALE STRATEGY]    Raw SO Price: $${rawSafetyOrderPrice.toFixed(8)}`);
-      console.log(`[MARTINGALE STRATEGY]    Adjusted SO Price: $${safetyOrderPrice.toFixed(5)} (PRICE_FILTER compliant)`);
+      console.log(`[MARTINGALE STRATEGY]    Adjusted SO Price: $${safetyOrderPrice.toFixed(3)} (PRICE_FILTER compliant)`);
       console.log(`[MARTINGALE STRATEGY]    Base Amount: $${safetyOrderAmount}`);
       console.log(`[MARTINGALE STRATEGY]    Size Multiplier: ${sizeMultiplier}x`);
       console.log(`[MARTINGALE STRATEGY]    Adjusted Amount: $${adjustedAmount.toFixed(2)}`);
@@ -2766,7 +2766,7 @@ export class WebSocketService {
         orderCategory: 'LIMIT',
         symbol: bot.tradingPair,
         quantity: quantity.toFixed(1),
-        price: safetyOrderPrice.toFixed(5),
+        price: safetyOrderPrice.toFixed(3),
         status: 'pending'
       });
 
@@ -2780,7 +2780,7 @@ export class WebSocketService {
           side: bot.direction === 'long' ? 'BUY' : 'SELL',
           type: 'LIMIT',
           quantity: quantity.toFixed(1),
-          price: safetyOrderPrice.toFixed(5),
+          price: safetyOrderPrice.toFixed(3),
           timeInForce: 'GTC'
         });
 
@@ -3439,16 +3439,16 @@ export class WebSocketService {
         : basePrice * (1 - takeProfitPercentage / 100);
 
       // Apply Binance PRICE_FILTER requirements for ICPUSDT
-      // Most USDT pairs require prices with 4-5 decimal places
-      // For ICPUSDT: tick size is typically 0.00001 (5 decimals)
-      const tickSize = 0.00001;
+      // For ICPUSDT on Binance testnet: tick size is 0.001 (3 decimals)
+      // This matches the price precision seen in successful MARKET orders
+      const tickSize = 0.001;
       const takeProfitPrice = Math.round(rawTakeProfitPrice / tickSize) * tickSize;
 
       console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:`);
       console.log(`[MARTINGALE STRATEGY]    Base Price: $${basePrice.toFixed(6)}`);
       console.log(`[MARTINGALE STRATEGY]    Take Profit %: ${takeProfitPercentage}%`);
       console.log(`[MARTINGALE STRATEGY]    Raw TP Price: $${rawTakeProfitPrice.toFixed(8)}`);
-      console.log(`[MARTINGALE STRATEGY]    Adjusted TP Price: $${takeProfitPrice.toFixed(5)} (PRICE_FILTER compliant)`);
+      console.log(`[MARTINGALE STRATEGY]    Adjusted TP Price: $${takeProfitPrice.toFixed(3)} (PRICE_FILTER compliant)`);
       console.log(`[MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(1)}`);
 
       // Create take profit order record
@@ -3461,7 +3461,7 @@ export class WebSocketService {
         orderCategory: 'LIMIT',
         symbol: bot.tradingPair,
         quantity: quantity.toFixed(1),
-        price: takeProfitPrice.toFixed(5),
+        price: takeProfitPrice.toFixed(3),
         status: 'pending'
       });
 
@@ -3479,7 +3479,7 @@ export class WebSocketService {
           side: bot.direction === 'long' ? 'SELL' : 'BUY',
           type: 'LIMIT',
           quantity: quantity.toFixed(1),
-          price: takeProfitPrice.toFixed(5),
+          price: takeProfitPrice.toFixed(3),
           timeInForce: 'GTC'
         });
 
