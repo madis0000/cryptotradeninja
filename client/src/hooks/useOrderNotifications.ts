@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface OrderNotification {
   orderId: number;
@@ -17,6 +18,7 @@ interface OrderNotification {
 
 export function useOrderNotifications() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -85,6 +87,12 @@ export function useOrderNotifications() {
         variant,
         duration: status === 'filled' ? 5000 : 3000, // Keep fill notifications visible longer
       });
+
+      // Invalidate relevant query cache to refresh UI data
+      queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bot-orders', data.botId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles', data.botId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
 
       // Log for debugging
       console.log(`[ORDER NOTIFICATIONS] ${title}: ${description}`);
