@@ -3014,7 +3014,7 @@ export class WebSocketService {
     try {
       // Check if exchange has encrypted credentials
       if (!exchange.apiKey || !exchange.apiSecret || !exchange.encryptionIv) {
-        console.error(`[WS ORDER] ❌ Exchange ${exchange.name} missing API credentials`);
+        console.error(`[ORDER] ❌ Exchange ${exchange.name} missing API credentials`);
         throw new Error('Exchange API credentials not configured');
       }
 
@@ -3025,81 +3025,141 @@ export class WebSocketService {
         exchange.encryptionIv
       );
 
-      // Generate unique request ID
-      const requestId = crypto.randomUUID();
-      
-      // Prepare order parameters for WebSocket API according to Binance documentation
+      // Testnet doesn't support WebSocket API, use REST API for testnet
+      if (exchange.name.includes('testnet')) {
+        return await this.placeOrderViaRest(exchange, orderParams, apiKey, apiSecret);
+      } else {
+        return await this.placeOrderViaWebSocket(exchange, orderParams, apiKey, apiSecret);
+      }
+
+    } catch (error) {
+      console.error('[ORDER] Error preparing order:', error);
+      throw error;
+    }
+  }
+
+  private async placeOrderViaRest(exchange: any, orderParams: any, apiKey: string, apiSecret: string): Promise<any> {
+    try {
       const timestamp = Date.now();
-      const params: any = {
+      const params = new URLSearchParams({
         symbol: orderParams.symbol,
         side: orderParams.side,
         type: orderParams.type,
-        apiKey: apiKey,
-        timestamp: timestamp
-      };
-
-      // For MARKET orders, quantity is required (base asset quantity)
-      if (orderParams.type === 'MARKET') {
-        params.quantity = orderParams.quantity;
-        // Optional: use quoteOrderQty for quote asset quantity instead
-        // params.quoteOrderQty = orderParams.quoteOrderQty;
-      } else if (orderParams.type === 'LIMIT') {
-        params.price = orderParams.price;
-        params.quantity = orderParams.quantity;
-        params.timeInForce = 'GTC';
-      }
-
-      // Create signature string for WebSocket API
-      const paramString = Object.keys(params)
-        .sort()
-        .map(key => `${key}=${params[key]}`)
-        .join('&');
+        quantity: orderParams.quantity,
+        timestamp: timestamp.toString()
+      });
 
       const signature = crypto
         .createHmac('sha256', apiSecret)
-        .update(paramString)
+        .update(params.toString())
         .digest('hex');
+      
+      params.append('signature', signature);
 
-      params.signature = signature;
-
-      // Create WebSocket order message
-      const orderMessage = {
-        id: requestId,
-        method: "order.place",
-        params: params
-      };
-
-      console.log(`[WS ORDER] Placing order via WebSocket:`, {
+      console.log(`[REST ORDER] Placing order via REST API:`, {
         symbol: orderParams.symbol,
         side: orderParams.side,
         type: orderParams.type,
         quantity: orderParams.quantity
       });
 
-      // Return a promise that resolves when the order response is received
-      return new Promise((resolve, reject) => {
-        // Store the resolve/reject functions for this request
-        this.pendingOrderRequests.set(requestId, { resolve, reject, timestamp: Date.now() });
-
-        // Send order via WebSocket
-        if (this.sendOrderToWebSocket(exchange, orderMessage)) {
-          // Set timeout for order response
-          setTimeout(() => {
-            if (this.pendingOrderRequests.has(requestId)) {
-              this.pendingOrderRequests.delete(requestId);
-              reject(new Error('Order request timeout'));
-            }
-          }, 10000); // 10 second timeout
-        } else {
-          this.pendingOrderRequests.delete(requestId);
-          reject(new Error('Failed to send order via WebSocket'));
-        }
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString()
       });
 
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`[REST ORDER] ✓ Order executed successfully:`, {
+          orderId: result.orderId,
+          symbol: result.symbol,
+          status: result.status
+        });
+        return result;
+      } else {
+        const error = await response.text();
+        console.error(`[REST ORDER] ❌ Order failed:`, error);
+        throw new Error(`Order failed: ${error}`);
+      }
     } catch (error) {
-      console.error('[WS ORDER] Error preparing order:', error);
+      console.error('[REST ORDER] Error placing order:', error);
       throw error;
     }
+  }
+
+  private async placeOrderViaWebSocket(exchange: any, orderParams: any, apiKey: string, apiSecret: string): Promise<any> {
+    // Generate unique request ID
+    const requestId = crypto.randomUUID();
+    
+    // Prepare order parameters for WebSocket API according to Binance documentation
+    const timestamp = Date.now();
+    const params: any = {
+      symbol: orderParams.symbol,
+      side: orderParams.side,
+      type: orderParams.type,
+      apiKey: apiKey,
+      timestamp: timestamp
+    };
+
+    // For MARKET orders, quantity is required (base asset quantity)
+    if (orderParams.type === 'MARKET') {
+      params.quantity = orderParams.quantity;
+    } else if (orderParams.type === 'LIMIT') {
+      params.price = orderParams.price;
+      params.quantity = orderParams.quantity;
+      params.timeInForce = 'GTC';
+    }
+
+    // Create signature string for WebSocket API
+    const paramString = Object.keys(params)
+      .sort()
+      .map(key => `${key}=${params[key]}`)
+      .join('&');
+
+    const signature = crypto
+      .createHmac('sha256', apiSecret)
+      .update(paramString)
+      .digest('hex');
+
+    params.signature = signature;
+
+    // Create WebSocket order message
+    const orderMessage = {
+      id: requestId,
+      method: "order.place",
+      params: params
+    };
+
+    console.log(`[WS ORDER] Placing order via WebSocket:`, {
+      symbol: orderParams.symbol,
+      side: orderParams.side,
+      type: orderParams.type,
+      quantity: orderParams.quantity
+    });
+
+    // Return a promise that resolves when the order response is received
+    return new Promise((resolve, reject) => {
+      // Store the resolve/reject functions for this request
+      this.pendingOrderRequests.set(requestId, { resolve, reject, timestamp: Date.now() });
+
+      // Send order via WebSocket
+      if (this.sendOrderToWebSocket(exchange, orderMessage)) {
+        // Set timeout for order response
+        setTimeout(() => {
+          if (this.pendingOrderRequests.has(requestId)) {
+            this.pendingOrderRequests.delete(requestId);
+            reject(new Error('Order request timeout'));
+          }
+        }, 10000); // 10 second timeout
+      } else {
+        this.pendingOrderRequests.delete(requestId);
+        reject(new Error('Failed to send order via WebSocket'));
+      }
+    });
   }
 
   public async placeInitialBaseOrder(botId: number, cycleId: number) {
@@ -3387,6 +3447,7 @@ export class WebSocketService {
   private createOrderWebSocketConnection(exchange: any) {
     try {
       // Determine WebSocket endpoint based on exchange type
+      // For testnet, use the correct WebSocket API endpoint
       const wsEndpoint = exchange.exchangeType === 'binance' 
         ? (exchange.name.includes('testnet') 
             ? 'wss://testnet.binance.vision/ws-api/v3'
