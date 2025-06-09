@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery } from "@tanstack/react-query";
 
@@ -12,14 +13,14 @@ interface OrderFormProps {
 }
 
 export function OrderForm({ symbol, className }: OrderFormProps) {
-  const [orderType, setOrderType] = useState<'market' | 'limit'>('market');
-  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
-  const [amount, setAmount] = useState('');
-  const [price, setPrice] = useState('');
-  const [total, setTotal] = useState('');
+  const [orderType, setOrderType] = useState<"market" | "limit">("market");
+  const [side, setSide] = useState<"BUY" | "SELL">("BUY");
+  const [amount, setAmount] = useState("");
+  const [price, setPrice] = useState("");
+  const [total, setTotal] = useState("");
   const [useTPSL, setUseTPSL] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [orderStatus, setOrderStatus] = useState<string>('');
+  const [orderStatus, setOrderStatus] = useState("");
 
   const baseAsset = symbol.replace("USDT", "").replace("USDC", "");
   const quoteAsset = symbol.includes("USDT") ? "USDT" : "USDC";
@@ -38,67 +39,60 @@ export function OrderForm({ symbol, className }: OrderFormProps) {
   // Calculate total when amount or price changes
   useEffect(() => {
     if (orderType === "limit" && amount && price) {
-      const calculatedTotal = (parseFloat(amount) * parseFloat(price)).toString();
-      setTotal(calculatedTotal);
-    } else if (orderType === "market" && amount) {
-      const calculatedTotal = (parseFloat(amount) * parseFloat(marketPrice)).toString();
+      const calculatedTotal = (parseFloat(amount) * parseFloat(price)).toFixed(8);
       setTotal(calculatedTotal);
     }
-  }, [amount, price, orderType, marketPrice]);
+  }, [amount, price, orderType]);
 
   const handleTotalChange = (newTotal: string) => {
     setTotal(newTotal);
-    if (orderType === "limit" && price && parseFloat(price) > 0) {
-      const calculatedAmount = (parseFloat(newTotal) / parseFloat(price)).toString();
+    if (price && parseFloat(price) > 0) {
+      const calculatedAmount = (parseFloat(newTotal) / parseFloat(price)).toFixed(8);
       setAmount(calculatedAmount);
     }
   };
 
   const handlePlaceOrder = async () => {
     if (!amount || (orderType === 'limit' && !price)) {
-      setOrderStatus('Please fill in all required fields');
+      setOrderStatus("Please fill in all required fields");
       return;
     }
 
     setIsPlacingOrder(true);
-    setOrderStatus('Placing order...');
+    setOrderStatus("Placing order...");
 
     try {
-      const orderData = {
-        exchangeId: 1,
-        symbol,
-        side,
-        orderType: orderType.toUpperCase(),
-        quantity: amount,
-        ...(orderType === 'limit' && { price }),
-        timeInForce: 'GTC'
-      };
-
       const response = await fetch('/api/orders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(orderData),
+        body: JSON.stringify({
+          exchangeId: 1,
+          symbol: symbol,
+          side: side,
+          orderType: orderType.toUpperCase(),
+          quantity: amount,
+          price: orderType === 'limit' ? price : undefined,
+          timeInForce: 'GTC'
+        }),
       });
 
       const result = await response.json();
 
-      if (response.ok) {
-        setOrderStatus(`Order placed successfully: ${result.orderId}`);
-        // Reset form
-        setAmount('');
-        setPrice('');
-        setTotal('');
+      if (result.success) {
+        setOrderStatus(`Order placed successfully! Order ID: ${result.orderId}`);
+        setAmount("");
+        setPrice("");
+        setTotal("");
       } else {
-        setOrderStatus(`Order failed: ${result.error || 'Unknown error'}`);
+        setOrderStatus(`Order failed: ${result.error}`);
       }
     } catch (error) {
-      setOrderStatus(`Order failed: ${error instanceof Error ? error.message : 'Network error'}`);
+      setOrderStatus(`Order failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsPlacingOrder(false);
-      // Clear status after 5 seconds
-      setTimeout(() => setOrderStatus(''), 5000);
+      setTimeout(() => setOrderStatus(""), 5000);
     }
   };
 
@@ -166,215 +160,207 @@ export function OrderForm({ symbol, className }: OrderFormProps) {
             </div>
           )}
           
-          <div className="flex flex-col space-y-6">
-            {/* Buy Section - Dynamic height container */}
-            <div className="w-full bg-green-900/10 border border-green-700/30 rounded-lg p-4">
-              <h4 className="text-green-400 font-medium mb-4 text-sm">Buy {baseAsset}</h4>
-              <div className="space-y-4">
-                {/* Price Field - Show for Limit orders, hide for Market */}
-                {orderType === "limit" && (
-                  <div className="space-y-2">
-                    <Label className="text-crypto-light text-xs">Price</Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        value={price}
-                        onChange={(e) => setPrice(e.target.value)}
-                        placeholder={marketPrice || "0"}
-                        className="bg-crypto-darker border-gray-700 text-white pr-16"
-                      />
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-xs">
-                        {quoteAsset}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Market Price Display for Market orders */}
-                {orderType === "market" && (
-                  <div className="space-y-2">
-                    <Label className="text-crypto-light text-xs">Price</Label>
-                    <div className="relative">
-                      <Input
-                        value="Market Price"
-                        readOnly
-                        className="bg-crypto-darker border-gray-700 text-crypto-light text-center"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Amount Field */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Buy Column */}
+            <div className="space-y-4">
+              {/* Price Field - Show for Limit orders, hide for Market */}
+              {orderType === "limit" && (
                 <div className="space-y-2">
-                  <Label className="text-crypto-light text-xs">Amount</Label>
+                  <Label className="text-crypto-light text-xs">Price</Label>
                   <div className="relative">
                     <Input
                       type="number"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder="0"
+                      value={price}
+                      onChange={(e) => setPrice(e.target.value)}
+                      placeholder={marketPrice || "0"}
                       className="bg-crypto-darker border-gray-700 text-white pr-16"
                     />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-xs">
-                      {baseAsset}
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-sm">
+                      {quoteAsset}
                     </div>
                   </div>
                 </div>
+              )}
 
-                {/* Total Field - Only for Limit orders */}
-                {orderType === "limit" && (
-                  <div className="space-y-2">
-                    <Label className="text-crypto-light text-xs">Total</Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        value={total}
-                        onChange={(e) => handleTotalChange(e.target.value)}
-                        placeholder="0"
-                        className="bg-crypto-darker border-gray-700 text-white"
-                      />
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-xs">
-                        Min 5 {quoteAsset}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TP/SL - Only for Limit orders */}
-                {orderType === "limit" && (
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="tpsl-buy" 
-                      checked={useTPSL}
-                      onCheckedChange={(checked) => setUseTPSL(checked === true)}
-                      className="border-gray-600"
+              {/* Market Price Display for Market orders */}
+              {orderType === "market" && (
+                <div className="space-y-2">
+                  <Label className="text-crypto-light text-xs">Price</Label>
+                  <div className="relative">
+                    <Input
+                      value="Market Price"
+                      readOnly
+                      className="bg-crypto-darker border-gray-700 text-crypto-light text-center"
                     />
-                    <Label htmlFor="tpsl-buy" className="text-crypto-light text-xs">TP/SL</Label>
-                  </div>
-                )}
-
-                {/* Balance Info */}
-                <div className="flex items-center space-x-2 text-xs text-crypto-light">
-                  <div className="flex-1 space-y-1">
-                    <div>Avbl: {formatNumber(getAvailableBalance())} {quoteAsset}</div>
-                    <div>Max Buy: {formatNumber(getAvailableBalance())} {quoteAsset}</div>
                   </div>
                 </div>
+              )}
 
-                {/* Buy Button */}
-                <Button 
-                  onClick={() => { setSide('BUY'); handlePlaceOrder(); }}
-                  disabled={isPlacingOrder || !amount || (orderType === 'limit' && !price)}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-medium disabled:opacity-50"
-                >
-                  {isPlacingOrder && side === 'BUY' ? 'Placing Order...' : `Buy ${baseAsset}`}
-                </Button>
+              <div className="space-y-2">
+                <Label className="text-crypto-light text-xs">Amount</Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0"
+                    className="bg-crypto-darker border-gray-700 text-white pr-16"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-sm">
+                    {baseAsset}
+                  </div>
+                </div>
               </div>
+
+              {/* Total Field - Only for Limit orders */}
+              {orderType === "limit" && (
+                <div className="space-y-2">
+                  <Label className="text-crypto-light text-xs">Total</Label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      value={total}
+                      onChange={(e) => handleTotalChange(e.target.value)}
+                      placeholder="0"
+                      className="bg-crypto-darker border-gray-700 text-white"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-sm">
+                      Min 5 {quoteAsset}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TP/SL - Only for Limit orders */}
+              {orderType === "limit" && (
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="tpsl-buy" 
+                    checked={useTPSL}
+                    onCheckedChange={(checked) => setUseTPSL(checked === true)}
+                    className="border-gray-600"
+                  />
+                  <Label htmlFor="tpsl-buy" className="text-crypto-light text-xs">TP/SL</Label>
+                </div>
+              )}
+
+              <div className="flex items-center space-x-2 text-xs text-crypto-light">
+                <i className="fas fa-exchange-alt"></i>
+                <div className="flex-1 space-y-1">
+                  <div>Avbl: {formatNumber(getAvailableBalance())} {side === 'BUY' ? quoteAsset : baseAsset}</div>
+                  <div>Max Buy: {formatNumber(getAvailableBalance())} {quoteAsset}</div>
+                  <div>Est. Fee</div>
+                </div>
+              </div>
+
+              <Button 
+                onClick={() => { setSide('BUY'); handlePlaceOrder(); }}
+                disabled={isPlacingOrder || !amount || (orderType === 'limit' && !price)}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium disabled:opacity-50"
+              >
+                {isPlacingOrder && side === 'BUY' ? 'Placing Order...' : `Buy ${baseAsset}`}
+              </Button>
             </div>
 
-            {/* Sell Section - Positioned below Buy section with dynamic spacing */}
-            <div className="w-full bg-red-900/10 border border-red-700/30 rounded-lg p-4">
-              <h4 className="text-red-400 font-medium mb-4 text-sm">Sell {baseAsset}</h4>
-              <div className="space-y-4">
-                {/* Price Field - Show for Limit orders, hide for Market */}
-                {orderType === "limit" && (
-                  <div className="space-y-2">
-                    <Label className="text-crypto-light text-xs">Price</Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        value={price}
-                        onChange={(e) => setPrice(e.target.value)}
-                        placeholder={marketPrice || "0"}
-                        className="bg-crypto-darker border-gray-700 text-white pr-16"
-                      />
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-xs">
-                        {quoteAsset}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Market Price Display for Market orders */}
-                {orderType === "market" && (
-                  <div className="space-y-2">
-                    <Label className="text-crypto-light text-xs">Price</Label>
-                    <div className="relative">
-                      <Input
-                        value="Market Price"
-                        readOnly
-                        className="bg-crypto-darker border-gray-700 text-crypto-light text-center"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Amount Field */}
+            {/* Sell Column */}
+            <div className="space-y-4">
+              {/* Price Field - Show for Limit orders, hide for Market */}
+              {orderType === "limit" && (
                 <div className="space-y-2">
-                  <Label className="text-crypto-light text-xs">Amount</Label>
+                  <Label className="text-crypto-light text-xs">Price</Label>
                   <div className="relative">
                     <Input
                       type="number"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder="0"
+                      value={price}
+                      onChange={(e) => setPrice(e.target.value)}
+                      placeholder={marketPrice || "0"}
                       className="bg-crypto-darker border-gray-700 text-white pr-16"
                     />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-xs">
-                      {baseAsset}
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-sm">
+                      {quoteAsset}
                     </div>
                   </div>
                 </div>
+              )}
 
-                {/* Total Field - Only for Limit orders */}
-                {orderType === "limit" && (
-                  <div className="space-y-2">
-                    <Label className="text-crypto-light text-xs">Total</Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        value={total}
-                        onChange={(e) => handleTotalChange(e.target.value)}
-                        placeholder="0"
-                        className="bg-crypto-darker border-gray-700 text-white"
-                      />
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-xs">
-                        Min 5 {quoteAsset}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TP/SL - Only for Limit orders */}
-                {orderType === "limit" && (
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="tpsl-sell" 
-                      checked={useTPSL}
-                      onCheckedChange={(checked) => setUseTPSL(checked === true)}
-                      className="border-gray-600"
+              {/* Market Price Display for Market orders */}
+              {orderType === "market" && (
+                <div className="space-y-2">
+                  <Label className="text-crypto-light text-xs">Price</Label>
+                  <div className="relative">
+                    <Input
+                      value="Market Price"
+                      readOnly
+                      className="bg-crypto-darker border-gray-700 text-crypto-light text-center"
                     />
-                    <Label htmlFor="tpsl-sell" className="text-crypto-light text-xs">TP/SL</Label>
-                  </div>
-                )}
-
-                {/* Balance Info */}
-                <div className="flex items-center space-x-2 text-xs text-crypto-light">
-                  <div className="flex-1 space-y-1">
-                    <div>Avbl: {formatNumber(getAvailableBalance())} {baseAsset}</div>
-                    <div>Max Sell: {formatNumber(getAvailableBalance())} {baseAsset}</div>
                   </div>
                 </div>
+              )}
 
-                {/* Sell Button */}
-                <Button 
-                  onClick={() => { setSide('SELL'); handlePlaceOrder(); }}
-                  disabled={isPlacingOrder || !amount || (orderType === 'limit' && !price)}
-                  className="w-full bg-red-600 hover:bg-red-700 text-white font-medium disabled:opacity-50"
-                >
-                  {isPlacingOrder && side === 'SELL' ? 'Placing Order...' : `Sell ${baseAsset}`}
-                </Button>
+              <div className="space-y-2">
+                <Label className="text-crypto-light text-xs">Amount</Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0"
+                    className="bg-crypto-darker border-gray-700 text-white pr-16"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-sm">
+                    {baseAsset}
+                  </div>
+                </div>
               </div>
+
+              {/* Total Field - Only for Limit orders */}
+              {orderType === "limit" && (
+                <div className="space-y-2">
+                  <Label className="text-crypto-light text-xs">Total</Label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      value={total}
+                      onChange={(e) => handleTotalChange(e.target.value)}
+                      placeholder="0"
+                      className="bg-crypto-darker border-gray-700 text-white"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-crypto-light text-sm">
+                      Min 5 {quoteAsset}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TP/SL - Only for Limit orders */}
+              {orderType === "limit" && (
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="tpsl-sell" 
+                    checked={useTPSL}
+                    onCheckedChange={(checked) => setUseTPSL(checked === true)}
+                    className="border-gray-600"
+                  />
+                  <Label htmlFor="tpsl-sell" className="text-crypto-light text-xs">TP/SL</Label>
+                </div>
+              )}
+
+              <div className="flex items-center space-x-2 text-xs text-crypto-light">
+                <i className="fas fa-exchange-alt"></i>
+                <div className="flex-1 space-y-1">
+                  <div>Avbl: 0.00000000 {baseAsset} <i className="fas fa-coins text-yellow-500"></i></div>
+                  <div>Max Sell: 0 {quoteAsset}</div>
+                  <div>Est. Fee</div>
+                </div>
+              </div>
+
+              <Button 
+                onClick={() => { setSide('SELL'); handlePlaceOrder(); }}
+                disabled={isPlacingOrder || !amount || (orderType === 'limit' && !price)}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-medium disabled:opacity-50"
+              >
+                {isPlacingOrder && side === 'SELL' ? 'Placing Order...' : `Sell ${baseAsset}`}
+              </Button>
             </div>
           </div>
         </CardContent>
