@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Dashboard from "@/pages/dashboard";
 import Trading from "@/pages/trading";
 import TradingBots from "@/pages/trading-bots";
+import { MyBotsPage } from "@/pages/my-bots";
 import ApiKeys from "@/pages/api-keys";
 import Portfolio from "@/pages/portfolio";
 import MyExchanges from "@/pages/my-exchanges";
@@ -27,6 +28,7 @@ function AuthenticatedApp() {
           <Route path="/" component={Dashboard} />
           <Route path="/trading" component={Trading} />
           <Route path="/bots" component={TradingBots} />
+          <Route path="/my-bots" component={MyBotsPage} />
           <Route path="/api-keys" component={ApiKeys} />
           <Route path="/portfolio" component={Portfolio} />
           <Route path="/my-exchanges" component={MyExchanges} />

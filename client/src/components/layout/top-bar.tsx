@@ -31,6 +31,7 @@ export function TopBar({ onLogout }: TopBarProps) {
   const tradingSubItems = [
     { path: '/trading', label: 'Trading', icon: 'fas fa-chart-bar' },
     { path: '/bots', label: 'Bots', icon: 'fas fa-robot' },
+    { path: '/my-bots', label: 'My Bots', icon: 'fas fa-cogs' },
   ];
 
   return (
@@ -68,7 +69,7 @@ export function TopBar({ onLogout }: TopBarProps) {
                 <Button 
                   variant="ghost" 
                   className={`flex items-center space-x-2 text-sm ${
-                    location.startsWith('/trading') || location === '/bots'
+                    location.startsWith('/trading') || location === '/bots' || location === '/my-bots'
                       ? 'text-crypto-accent bg-crypto-accent/10' 
                       : 'text-crypto-light hover:text-white hover:bg-gray-800'
                   }`}
