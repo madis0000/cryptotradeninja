@@ -93,17 +93,17 @@ export class WebSocketService {
     // Start order monitoring for Martingale bots
     this.startOrderMonitoring();
     
-    console.log(`[WEBSOCKET] Unified service initialized on port ${wsPort} with 0.0.0.0 binding. Automatic streaming disabled.`);
+    // Removed verbose WebSocket logging
   }
 
   private setupWebSocket() {
     const wsPort = parseInt(process.env.WS_PORT || '8080');
-    console.log(`[WEBSOCKET] Setting up unified WebSocket server on port ${wsPort} with 0.0.0.0 binding`);
+    // Removed verbose WebSocket logging
     
     this.wss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;
       const clientId = Math.random().toString(36).substr(2, 9);
-      console.log(`[WEBSOCKET] ===== NEW CLIENT CONNECTED ===== ID: ${clientId} from ${clientIP}`);
+      // Removed verbose WebSocket logging
 
       const subscription: MarketSubscription = {
         ws,
@@ -114,7 +114,7 @@ export class WebSocketService {
       };
 
       this.marketSubscriptions.add(subscription);
-      console.log(`[WEBSOCKET] Total active subscriptions: ${this.marketSubscriptions.size}`);
+      // Removed verbose WebSocket logging
       
       // Send immediate welcome message to confirm connection
       ws.send(JSON.stringify({
@@ -128,13 +128,13 @@ export class WebSocketService {
       ws.on('message', async (data) => {
         try {
           const message = JSON.parse(data.toString());
-          console.log(`[WEBSOCKET] Received command from frontend:`, message);
-          console.log(`[WEBSOCKET] Message type: ${message.type}, symbols: ${message.symbols}, dataType: ${message.dataType}`);
+          // Removed verbose WebSocket logging
+          // Removed verbose WebSocket logging
           
           if (message.type === 'subscribe') {
             // Frontend requests subscription to specific trading pairs
             const symbols = message.symbols || ['BTCUSDT'];
-            console.log(`[WEBSOCKET] Frontend requesting subscription to symbols:`, symbols);
+            // Removed verbose WebSocket logging
             
             // Clear previous symbols and set new ones
             subscription.symbols.clear();
@@ -149,7 +149,7 @@ export class WebSocketService {
             });
             
             const allSymbolsArray = Array.from(allSymbols);
-            console.log(`[WEBSOCKET] All subscribed symbols across clients:`, allSymbolsArray);
+            // Removed verbose WebSocket logging
             
             // Update Binance streams only if symbols have changed
             const currentSymbolsArray = this.currentSubscriptions.map(s => s.replace('@ticker', '').toUpperCase());
@@ -158,15 +158,15 @@ export class WebSocketService {
               !currentSymbolsArray.every(s => newSymbolsArray.includes(s));
 
             if (symbolsChanged && allSymbolsArray.length > 0) {
-              console.log(`[WEBSOCKET] Fast symbol switch:`, allSymbolsArray);
+              // Removed verbose WebSocket logging
               await this.updateBinanceSubscription(allSymbolsArray);
               this.isStreamsActive = true;
             } else if (!this.isStreamsActive && allSymbolsArray.length > 0) {
-              console.log(`[WEBSOCKET] Initial connection:`, allSymbolsArray);
+              // Removed verbose WebSocket logging
               await this.connectConfigurableStream('ticker', allSymbolsArray);
               this.isStreamsActive = true;
             } else if (symbolsChanged) {
-              console.log(`[WEBSOCKET] No symbol change detected - using existing stream`);
+              // Removed verbose WebSocket logging
             }
             
             // Send current market data from backend to frontend
@@ -182,12 +182,12 @@ export class WebSocketService {
           }
           
           if (message.type === 'subscribe_balance') {
-            console.log(`[WEBSOCKET] Balance subscription request:`, message);
+            // Removed verbose WebSocket logging
             await this.subscribeToBalance(ws, message.userId, message.exchangeId, message.symbol, clientId);
           }
           
           if (message.type === 'place_order') {
-            console.log(`[WEBSOCKET] Order placement request:`, message);
+            // Removed verbose WebSocket logging
             await this.handleOrderPlacement(ws, message as OrderRequest);
           }
           
@@ -196,7 +196,7 @@ export class WebSocketService {
           }
           
           if (message.type === 'configure_stream') {
-            console.log(`[WEBSOCKET] Configuring ${message.dataType} stream for client ${subscription.clientId}:`, message.symbols, 'interval:', message.interval);
+            // Removed verbose WebSocket logging
             
             // Update the subscription with the requested configuration
             subscription.symbols.clear();
@@ -211,7 +211,7 @@ export class WebSocketService {
               const newInterval = message.interval || '1m';
               const symbols = Array.from(subscription.symbols);
               
-              console.log(`[WEBSOCKET] Hot-swapping kline interval from ${this.currentInterval} to ${newInterval}`);
+              // Removed verbose WebSocket logging
               this.currentInterval = newInterval;
               
               // Update kline subscription immediately
@@ -233,11 +233,11 @@ export class WebSocketService {
             const hasKlineClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'kline');
             const hasTickerClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'ticker');
             
-            console.log(`[WEBSOCKET] Client types - Kline: ${hasKlineClients}, Ticker: ${hasTickerClients}, All symbols:`, symbolsArray);
+            // Removed verbose WebSocket logging
             
             // Configure streams based on client type without circular calls
             if (hasKlineClients && hasTickerClients) {
-              console.log(`[WEBSOCKET] Synchronizing both ticker and kline streams to symbols:`, symbolsArray);
+              // Removed verbose WebSocket logging
               
               // Direct subscription updates without recursive calls
               if (message.dataType === 'ticker' || !message.dataType) {
@@ -249,7 +249,7 @@ export class WebSocketService {
                     params: tickerStreams,
                     id: Date.now()
                   };
-                  console.log(`[WEBSOCKET] Direct ticker subscription:`, tickerStreams);
+                  // Removed verbose WebSocket logging
                   this.binancePublicWs.send(JSON.stringify(subscribeMessage));
                   this.currentSubscriptions = tickerStreams;
                 }
@@ -274,13 +274,13 @@ export class WebSocketService {
                   params: tickerStreams,
                   id: Date.now()
                 };
-                console.log(`[WEBSOCKET] Single ticker subscription:`, tickerStreams);
+                // Removed verbose WebSocket logging
                 this.binancePublicWs?.send(JSON.stringify(subscribeMessage));
                 this.currentSubscriptions = tickerStreams;
               }
             }
             
-            console.log(`[WEBSOCKET] Stream configured for ${message.dataType} with symbols:`, symbolsArray, 'for client:', subscription.clientId);
+            // Removed verbose WebSocket logging
           }
         } catch (error) {
           console.error('[WEBSOCKET] Error processing message:', error);
@@ -292,16 +292,16 @@ export class WebSocketService {
       });
 
       ws.on('close', (code, reason) => {
-        console.log(`[WEBSOCKET] ===== CLIENT DISCONNECT EVENT ===== ID: ${clientId} Code: ${code}, Reason: ${reason}`);
-        console.log(`[WEBSOCKET] Subscriptions before removal: ${this.marketSubscriptions.size}`);
+        // Removed verbose WebSocket logging
+        // Removed verbose WebSocket logging
         this.marketSubscriptions.delete(subscription);
-        console.log(`[WEBSOCKET] Subscriptions after removal: ${this.marketSubscriptions.size}`);
+        // Removed verbose WebSocket logging
         
         // Clean up balance subscriptions for this WebSocket
         const balanceSubscriptionsToRemove = Array.from(this.balanceSubscriptions).filter(sub => sub.ws === ws);
         balanceSubscriptionsToRemove.forEach(sub => {
           this.balanceSubscriptions.delete(sub);
-          console.log(`[BALANCE] Removed balance subscription for user ${sub.userId}, exchange ${sub.exchangeId}, symbol ${sub.symbol}`);
+          // Removed verbose balance logging
         });
         
         // Stop balance updates if no more subscriptions
@@ -315,16 +315,16 @@ export class WebSocketService {
         this.userConnections.forEach((connection, userId) => {
           if (connection.ws === ws) {
             this.userConnections.delete(userId);
-            console.log(`[WEBSOCKET] Removed authenticated user ${userId}`);
+            // Removed verbose WebSocket logging
           }
         });
         
         // Stop Binance streams if no clients are connected
         if (this.marketSubscriptions.size === 0) {
-          console.log(`[WEBSOCKET] ⚠️  NO CLIENTS CONNECTED - STOPPING ALL STREAMS ⚠️`);
+          // Removed verbose WebSocket logging
           this.stopBinanceStreams();
         } else {
-          console.log(`[WEBSOCKET] Still have ${this.marketSubscriptions.size} active subscriptions, keeping streams alive`);
+          // Removed verbose WebSocket logging
         }
       });
 
@@ -380,11 +380,11 @@ export class WebSocketService {
   // Removed - streams now started on-demand when frontend subscribes
 
   private async setupKlineStream(symbols: string[], interval: string) {
-    console.log(`[WEBSOCKET] Setting up kline subscription for symbols:`, symbols, 'interval:', interval);
+    // Removed verbose WebSocket logging
     
     // If we have an existing kline connection, update subscriptions
     if (this.binanceKlineWs && this.binanceKlineWs.readyState === WebSocket.OPEN) {
-      console.log(`[WEBSOCKET] Updating existing kline connection subscriptions`);
+      // Removed verbose WebSocket logging
       
       // Unsubscribe from old kline streams first
       if (this.currentKlineSubscriptions.length > 0) {
@@ -393,7 +393,7 @@ export class WebSocketService {
           params: this.currentKlineSubscriptions,
           id: Date.now()
         };
-        console.log(`[WEBSOCKET] Unsubscribing from old kline streams:`, unsubscribeMessage.params);
+        // Removed verbose WebSocket logging
         this.binanceKlineWs.send(JSON.stringify(unsubscribeMessage));
       }
       
@@ -408,14 +408,14 @@ export class WebSocketService {
         id: Date.now()
       };
       
-      console.log(`[WEBSOCKET] Subscribing to new kline streams:`, klineStreamPaths);
+      // Removed verbose WebSocket logging
       this.binanceKlineWs.send(JSON.stringify(subscribeMessage));
       this.currentKlineSubscriptions = klineStreamPaths;
       return;
     }
     
     // If no existing connection, create a new one specifically for klines
-    console.log(`[WEBSOCKET] Creating new connection for kline streams`);
+    // Removed verbose WebSocket logging
     
     // Fetch historical data first, then start real-time streams
     await this.fetchHistoricalKlinesWS(symbols, interval);
@@ -437,12 +437,12 @@ export class WebSocketService {
       console.error(`[WEBSOCKET] Error fetching exchange config for kline:`, error);
     }
     
-    console.log(`[WEBSOCKET] Connecting to kline stream: ${baseUrl}`);
+    // Removed verbose WebSocket logging
     
     this.binanceKlineWs = new WebSocket(baseUrl);
     
     this.binanceKlineWs.on('open', () => {
-      console.log(`[KLINE STREAM] Connected to Binance kline stream`);
+      // Removed verbose kline stream logging
       
       // Subscribe to kline streams
       const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
@@ -452,7 +452,7 @@ export class WebSocketService {
         id: Date.now()
       };
       
-      console.log(`[KLINE STREAM] Subscribing to kline streams:`, klineStreamPaths);
+      // Removed verbose kline stream logging
       if (this.binanceKlineWs && this.binanceKlineWs.readyState === WebSocket.OPEN) {
         this.binanceKlineWs.send(JSON.stringify(subscribeMessage));
         this.currentKlineSubscriptions = klineStreamPaths;
@@ -465,7 +465,7 @@ export class WebSocketService {
         
         // Handle subscription confirmation
         if (message.result === null && message.id) {
-          console.log(`[KLINE STREAM] ✓ Subscription confirmed for ID: ${message.id}`);
+          // Removed verbose kline stream logging
           return;
         }
         
@@ -486,9 +486,9 @@ export class WebSocketService {
             timestamp: Date.now()
           };
           
-          console.log(`[KLINE STREAM] ✓ Received kline for ${kline.s} (${kline.i}): OHLC=[${kline.o},${kline.h},${kline.l},${kline.c}] closed:${kline.x}`);
+          // Removed verbose kline stream logging
           // Only log but don't filter - let each client decide what interval data they want
-          console.log(`[KLINE STREAM] Broadcasting kline data for ${kline.s} interval ${kline.i}`);
+          // Removed verbose kline stream logging
           this.broadcastKlineUpdate(klineUpdate);
         }
       } catch (error) {
@@ -507,7 +507,7 @@ export class WebSocketService {
   }
 
   private async createNewBinanceConnection(symbols: string[]) {
-    console.log(`[WEBSOCKET] Creating new Binance connection for symbols:`, symbols);
+    // Removed verbose WebSocket logging
     
     // Close existing connection if any
     if (this.binancePublicWs) {
@@ -523,7 +523,7 @@ export class WebSocketService {
       const exchanges = await storage.getExchangesByUserId(1); // Assuming user ID 1
       if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
         const endpoint = exchanges[0].wsStreamEndpoint;
-        console.log(`[WEBSOCKET] Using configured endpoint: ${endpoint}`);
+        // Removed verbose WebSocket logging
         
         if (endpoint.includes('testnet')) {
           baseUrl = 'wss://stream.testnet.binance.vision/ws/';
@@ -538,7 +538,7 @@ export class WebSocketService {
       const subscriptionUrl = baseUrl.replace('/ws/', '/stream');
       const streamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@ticker`);
       
-      console.log(`[WEBSOCKET] Creating connection to: ${subscriptionUrl}`);
+      // Removed verbose WebSocket logging
       this.connectWithSubscription(subscriptionUrl, streamPaths);
       
     } catch (error) {
@@ -548,7 +548,7 @@ export class WebSocketService {
 
   private async updateBinanceSubscription(symbols: string[]) {
     if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
-      console.log(`[WEBSOCKET] No active Binance connection, creating new one for symbols:`, symbols);
+      // Removed verbose WebSocket logging
       await this.createNewBinanceConnection(symbols);
       return;
     }
@@ -562,7 +562,7 @@ export class WebSocketService {
         params: this.currentSubscriptions,
         id: Date.now()
       };
-      console.log(`[WEBSOCKET] Quick unsubscribe from:`, this.currentSubscriptions);
+      // Removed verbose WebSocket logging
       this.binancePublicWs.send(JSON.stringify(unsubscribeMessage));
     }
 
@@ -572,7 +572,7 @@ export class WebSocketService {
       params: newStreamPaths,
       id: Date.now() + 1
     };
-    console.log(`[WEBSOCKET] Quick subscribe to:`, newStreamPaths);
+    // Removed verbose WebSocket logging
     this.binancePublicWs.send(JSON.stringify(subscribeMessage));
     
     // Update current subscriptions
@@ -580,13 +580,13 @@ export class WebSocketService {
   }
 
   public async connectConfigurableStream(dataType: string, symbols: string[], interval?: string, depth?: string) {
-    console.log(`[WEBSOCKET] Configuring stream: ${dataType}, symbols: ${symbols}, interval: ${interval}`);
+    // Removed verbose WebSocket logging
     
     // Check what types of clients we have
     const hasTickerClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'ticker');
     const hasKlineClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'kline');
     
-    console.log(`[WEBSOCKET] Client types after config - Ticker: ${hasTickerClients}, Kline: ${hasKlineClients}`);
+    // Removed verbose WebSocket logging
     
     // Update current stream configuration
     this.currentStreamType = dataType;
@@ -594,12 +594,12 @@ export class WebSocketService {
     
     // Always set up kline connection for chart clients
     if (dataType === 'kline') {
-      console.log(`[WEBSOCKET] Setting up dedicated kline stream for chart client`);
+      // Removed verbose WebSocket logging
       await this.setupKlineStream(symbols, interval || '1m');
       
       // If we also have ticker clients but no active ticker connection, start ticker stream too
       if (hasTickerClients && (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN)) {
-        console.log(`[WEBSOCKET] Also starting ticker stream for header clients`);
+        // Removed verbose WebSocket logging
         await this.createNewBinanceConnection(symbols);
       }
       return;
@@ -607,7 +607,7 @@ export class WebSocketService {
     
     // For ticker clients, use the main connection
     if (dataType === 'ticker') {
-      console.log(`[WEBSOCKET] Configuring ticker stream for header client`);
+      // Removed verbose WebSocket logging
       if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
         await this.createNewBinanceConnection(symbols);
       } else {
@@ -621,7 +621,7 @@ export class WebSocketService {
         this.binancePublicWs.readyState === WebSocket.OPEN && 
         dataType === 'ticker' && 
         this.currentStreamType === 'ticker') {
-      console.log(`[WEBSOCKET] Hot swapping ticker symbols without reconnection`);
+      // Removed verbose WebSocket logging
       await this.updateBinanceSubscription(symbols);
       this.isStreamsActive = true;
       return;
@@ -646,7 +646,7 @@ export class WebSocketService {
       const exchanges = await storage.getExchangesByUserId(1); // Assuming user ID 1
       if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
         const endpoint = exchanges[0].wsStreamEndpoint;
-        console.log(`[WEBSOCKET] Using configured endpoint: ${endpoint}`);
+        // Removed verbose WebSocket logging
         
         // Force single raw stream format with fallback strategy
         if (endpoint.includes('testnet')) {
@@ -658,7 +658,7 @@ export class WebSocketService {
           baseUrl = 'wss://stream.testnet.binance.vision/ws/';
         }
       } else {
-        console.log(`[WEBSOCKET] No exchange configuration found, using production endpoint for accurate data`);
+        // Removed verbose WebSocket logging
       }
     } catch (error) {
       console.error(`[WEBSOCKET] Error fetching exchange config, using default:`, error);
@@ -671,7 +671,7 @@ export class WebSocketService {
           return `${sym}@ticker`;
         case 'kline':
           const streamPath = `${sym}@kline_${interval || '1m'}`;
-          console.log(`[WEBSOCKET] Generated kline stream path: ${streamPath} for interval: ${interval}`);
+          // Removed verbose WebSocket logging
           return streamPath;
         case 'depth':
           return `${sym}@depth${depth || '5'}`;
@@ -696,13 +696,13 @@ export class WebSocketService {
     
     // Send historical data for the new interval to connected clients
     if (dataType === 'kline' && this.marketSubscriptions.size > 0) {
-      console.log(`[WEBSOCKET] Sending historical data for interval: ${interval || '1m'}`);
+      // Removed verbose WebSocket logging
       this.sendHistoricalDataToClients(symbols, interval || '1m');
     }
     
     // Restart streams for existing subscriptions with new configuration
     if (this.marketSubscriptions.size > 0) {
-      console.log(`[WEBSOCKET] Restarting streams for ${this.marketSubscriptions.size} existing subscriptions`);
+      // Removed verbose WebSocket logging
     }
   }
 
@@ -737,7 +737,7 @@ export class WebSocketService {
           params: this.currentSubscriptions,
           id: 1
         };
-        console.log(`[BINANCE STREAM] Unsubscribing from previous streams:`, this.currentSubscriptions);
+        // Removed verbose Binance stream logging
         this.binancePublicWs?.send(JSON.stringify(unsubscribeMessage));
       }
       
@@ -748,8 +748,8 @@ export class WebSocketService {
         id: 2
       };
       
-      console.log(`[BINANCE STREAM] Subscribing to specific streams:`, streamPaths);
-      console.log(`[BINANCE STREAM] Subscription message:`, JSON.stringify(subscriptionMessage));
+      // Removed verbose Binance stream logging
+      // Removed verbose Binance stream logging
       this.binancePublicWs?.send(JSON.stringify(subscriptionMessage));
       
       // Update current subscriptions
@@ -787,11 +787,11 @@ export class WebSocketService {
         } else if (processedData.e === 'kline') {
           // Single raw stream format - determine stream type from data
           streamName = `${processedData.s.toLowerCase()}@kline_${processedData.k.i}`;
-          console.log(`[BINANCE STREAM] Raw stream data for: ${streamName}`);
+          // Removed verbose Binance stream logging
         } else if (processedData.e === '24hrTicker') {
           // Handle ticker data
           streamName = `${processedData.s.toLowerCase()}@ticker`;
-          console.log(`[BINANCE STREAM] Raw ticker data for: ${streamName}`);
+          // Removed verbose Binance stream logging
         } else {
           // Skip non-kline/ticker messages
           return;
@@ -833,7 +833,7 @@ export class WebSocketService {
             
             // STRICT: Only process data for the exactly requested interval
             if (receivedInterval === expectedInterval) {
-              console.log(`[BINANCE STREAM] Processing ${receivedInterval} kline for ${symbol}: ${kline.c}`);
+              // Removed verbose Binance stream logging
               
               const klineUpdate = {
                 symbol: symbol,
@@ -869,7 +869,7 @@ export class WebSocketService {
                 this.broadcastMarketUpdate(marketUpdate);
               }
             } else {
-              console.log(`[BINANCE STREAM] Ignoring ${receivedInterval} data (expecting ${expectedInterval})`);
+              // Removed verbose Binance stream logging
             }
           }
         }
@@ -879,7 +879,7 @@ export class WebSocketService {
     });
 
     this.binancePublicWs.on('close', (code, reason) => {
-      console.log(`[BINANCE STREAM] Disconnected - Code: ${code}, Reason: ${reason}`);
+      // Removed verbose Binance stream logging
       this.binancePublicWs = null;
       
       // Implement reconnection logic
@@ -1093,7 +1093,7 @@ export class WebSocketService {
             timestamp: Date.now()
           };
 
-          console.log(`[BINANCE STREAM] Direct market update for ${symbol}: ${message.c}`);
+          // Removed verbose Binance stream logging
           this.marketData.set(symbol, marketUpdate);
           this.broadcastMarketUpdate(marketUpdate);
         }
@@ -1103,7 +1103,7 @@ export class WebSocketService {
     });
 
     this.binancePublicWs.on('close', (code, reason) => {
-      console.log(`[BINANCE STREAM] Disconnected - Code: ${code}, Reason: ${reason}`);
+      // Removed verbose Binance stream logging
       this.binancePublicWs = null;
       
       // Only reconnect if streams are still supposed to be active
@@ -1303,7 +1303,7 @@ export class WebSocketService {
       data: klineUpdate
     });
 
-    console.log(`[WEBSOCKET] Broadcasting kline update for ${klineUpdate.symbol} to kline clients only`);
+    // Removed verbose WebSocket logging
     
     let sentCount = 0;
     let skippedCount = 0;
@@ -1312,26 +1312,26 @@ export class WebSocketService {
       if (subscription.ws.readyState === WebSocket.OPEN && subscription.dataType === 'kline') {
         const subscribedSymbols = Array.from(subscription.symbols).map(s => s.toUpperCase());
         const isMatched = subscription.symbols.size === 0 || subscribedSymbols.includes(klineUpdate.symbol.toUpperCase());
-        console.log(`[WEBSOCKET] KLINE CLIENT ${subscription.clientId}: subscribed to [${Array.from(subscription.symbols).join(', ')}], match: ${isMatched}`);
+        // Removed verbose WebSocket logging
         
         if (isMatched) {
           // Check if this kline data matches the client's requested interval
           const clientInterval = subscription.interval || '1m';
           if (klineUpdate.interval === clientInterval) {
-            console.log(`[WEBSOCKET] ✓ Sending kline to ${subscription.clientId}: ${klineUpdate.symbol} ${klineUpdate.close} (${klineUpdate.interval})`);
+            // Removed verbose WebSocket logging
             subscription.ws.send(message);
             sentCount++;
           } else {
-            console.log(`[WEBSOCKET] ⏭ Skipped kline for ${subscription.clientId}: interval mismatch (${klineUpdate.interval} vs ${clientInterval})`);
+            // Removed verbose WebSocket logging
           }
         }
       } else if (subscription.dataType === 'ticker') {
         skippedCount++;
-        console.log(`[WEBSOCKET] ⏭ Skipped TICKER client ${subscription.clientId} - needs ticker data, not kline`);
+        // Removed verbose WebSocket logging
       }
     });
     
-    console.log(`[WEBSOCKET] Kline broadcast complete: ${sentCount} sent, ${skippedCount} skipped (ticker clients)`);
+    // Removed verbose WebSocket logging
   }
 
   private storeHistoricalKlineData(klineUpdate: any) {
@@ -1361,7 +1361,7 @@ export class WebSocketService {
       }
     }
     
-    console.log(`[WEBSOCKET] Stored kline data for ${symbol} ${interval}: ${intervalData.length} candles`);
+    // Removed verbose WebSocket logging
   }
 
   private sendHistoricalDataToClients(symbols: string[], interval: string) {
@@ -1416,7 +1416,7 @@ export class WebSocketService {
       data: marketUpdate
     });
 
-    console.log(`[WEBSOCKET] Broadcasting ticker update for ${marketUpdate.symbol} to ticker clients only`);
+    // Removed verbose WebSocket logging
     
     let sentCount = 0;
     let skippedCount = 0;
@@ -1428,24 +1428,24 @@ export class WebSocketService {
         const isSubscribed = subscription.symbols.size === 0 || 
                            subscription.symbols.has(marketUpdate.symbol.toUpperCase());
         
-        console.log(`[WEBSOCKET] TICKER CLIENT ${subscription.clientId}: subscribed to [${Array.from(subscription.symbols).join(', ')}], match: ${isSubscribed}`);
+        // Removed verbose WebSocket logging
         
         if (isSubscribed) {
           try {
             subscription.ws.send(message);
             sentCount++;
-            console.log(`[WEBSOCKET] ✓ Sent ticker to ${subscription.clientId} for ${marketUpdate.symbol}`);
+            // Removed verbose WebSocket logging
           } catch (error) {
             console.error(`[WEBSOCKET] Failed to send to client ${subscription.clientId}:`, error);
           }
         }
       } else if (subscription.dataType === 'kline') {
         skippedCount++;
-        console.log(`[WEBSOCKET] ⏭ Skipped KLINE client ${subscription.clientId} - needs kline data, not ticker`);
+        // Removed verbose WebSocket logging
       }
     });
     
-    console.log(`[WEBSOCKET] Ticker broadcast complete: ${sentCount} sent, ${skippedCount} skipped (kline clients)`);
+    // Removed verbose WebSocket logging
   }
 
   private broadcastUserUpdate(userId: number, userData: any) {
@@ -1459,7 +1459,7 @@ export class WebSocketService {
   }
 
   public async subscribeToBalance(ws: WebSocket, userId: number, exchangeId: number, symbol: string, clientId?: string) {
-    console.log(`[BALANCE] Subscribing to balance updates for user ${userId}, exchange ${exchangeId}, symbol ${symbol}`);
+    // Removed verbose balance logging
     
     const balanceSubscription: BalanceSubscription = {
       ws,
@@ -1492,7 +1492,7 @@ export class WebSocketService {
   }
 
   public unsubscribeFromBalance(ws: WebSocket, userId: number, exchangeId: number, symbol: string) {
-    console.log(`[BALANCE] Unsubscribing from balance updates for user ${userId}, exchange ${exchangeId}, symbol ${symbol}`);
+    // Removed verbose balance logging
     
     const subscriptionToRemove = Array.from(this.balanceSubscriptions).find(sub => 
       sub.ws === ws && sub.userId === userId && sub.exchangeId === exchangeId && sub.symbol === symbol.toUpperCase()
@@ -1500,7 +1500,7 @@ export class WebSocketService {
     
     if (subscriptionToRemove) {
       this.balanceSubscriptions.delete(subscriptionToRemove);
-      console.log(`[BALANCE] Removed balance subscription for ${symbol}`);
+      // Removed verbose balance logging
     }
     
     // Stop balance updates if no more subscriptions
@@ -1645,11 +1645,11 @@ export class WebSocketService {
           data: balanceData
         }));
         sentCount++;
-        console.log(`[BALANCE] ✓ Sent balance update to client ${subscription.clientId}: ${balanceData.asset} ${balanceData.balance}`);
+        // Removed verbose balance logging
       }
     });
     
-    console.log(`[BALANCE] Broadcast complete: ${sentCount} clients updated for ${balanceKey}`);
+    // Removed verbose balance logging
   }
 
   private async handleTestnetBalanceRequest(userId: number, exchange: any) {
@@ -1717,7 +1717,7 @@ export class WebSocketService {
   }
 
   private async requestAccountBalance(ws: WebSocket, userId: number, exchangeId: number) {
-    console.log(`[WEBSOCKET] Account balance requested for user ${userId}, exchange ${exchangeId}`);
+    // Removed verbose WebSocket logging
     
     try {
       // Fetch the exchange configuration from database
@@ -1735,7 +1735,7 @@ export class WebSocketService {
         targetExchange.encryptionIv
       );
 
-      console.log(`[WEBSOCKET] Fetching balance for exchange: ${targetExchange.name}`);
+      // Removed verbose WebSocket logging
 
       // Make authenticated request to Binance API
       const timestamp = Date.now();
@@ -1764,7 +1764,7 @@ export class WebSocketService {
       }
 
       const accountData = await response.json();
-      console.log(`[WEBSOCKET] Successfully fetched account data for user ${userId}`);
+      // Removed verbose WebSocket logging
 
       // Send balance update to the client
       const userConnection = this.userConnections.get(userId);
@@ -2066,7 +2066,7 @@ export class WebSocketService {
     
     // Close all user streams
     this.binanceUserStreams.forEach((ws, listenKey) => {
-      console.log(`[WEBSOCKET] Closing user stream ${listenKey}`);
+      // Removed verbose WebSocket logging
       ws.close();
     });
     this.binanceUserStreams.clear();
@@ -2214,7 +2214,7 @@ export class WebSocketService {
       });
 
       if (allSymbols.size > 0) {
-        console.log(`[WEBSOCKET] Requesting data for ${allSymbols.size} symbols: ${Array.from(allSymbols).join(', ')}`);
+        // Removed verbose WebSocket logging
         
         // Stop continuous streams and request data via WebSocket API
         this.stopBinanceStreams(false);
@@ -2234,7 +2234,7 @@ export class WebSocketService {
       // Use REST API for 24hr ticker statistics since testnet doesn't support WebSocket API
       const baseUrl = 'https://testnet.binance.vision/api/v3/ticker/24hr';
       
-      console.log(`[WEBSOCKET] Requesting ticker data for ${symbols.length} symbols via REST API`);
+      // Removed verbose WebSocket logging
       
       // Request data for all symbols at once
       const symbolsParam = symbols.join(',');
@@ -2249,7 +2249,7 @@ export class WebSocketService {
       const tickerData = await response.json();
       
       if (Array.isArray(tickerData)) {
-        console.log(`[WEBSOCKET] Received ticker data for ${tickerData.length} symbols via REST API`);
+        // Removed verbose WebSocket logging
         
         // Process each ticker update
         tickerData.forEach((ticker: any) => {
