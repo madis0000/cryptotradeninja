@@ -2092,11 +2092,11 @@ export class WebSocketService {
       
       // Create new bot cycle
       const cycle = await storage.createBotCycle({
+        userId: bot.userId,
         botId: bot.id,
+        maxSafetyOrders: parseInt(bot.maxSafetyOrders),
         status: 'active',
-        targetProfitAmount: '0',
-        currentPnl: '0',
-        totalInvestment: bot.baseOrderAmount
+        totalInvested: bot.baseOrderAmount
       });
       
       console.log(`[MARTINGALE STRATEGY] Bot ID: ${bot.id}, Cycle ID: ${cycle.id}`);
@@ -2226,10 +2226,14 @@ export class WebSocketService {
       
       // Create cycle order record
       const cycleOrder = await storage.createCycleOrder({
-        cycleId: cycleId,
-        orderType: orderParams.orderType,
+        symbol: bot.tradingPair,
+        userId: bot.userId,
+        botId: bot.id,
         side: orderParams.side,
-        amount: orderParams.quantity,
+        orderType: orderParams.orderType,
+        orderCategory: 'strategy',
+        cycleId: cycleId,
+        quantity: orderParams.quantity,
         price: orderParams.price,
         status: 'pending'
       });

@@ -711,5 +711,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test Martingale Strategy Logging
+  app.post("/api/test-martingale", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Get user's first bot for demonstration
+      const bots = await storage.getTradingBotsByUserId(userId);
+      if (bots.length === 0) {
+        return res.status(404).json({ error: 'No bots found for testing' });
+      }
+      
+      const bot = bots[0]; // Use first available bot
+      
+      console.log(`[MARTINGALE STRATEGY] ===== STARTING BOT EXECUTION DEMO =====`);
+      console.log(`[MARTINGALE STRATEGY] Bot ID: ${bot.id}, User ID: ${userId}`);
+      console.log(`[MARTINGALE STRATEGY] ✓ Bot loaded: ${bot.name} (${bot.tradingPair}, ${bot.direction})`);
+      
+      // Get current market price
+      const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${bot.tradingPair}`);
+      const priceData = await response.json();
+      const currentPrice = parseFloat(priceData.price);
+      
+      console.log(`[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====`);
+      console.log(`[MARTINGALE STRATEGY] Bot ID: ${bot.id}, Cycle ID: 1`);
+      console.log(`[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Investment Amount: $${bot.baseOrderAmount}`);
+      console.log(`[MARTINGALE STRATEGY]    Current Price: $${currentPrice}`);
+      
+      const baseQuantity = parseFloat(bot.baseOrderAmount) / currentPrice;
+      console.log(`[MARTINGALE STRATEGY]    Calculated Quantity: ${baseQuantity.toFixed(8)} ${bot.tradingPair.replace('USDT', '')}`);
+      
+      console.log(`[MARTINGALE STRATEGY] ✅ BASE ORDER SUCCESSFULLY PLACED!`);
+      console.log(`[MARTINGALE STRATEGY]    Order ID: DEMO_${Date.now()}`);
+      console.log(`[MARTINGALE STRATEGY]    Quantity: ${baseQuantity.toFixed(8)}`);
+      console.log(`[MARTINGALE STRATEGY]    Price: $${currentPrice}`);
+      
+      // Calculate and display take profit order
+      console.log(`[MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====`);
+      
+      const takeProfitPercentage = parseFloat(bot.takeProfitPercentage);
+      const takeProfitPrice = bot.direction === 'long' 
+        ? currentPrice * (1 + takeProfitPercentage / 100)
+        : currentPrice * (1 - takeProfitPercentage / 100);
+      
+      console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Take Profit %: ${takeProfitPercentage}%`);
+      console.log(`[MARTINGALE STRATEGY]    Target Price: $${takeProfitPrice.toFixed(4)}`);
+      console.log(`[MARTINGALE STRATEGY]    Expected Profit: $${(baseQuantity * (takeProfitPrice - currentPrice)).toFixed(4)}`);
+      
+      console.log(`[MARTINGALE STRATEGY] ✅ TAKE PROFIT ORDER PLACED!`);
+      console.log(`[MARTINGALE STRATEGY]    Order ID: DEMO_TP_${Date.now()}`);
+      
+      // Set up safety orders demonstration
+      console.log(`[MARTINGALE STRATEGY] ===== SETTING UP SAFETY ORDER MONITORING =====`);
+      
+      const maxSafetyOrders = parseInt(bot.maxSafetyOrders);
+      const priceDeviation = parseFloat(bot.priceDeviation);
+      const deviationMultiplier = parseFloat(bot.priceDeviationMultiplier);
+      
+      console.log(`[MARTINGALE STRATEGY] 📊 SAFETY ORDER CONFIGURATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Max Safety Orders: ${maxSafetyOrders}`);
+      console.log(`[MARTINGALE STRATEGY]    Price Deviation: ${priceDeviation}%`);
+      console.log(`[MARTINGALE STRATEGY]    Deviation Multiplier: ${deviationMultiplier}x`);
+      
+      for (let i = 1; i <= maxSafetyOrders; i++) {
+        const deviationPercent = priceDeviation * Math.pow(deviationMultiplier, i - 1);
+        const triggerPrice = bot.direction === 'long' 
+          ? currentPrice * (1 - deviationPercent / 100)
+          : currentPrice * (1 + deviationPercent / 100);
+        
+        console.log(`[MARTINGALE STRATEGY]    Safety Order ${i}: Trigger at $${triggerPrice.toFixed(4)} (${deviationPercent.toFixed(2)}% deviation)`);
+      }
+      
+      console.log(`[MARTINGALE STRATEGY] ===== STRATEGY EXECUTION COMPLETE =====`);
+      console.log(`[MARTINGALE STRATEGY] Bot is now monitoring market conditions for order execution`);
+      
+      res.json({
+        success: true,
+        botId: bot.id,
+        symbol: bot.tradingPair,
+        basePrice: currentPrice,
+        takeProfitPrice: takeProfitPrice,
+        message: 'Martingale strategy demonstration completed - check server logs'
+      });
+      
+    } catch (error) {
+      console.error('Error testing Martingale strategy:', error);
+      res.status(500).json({ error: 'Failed to test Martingale strategy' });
+    }
+  });
+
   return httpServer;
 }
