@@ -27,7 +27,15 @@ export function MyBotsPage() {
   // Fetch bot orders for selected bot
   const { data: botOrders = [], isLoading: ordersLoading } = useQuery<any[]>({
     queryKey: ['/api/bot-orders', selectedBot?.id],
-    enabled: !!selectedBot
+    enabled: !!selectedBot,
+    refetchInterval: 5000 // Refresh every 5 seconds for real-time data
+  });
+
+  // Fetch real-time bot data for selected bot
+  const { data: realTimeBotData } = useQuery<any>({
+    queryKey: ['/api/bots', selectedBot?.id],
+    enabled: !!selectedBot,
+    refetchInterval: 3000 // Refresh every 3 seconds for real-time updates
   });
 
   // Delete bot mutation
@@ -86,6 +94,8 @@ export function MyBotsPage() {
   const inactiveBots = Array.isArray(bots) ? bots.filter((bot: any) => !(bot.isActive || bot.is_active)) : [];
 
   const renderBotDetails = () => {
+    // Use real-time data if available, fallback to selected bot data
+    const botData = realTimeBotData || selectedBot;
     const activeCycles = botCycles?.filter((cycle: any) => cycle.status === 'active') || [];
     const completedCycles = botCycles?.filter((cycle: any) => cycle.status === 'completed') || [];
     const currentCycle = activeCycles[0];
@@ -105,19 +115,39 @@ export function MyBotsPage() {
               Back to Bots
             </Button>
             <div>
-              <h1 className="text-2xl font-bold text-white">{selectedBot.name}</h1>
-              <p className="text-crypto-light">{selectedBot.tradingPair || selectedBot.trading_pair}</p>
+              <h1 className="text-2xl font-bold text-white">{botData.name}</h1>
+              <p className="text-crypto-light">{botData.tradingPair || botData.trading_pair}</p>
+              {botData.errorMessage && (
+                <p className="text-red-400 text-sm mt-1">{botData.errorMessage}</p>
+              )}
             </div>
-            <Badge className={`ml-auto ${
-              selectedBot.status === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
-              selectedBot.status === 'failed' || selectedBot.status === 'error' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-              'bg-gray-500/10 text-gray-400 border-gray-500/20'
-            }`}>
-              {selectedBot.status === 'active' ? 'Running' :
-               selectedBot.status === 'failed' ? 'Failed' :
-               selectedBot.status === 'error' ? 'Error' :
-               'Stopped'}
-            </Badge>
+            <div className="ml-auto flex items-center gap-3">
+              <Badge className={`${
+                botData.status === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+                botData.status === 'failed' || botData.status === 'error' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                'bg-gray-500/10 text-gray-400 border-gray-500/20'
+              }`}>
+                {botData.status === 'active' ? 'Running' :
+                 botData.status === 'failed' ? 'Failed' :
+                 botData.status === 'error' ? 'Error' :
+                 'Stopped'}
+              </Badge>
+              {botData.status === 'active' && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span className="text-xs text-green-400">Live</span>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-red-600 hover:border-red-500 text-red-400"
+                onClick={() => stopBotMutation.mutate(botData.id)}
+                disabled={stopBotMutation.isPending || botData.status !== 'active'}
+              >
+                Stop Bot
+              </Button>
+            </div>
           </div>
 
           {/* Error Message for Failed Bots */}
@@ -137,14 +167,15 @@ export function MyBotsPage() {
             </div>
           )}
 
-          {/* Bot Info Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {/* Bot Configuration Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Card className="bg-crypto-darker border-gray-800">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-crypto-light">Exchange</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-lg font-medium text-white">Binance Testnet</p>
+                <p className="text-xs text-crypto-light mt-1">Exchange ID: {botData.exchangeId}</p>
               </CardContent>
             </Card>
 
@@ -153,19 +184,60 @@ export function MyBotsPage() {
                 <CardTitle className="text-sm text-crypto-light">Strategy</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-lg font-medium text-white capitalize">{selectedBot.strategy}</p>
+                <p className="text-lg font-medium text-white capitalize">{botData.strategy}</p>
+                <p className="text-xs text-crypto-light mt-1">Direction: {botData.direction?.toUpperCase()}</p>
               </CardContent>
             </Card>
 
             <Card className="bg-crypto-darker border-gray-800">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-crypto-light">Total Investment</CardTitle>
+                <CardTitle className="text-sm text-crypto-light">Base Order</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-lg font-medium text-white">${selectedBot.totalInvested || selectedBot.total_invested || '0.00'}</p>
+                <p className="text-lg font-medium text-white">${botData.baseOrderAmount || botData.base_order_amount || '0.00'}</p>
+                <p className="text-xs text-crypto-light mt-1">Initial investment per cycle</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-crypto-darker border-gray-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-crypto-light">Safety Orders</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-lg font-medium text-white">{botData.maxSafetyOrders || botData.max_safety_orders || 0}</p>
+                <p className="text-xs text-crypto-light mt-1">Max: ${botData.safetyOrderAmount || botData.safety_order_amount || '0.00'} each</p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Strategy Configuration */}
+          <Card className="bg-crypto-darker border-gray-800 mb-6">
+            <CardHeader>
+              <CardTitle className="text-white">Strategy Configuration</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-crypto-light text-sm">Price Deviation</p>
+                  <p className="text-white font-medium">{botData.priceDeviation || botData.price_deviation || 0}%</p>
+                </div>
+                <div>
+                  <p className="text-crypto-light text-sm">Take Profit</p>
+                  <p className="text-white font-medium">{botData.takeProfitPercentage || botData.take_profit_percentage || 0}%</p>
+                </div>
+                <div>
+                  <p className="text-crypto-light text-sm">Volume Scale</p>
+                  <p className="text-white font-medium">{botData.volumeScale || botData.volume_scale || 0}x</p>
+                </div>
+                <div>
+                  <p className="text-crypto-light text-sm">Created</p>
+                  <p className="text-white font-medium">
+                    {new Date(botData.createdAt || botData.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Current Cycle with Dynamic P&L */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -225,26 +297,34 @@ export function MyBotsPage() {
                   <span className="text-white font-medium">{botCycles.length}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-crypto-light">Active Cycles:</span>
+                  <span className="text-blue-400 font-medium">{activeCycles.length}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-crypto-light">Completed Cycles:</span>
-                  <span className="text-white font-medium">{completedCycles.length}</span>
+                  <span className="text-green-400 font-medium">{completedCycles.length}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-crypto-light">Total Invested:</span>
-                  <span className="text-white font-medium">${parseFloat(selectedBot.totalInvested || '0').toFixed(2)}</span>
+                  <span className="text-white font-medium">${parseFloat(botData.totalInvested || botData.total_invested || '0').toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-crypto-light">Total PnL:</span>
-                  <span className={`font-medium ${parseFloat(selectedBot.totalPnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    ${parseFloat(selectedBot.totalPnl || '0').toFixed(2)}
+                  <span className={`font-medium ${parseFloat(botData.totalPnl || botData.total_pnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${parseFloat(botData.totalPnl || botData.total_pnl || '0').toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-crypto-light">Total Trades:</span>
-                  <span className="text-white font-medium">{selectedBot.totalTrades || 0}</span>
+                  <span className="text-crypto-light">Total Orders:</span>
+                  <span className="text-white font-medium">{botOrders.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-crypto-light">Filled Orders:</span>
+                  <span className="text-green-400 font-medium">{botOrders.filter((order: any) => order.status === 'filled').length}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-crypto-light">Win Rate:</span>
-                  <span className="text-white font-medium">{parseFloat(selectedBot.winRate || '0').toFixed(1)}%</span>
+                  <span className="text-white font-medium">{parseFloat(botData.winRate || botData.win_rate || '0').toFixed(1)}%</span>
                 </div>
               </CardContent>
             </Card>
