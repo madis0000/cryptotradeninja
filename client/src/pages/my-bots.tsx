@@ -278,7 +278,7 @@ export function MyBotsPage() {
                   <CardTitle className="text-white text-sm">Base Order</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold text-green-400">${selectedBot.baseOrderAmount}</div>
+                  <div className="text-xl font-bold text-green-400">${parseFloat(selectedBot.baseOrderAmount || '0').toFixed(4)}</div>
                   <p className="text-xs text-crypto-light mt-1">Initial order size</p>
                 </CardContent>
               </Card>
@@ -288,7 +288,7 @@ export function MyBotsPage() {
                   <CardTitle className="text-white text-sm">Safety Order</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold text-blue-400">${selectedBot.safetyOrderAmount}</div>
+                  <div className="text-xl font-bold text-blue-400">${parseFloat(selectedBot.safetyOrderAmount || '0').toFixed(4)}</div>
                   <p className="text-xs text-crypto-light mt-1">DCA order size</p>
                 </CardContent>
               </Card>
@@ -308,7 +308,7 @@ export function MyBotsPage() {
                   <CardTitle className="text-white text-sm">Price Deviation</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold text-purple-400">{selectedBot.priceDeviation}%</div>
+                  <div className="text-xl font-bold text-purple-400">{parseFloat(selectedBot.priceDeviation || '0').toFixed(4)}%</div>
                   <p className="text-xs text-crypto-light mt-1">DCA trigger</p>
                 </CardContent>
               </Card>
