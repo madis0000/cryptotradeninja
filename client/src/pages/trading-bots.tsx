@@ -305,7 +305,6 @@ export default function TradingBots() {
                 </CardHeader>
                 <CardContent>
                   <GridStrategy 
-                    selectedSymbol={selectedSymbol}
                     className="space-y-4"
                   />
                 </CardContent>
@@ -325,6 +324,8 @@ export default function TradingBots() {
                   <MartingaleStrategy 
                     selectedSymbol={selectedSymbol}
                     className="space-y-4"
+                    selectedExchangeId={undefined}
+                    exchanges={[]}
                   />
                 </CardContent>
               </Card>
