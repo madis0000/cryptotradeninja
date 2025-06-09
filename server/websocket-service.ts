@@ -1253,13 +1253,12 @@ export class WebSocketService {
   }
 
   private sendMarketDataToClient(ws: WebSocket) {
-    console.log('[PUBLIC WS] Attempting to send market data to client');
-    console.log(`[PUBLIC WS] WebSocket ready state: ${ws.readyState}`);
+    // Attempting to send market data to client
     
     // Find the subscription for this WebSocket to get subscribed symbols
     const subscription = Array.from(this.marketSubscriptions).find(sub => sub.ws === ws);
     if (!subscription) {
-      console.log('[PUBLIC WS] No subscription found for this client');
+      // No subscription found for this client
       return;
     }
 
@@ -1270,9 +1269,7 @@ export class WebSocketService {
       subscribedSymbols.length === 0 || subscribedSymbols.includes(data.symbol.toUpperCase())
     );
     
-    console.log(`[PUBLIC WS] Client subscribed to: ${subscribedSymbols.join(', ')}`);
-    console.log(`[PUBLIC WS] Available market data symbols: ${availableSymbols.join(', ')}`);
-    console.log(`[PUBLIC WS] Filtered market data entries: ${filteredData.length}`);
+    // Processing market data for client
     
     if (filteredData.length > 0) {
       try {
@@ -1373,7 +1370,7 @@ export class WebSocketService {
       const symbolData = this.historicalData.get(symbol.toUpperCase());
       if (symbolData && symbolData.has(interval)) {
         const intervalData = symbolData.get(interval)!;
-        console.log(`[HISTORICAL] Sending ${intervalData.length} historical candles for ${symbol} ${interval}`);
+        // Sending historical candles
         
         // Send historical data only to kline clients
         this.marketSubscriptions.forEach((subscription) => {
@@ -1396,7 +1393,7 @@ export class WebSocketService {
               
               try {
                 subscription.ws.send(message);
-                console.log(`[HISTORICAL] ✓ Sent ${intervalData.length} historical klines to ${subscription.clientId} for ${symbol} ${interval}`);
+                // Historical klines sent to client
               } catch (error) {
                 console.error(`[HISTORICAL] Failed to send historical data to ${subscription.clientId}:`, error);
               }
@@ -1404,7 +1401,7 @@ export class WebSocketService {
           }
         });
       } else {
-        console.log(`[HISTORICAL] No historical data available for ${symbol} ${interval}`);
+        // No historical data available
       }
     });
   }
@@ -2379,11 +2376,11 @@ export class WebSocketService {
         ws.onmessage = (event) => {
           try {
             const response = JSON.parse(event.data.toString());
-            console.log(`[HISTORICAL WS] Received response for ${symbol}:`, response);
+            // Received response for historical data
             
             if (response.result && Array.isArray(response.result)) {
               const klines = response.result;
-              console.log(`[HISTORICAL WS] Received ${klines.length} klines for ${symbol} ${interval}`);
+              // Received historical klines data
               
               // Process and store historical klines
               const processedKlines = klines.map((kline: any[]) => ({
@@ -2426,7 +2423,7 @@ export class WebSocketService {
         };
         
         ws.onclose = () => {
-          console.log(`[HISTORICAL WS] WebSocket closed for ${symbol}`);
+          // WebSocket closed for historical data
         };
         
       } catch (error) {
