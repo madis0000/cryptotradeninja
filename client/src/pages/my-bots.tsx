@@ -107,10 +107,14 @@ export function MyBotsPage() {
 
   // Calculate next orders to be filled and their distances
   const getNextOrdersInfo = () => {
-    if (!botOrders || !marketData) return { takeProfitDistance: null, nextSafetyDistance: null };
+    if (!botOrders || !marketData) {
+      return { takeProfitDistance: null, nextSafetyDistance: null, takeProfitOrder: null, nextSafetyOrder: null };
+    }
 
     const currentPrice = parseFloat(marketData.price || '0');
-    if (currentPrice === 0) return { takeProfitDistance: null, nextSafetyDistance: null };
+    if (currentPrice === 0) {
+      return { takeProfitDistance: null, nextSafetyDistance: null, takeProfitOrder: null, nextSafetyOrder: null };
+    }
 
     // Find take profit order
     const takeProfitOrder = botOrders.find((order: any) => 
@@ -132,8 +136,8 @@ export function MyBotsPage() {
     return {
       takeProfitDistance: takeProfitOrder ? calculateDistance(takeProfitOrder.price) : null,
       nextSafetyDistance: nextSafetyOrder ? calculateDistance(nextSafetyOrder.price) : null,
-      takeProfitOrder,
-      nextSafetyOrder
+      takeProfitOrder: takeProfitOrder || null,
+      nextSafetyOrder: nextSafetyOrder || null
     };
   };
 

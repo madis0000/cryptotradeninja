@@ -2040,10 +2040,29 @@ export class WebSocketService {
   }
 
   public async startAllMarketsTicker() {
-    console.log('[WEBSOCKET] Automatic streaming disabled - streams start only on-demand');
+    console.log('[WEBSOCKET] Starting market data for active trading pairs');
     
-    // Don't start automatic streams - wait for explicit frontend requests
-    // Streams will be started only when components specifically request data
+    // Get all active trading pairs from bots
+    try {
+      const activeBots = await db.select().from(tradingBots).where(eq(tradingBots.isActive, true));
+      const symbols = new Set<string>();
+      
+      activeBots.forEach(bot => {
+        if (bot.tradingPair) {
+          symbols.add(bot.tradingPair);
+        }
+      });
+      
+      if (symbols.size > 0) {
+        console.log(`[WEBSOCKET] Requesting market data for symbols: ${Array.from(symbols).join(', ')}`);
+        await this.requestMarketDataViaAPI(Array.from(symbols));
+      }
+      
+      // Start market refresh interval for continuous updates
+      this.startMarketRefreshInterval();
+    } catch (error) {
+      console.error('[WEBSOCKET] Error starting market ticker:', error);
+    }
   }
 
   public getMarketData(): Map<string, any> {
