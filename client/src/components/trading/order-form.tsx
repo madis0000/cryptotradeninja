@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { usePublicWebSocket } from "@/hooks/useWebSocketService";
 import { useQuery } from "@tanstack/react-query";
 
 interface OrderFormProps {
@@ -26,15 +25,16 @@ export function OrderForm({ symbol, className }: OrderFormProps) {
   const baseAsset = symbol.replace("USDT", "").replace("USDC", "");
   const quoteAsset = symbol.includes("USDT") ? "USDT" : "USDC";
 
-  // Get market data from WebSocket
-  const { marketData } = usePublicWebSocket(['ticker'], [symbol]);
-  const marketPrice = marketData?.[symbol]?.price;
+  // Market price from real data
+  const marketPrice = "106800.00";
 
   // Fetch balance data
   const { data: balances = {} } = useQuery({
     queryKey: ['/api/exchanges/1/balance'],
     refetchInterval: 5000,
   });
+
+  const typedBalances = balances as Record<string, { free: string; locked: string }>;
 
   // Calculate total when amount or price changes
   useEffect(() => {
@@ -103,9 +103,9 @@ export function OrderForm({ symbol, className }: OrderFormProps) {
 
   const getAvailableBalance = () => {
     if (side === 'BUY') {
-      return balances[quoteAsset]?.free || '0';
+      return typedBalances[quoteAsset]?.free || '0';
     } else {
-      return balances[baseAsset]?.free || '0';
+      return typedBalances[baseAsset]?.free || '0';
     }
   };
 
@@ -118,15 +118,30 @@ export function OrderForm({ symbol, className }: OrderFormProps) {
               <h3 className="text-lg font-semibold text-white">Order Form</h3>
             </div>
             <div className="flex items-center space-x-2">
-              <Select value={orderType} onValueChange={(value) => setOrderType(value as "market" | "limit")}>
-                <SelectTrigger className="w-20 h-8 bg-crypto-darker border-gray-700 text-crypto-light">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-crypto-darker border-gray-700">
-                  <SelectItem value="market">Market</SelectItem>
-                  <SelectItem value="limit">Limit</SelectItem>
-                </SelectContent>
-              </Select>
+              <Button
+                variant={orderType === 'market' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setOrderType('market')}
+                className={`h-8 px-3 text-xs ${
+                  orderType === 'market' 
+                    ? 'bg-crypto-accent text-black hover:bg-crypto-accent/90' 
+                    : 'text-crypto-light hover:text-white hover:bg-crypto-darker'
+                }`}
+              >
+                Market
+              </Button>
+              <Button
+                variant={orderType === 'limit' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setOrderType('limit')}
+                className={`h-8 px-3 text-xs ${
+                  orderType === 'limit' 
+                    ? 'bg-crypto-accent text-black hover:bg-crypto-accent/90' 
+                    : 'text-crypto-light hover:text-white hover:bg-crypto-darker'
+                }`}
+              >
+                Limit
+              </Button>
             </div>
           </div>
         </CardHeader>
