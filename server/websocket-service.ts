@@ -2779,8 +2779,8 @@ export class WebSocketService {
           symbol: bot.tradingPair,
           side: bot.direction === 'long' ? 'BUY' : 'SELL',
           type: 'LIMIT',
-          quantity: quantity.toFixed(8),
-          price: safetyOrderPrice.toFixed(8),
+          quantity: quantity.toFixed(1),
+          price: safetyOrderPrice.toFixed(5),
           timeInForce: 'GTC'
         });
 

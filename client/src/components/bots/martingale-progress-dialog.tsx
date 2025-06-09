@@ -87,52 +87,84 @@ export function MartingaleProgressDialog({
     }
   }, [open, botConfig]);
 
-  // Monitor order placement progress
+  // Monitor order placement progress with enhanced polling
   const monitorOrderPlacementProgress = async (botId: string) => {
-    updateStepStatus('take_profit', 'processing');
-    
     try {
-      // Poll for order status updates
+      // Poll for order status updates more frequently
       let attempts = 0;
-      const maxAttempts = 10;
+      const maxAttempts = 30; // Increased timeout for comprehensive monitoring
+      let baseOrderCompleted = false;
       
       while (attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Check bot cycles and orders
         const token = localStorage.getItem('token');
         const cycleResponse = await fetch(`/api/bot-cycles/${botId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
         });
+        
         if (cycleResponse.ok) {
           const cycles = await cycleResponse.json();
           if (cycles.length > 0) {
-            // Check if base order was placed successfully
             const ordersResponse = await fetch(`/api/bot-orders/${botId}`, {
               headers: {
                 'Authorization': `Bearer ${token}`,
               },
             });
+            
             if (ordersResponse.ok) {
               const orders = await ordersResponse.json();
               const baseOrder = orders.find((order: any) => order.orderType === 'base_order');
+              const takeProfitOrder = orders.find((order: any) => order.orderType === 'take_profit');
+              const safetyOrders = orders.filter((order: any) => order.orderType === 'safety_order');
               
-              if (baseOrder) {
+              // Check base order status
+              if (baseOrder && !baseOrderCompleted) {
                 if (baseOrder.status === 'filled') {
                   updateStepStatus('base_order', 'completed', baseOrder.exchangeOrderId, baseOrder.filledPrice, baseOrder.quantity);
-                  updateStepStatus('take_profit', 'completed', 'TP-PENDING', 'Pending', baseOrder.quantity);
-                  setCurrentStep(2);
-                  setOverallProgress(100);
-                  
-                  setTimeout(() => {
-                    onComplete?.(botId);
-                  }, 1000);
-                  return;
+                  setCurrentStep(1);
+                  setOverallProgress(25);
+                  baseOrderCompleted = true;
+                  updateStepStatus('take_profit', 'processing');
                 } else if (baseOrder.status === 'failed') {
                   throw new Error(`Base order failed: ${baseOrder.errorMessage || 'Unknown error'}`);
                 }
+              }
+              
+              // Check take profit order status
+              if (takeProfitOrder && baseOrderCompleted) {
+                if (takeProfitOrder.status === 'placed') {
+                  updateStepStatus('take_profit', 'completed', takeProfitOrder.exchangeOrderId, takeProfitOrder.price, takeProfitOrder.quantity);
+                  setCurrentStep(2);
+                  setOverallProgress(50);
+                  updateStepStatus('safety_order_1', 'processing');
+                } else if (takeProfitOrder.status === 'failed') {
+                  updateStepStatus('take_profit', 'error', undefined, undefined, undefined, takeProfitOrder.errorMessage || 'Take profit order failed due to PRICE_FILTER');
+                }
+              }
+              
+              // Check safety orders status
+              if (safetyOrders.length > 0) {
+                safetyOrders.forEach((order: any, index: number) => {
+                  const stepId = `safety_order_${index + 1}`;
+                  if (order.status === 'placed') {
+                    updateStepStatus(stepId, 'completed', order.exchangeOrderId, order.price, order.quantity);
+                    setCurrentStep(3);
+                    setOverallProgress(75 + (index + 1) * 25 / safetyOrders.length);
+                  } else if (order.status === 'failed') {
+                    updateStepStatus(stepId, 'error', undefined, undefined, undefined, order.errorMessage || 'Safety order failed due to PRICE_FILTER');
+                  }
+                });
+              }
+              
+              // Complete if we have successful base order
+              if (baseOrderCompleted && attempts > 5) {
+                setTimeout(() => {
+                  onComplete?.(botId);
+                }, 2000);
+                return;
               }
             }
           }
@@ -141,11 +173,13 @@ export function MartingaleProgressDialog({
         attempts++;
       }
       
-      throw new Error('Order placement timeout - unable to confirm order status');
+      if (!baseOrderCompleted) {
+        throw new Error('Order placement timeout - unable to confirm base order status');
+      }
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to monitor order placement';
-      updateStepStatus('take_profit', 'error', undefined, undefined, undefined, errorMessage);
+      updateStepStatus('base_order', 'error', undefined, undefined, undefined, errorMessage);
       throw error;
     }
   };
