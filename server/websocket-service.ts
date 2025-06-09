@@ -2779,7 +2779,7 @@ export class WebSocketService {
       }
 
       const { listenKey } = await listenKeyResponse.json();
-      this.userListenKeys.set(exchangeId, listenKey);
+      this.listenKeys.set(exchangeId, listenKey);
 
       // Connect to User Data Stream WebSocket
       const wsUrl = `${exchange.wsApiEndpoint}/${listenKey}`;
@@ -3393,9 +3393,23 @@ export class WebSocketService {
   }
 
   public async startNewMartingaleCycle(botId: number, cycleNumber: number) {
+    console.log(`\n[MARTINGALE STRATEGY] ===== STARTING NEW CYCLE =====`);
+    console.log(`[MARTINGALE STRATEGY] Bot ID: ${botId}, Cycle Number: ${cycleNumber}`);
+    
     try {
       const bot = await storage.getTradingBot(botId);
-      if (!bot) return;
+      if (!bot) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Bot ${botId} not found`);
+        return;
+      }
+
+      // Verify bot is still active
+      if (!bot.isActive) {
+        console.log(`[MARTINGALE STRATEGY] ⏸️ Bot ${botId} is no longer active - cancelling new cycle`);
+        return;
+      }
+
+      console.log(`[MARTINGALE STRATEGY] ✓ Bot verified: ${bot.name} (${bot.tradingPair})`);
 
       // Create new cycle
       const newCycle = await storage.createBotCycle({
@@ -3409,11 +3423,18 @@ export class WebSocketService {
         totalQuantity: '0'
       });
 
-      console.log(`[MARTINGALE] Started new cycle ${cycleNumber} for bot ${botId}`);
+      console.log(`[MARTINGALE STRATEGY] ✓ Created new cycle ${cycleNumber} (ID: ${newCycle.id})`);
+
+      // Place the initial base order to start the cycle
+      await this.placeInitialBaseOrder(botId, newCycle.id);
+
+      console.log(`[MARTINGALE STRATEGY] ✅ New cycle ${cycleNumber} started successfully for bot ${botId}`);
 
     } catch (error) {
-      console.error('[MARTINGALE] Error starting new cycle:', error);
+      console.error(`[MARTINGALE STRATEGY] ❌ Error starting new cycle ${cycleNumber} for bot ${botId}:`, error);
     }
+    
+    console.log(`[MARTINGALE STRATEGY] ===== NEW CYCLE INITIALIZATION COMPLETE =====\n`);
   }
 
   private async placeOrderOnExchange(exchange: any, orderParams: any): Promise<any> {

@@ -1,0 +1,131 @@
+[WEBSOCKET] Live price update: ICPUSDT = $6.02600000
+[USER DATA STREAM] Order update: 503576 - FILLED (ICPUSDT SELL)
+[USER DATA STREAM] ✅ Order 503576 filled via WebSocket - processing...
+
+[MARTINGALE STRATEGY] ===== ORDER FILL DETECTED =====
+[MARTINGALE STRATEGY] Order Type: TAKE_PROFIT
+[MARTINGALE STRATEGY] Bot ID: 22, Cycle ID: 19
+[MARTINGALE STRATEGY] Symbol: ICPUSDT
+[MARTINGALE STRATEGY] Side: SELL, Quantity: 3.30000000
+[MARTINGALE STRATEGY] Fill Price: $6.030000
+[MARTINGALE STRATEGY] ✓ Updated order 52 status to filled
+
+[MARTINGALE STRATEGY] ===== TAKE PROFIT FILLED =====
+[MARTINGALE STRATEGY] 🎯 TAKE PROFIT ANALYSIS:
+[MARTINGALE STRATEGY]    Fill Price: $6.030000
+[MARTINGALE STRATEGY]    Fill Quantity: 3.30000000
+[MARTINGALE STRATEGY]    Cycle Number: 1
+[MARTINGALE STRATEGY] 💰 PROFIT CALCULATION:
+[MARTINGALE STRATEGY]    Total Invested: $20.00
+[MARTINGALE STRATEGY]    Total Received: $19.90
+[MARTINGALE STRATEGY]    Net Profit: $-0.10
+[MARTINGALE STRATEGY]    Profit Percentage: -0.50%
+[MARTINGALE STRATEGY]    Safety Orders Used: 0/4
+[WEBSOCKET] Live price update: ICPUSDT = $6.03000000
+[MARTINGALE STRATEGY] ✓ Trade recorded for analytics
+[MARTINGALE STRATEGY] 🚫 CANCELLING PENDING SAFETY ORDERS...
+[MARTINGALE STRATEGY] Found 4 pending safety orders to cancel
+[MARTINGALE STRATEGY] Cancelling safety order 56 (Exchange ID: 503580)
+[USER DATA STREAM] Order update: 503580 - CANCELED (ICPUSDT BUY)
+[CANCEL ORDER] ✅ Successfully cancelled order 503580: {
+  symbol: 'ICPUSDT',
+  origClientOrderId: 'wTstyCOfdcrRCeSQndVLX8',
+  orderId: 503580,
+  orderListId: -1,
+  clientOrderId: 'y7gCPPeipPYebE4pnkNLRq',
+  transactTime: 1749506489918,
+  price: '5.89900000',
+  origQty: '27.10000000',
+  executedQty: '0.00000000',
+  origQuoteOrderQty: '0.00000000',
+  cummulativeQuoteQty: '0.00000000',
+  status: 'CANCELED',
+  timeInForce: 'GTC',
+  type: 'LIMIT',
+  side: 'BUY',
+  selfTradePreventionMode: 'EXPIRE_MAKER'
+}
+[MARTINGALE STRATEGY] ✅ Successfully cancelled safety order 503580 on exchange
+[USER DATA STREAM] Order 503580 cancelled via WebSocket
+[MARTINGALE STRATEGY] ✅ Updated safety order 56 status to cancelled
+[MARTINGALE STRATEGY] Cancelling safety order 55 (Exchange ID: 503579)
+[USER DATA STREAM] Order update: 503579 - CANCELED (ICPUSDT BUY)
+[CANCEL ORDER] ✅ Successfully cancelled order 503579: {
+  symbol: 'ICPUSDT',
+  origClientOrderId: 'wRjWqj9GmDuGsGlTOh8C1L',
+  orderId: 503579,
+  orderListId: -1,
+  clientOrderId: 'ltcNLAeMgeKdBXr06sV5Cy',
+  transactTime: 1749506490324,
+  price: '5.93300000',
+  origQty: '13.50000000',
+  executedQty: '0.00000000',
+  origQuoteOrderQty: '0.00000000',
+  cummulativeQuoteQty: '0.00000000',
+  status: 'CANCELED',
+  timeInForce: 'GTC',
+  type: 'LIMIT',
+  side: 'BUY',
+  selfTradePreventionMode: 'EXPIRE_MAKER'
+}
+[MARTINGALE STRATEGY] ✅ Successfully cancelled safety order 503579 on exchange
+[MARTINGALE STRATEGY] ✅ Updated safety order 55 status to cancelled
+[MARTINGALE STRATEGY] Cancelling safety order 54 (Exchange ID: 503578)
+[USER DATA STREAM] Order 503579 cancelled via WebSocket
+[CANCEL ORDER] ✅ Successfully cancelled order 503578: {
+  symbol: 'ICPUSDT',
+  origClientOrderId: 'OVcGipWIwRGGi7OusQyIVu',
+  orderId: 503578,
+  orderListId: -1,
+  clientOrderId: 'nujJaUyOLvteWMDSEB3Znc',
+  transactTime: 1749506490480,
+  price: '5.95500000',
+  origQty: '6.70000000',
+  executedQty: '0.00000000',
+  origQuoteOrderQty: '0.00000000',
+  cummulativeQuoteQty: '0.00000000',
+  status: 'CANCELED',
+  timeInForce: 'GTC',
+  type: 'LIMIT',
+  side: 'BUY',
+  selfTradePreventionMode: 'EXPIRE_MAKER'
+}
+[MARTINGALE STRATEGY] ✅ Successfully cancelled safety order 503578 on exchange
+[USER DATA STREAM] Order update: 503578 - CANCELED (ICPUSDT BUY)
+[MARTINGALE STRATEGY] ✅ Updated safety order 54 status to cancelled
+[MARTINGALE STRATEGY] Cancelling safety order 53 (Exchange ID: 503577)
+[USER DATA STREAM] Order 503578 cancelled via WebSocket
+[CANCEL ORDER] ✅ Successfully cancelled order 503577: {
+  symbol: 'ICPUSDT',
+  origClientOrderId: 'G56YRmXIQfLHZMrNdCFn5z',
+  orderId: 503577,
+  orderListId: -1,
+  clientOrderId: 'WyLAOyfY15hXLUJk2iskk4',
+  transactTime: 1749506490619,
+  price: '5.97000000',
+  origQty: '3.40000000',
+  executedQty: '0.00000000',
+  origQuoteOrderQty: '0.00000000',
+  cummulativeQuoteQty: '0.00000000',
+  status: 'CANCELED',
+  timeInForce: 'GTC',
+  type: 'LIMIT',
+  side: 'BUY',
+  selfTradePreventionMode: 'EXPIRE_MAKER'
+}
+[MARTINGALE STRATEGY] ✅ Successfully cancelled safety order 503577 on exchange
+[USER DATA STREAM] Order update: 503577 - CANCELED (ICPUSDT BUY)
+[MARTINGALE STRATEGY] ✅ Updated safety order 53 status to cancelled
+[MARTINGALE STRATEGY] ✅ All pending safety orders have been cancelled
+[USER DATA STREAM] Order 503577 cancelled via WebSocket
+[MARTINGALE STRATEGY] ✓ Updated bot statistics: P&L: $-0.10, Trades: 1, Win Rate: 100.0%
+[MARTINGALE STRATEGY] ✓ Cycle 1 completed successfully
+[MARTINGALE STRATEGY] 🔄 Bot is active - Starting new cycle...
+[MARTINGALE STRATEGY] ⏱️ Applying cooldown: 60s
+[MARTINGALE STRATEGY] ✅ CYCLE COMPLETED SUCCESSFULLY!
+[MARTINGALE STRATEGY]    Final Profit: $-0.10 (-0.50%)
+[MARTINGALE STRATEGY]    Cycle Duration: Completed
+[MARTINGALE STRATEGY] ===== TAKE PROFIT PROCESSING COMPLETE =====
+
+[MARTINGALE STRATEGY] ✓ Broadcasted order fill notification to clients
+[MARTINGALE STRATEGY] ===== ORDER FILL PROCESSING COMPLETE =====
