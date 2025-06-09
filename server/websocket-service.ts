@@ -1281,12 +1281,12 @@ export class WebSocketService {
           });
           ws.send(message);
         });
-        console.log(`[PUBLIC WS] Sent ${filteredData.length} market updates to client`);
+        // Market updates sent to client
       } catch (error) {
         console.error('[PUBLIC WS] Error sending market data:', error);
       }
     } else {
-      console.log('[PUBLIC WS] No relevant market data available for subscribed symbols');
+      // No relevant market data available for subscribed symbols
     }
   }
 
