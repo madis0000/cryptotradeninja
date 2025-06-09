@@ -49,6 +49,8 @@ interface OrderResponse {
   quantity: string;
   price?: string;
   status?: string;
+  fee?: string;
+  feeAsset?: string;
   error?: string;
 }
 
@@ -1843,16 +1845,48 @@ export class WebSocketService {
         exchange.encryptionIv
       );
 
-      // Simulate order placement for testnet (since we're using Binance testnet)
-      // In production, this would make actual API calls to Binance
-      const orderId = `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const currentPrice = this.marketData.get(orderRequest.symbol)?.price || '0';
-      
-      // Simulate processing delay
-      await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-      
-      // Simulate occasional failures (5% chance for testing)
-      if (Math.random() < 0.05) {
+      // Place actual order through Binance API
+      const orderResult = await this.placeBinanceOrder(
+        apiKey,
+        apiSecret,
+        orderRequest,
+        exchange.isTestnet || false
+      );
+
+      if (orderResult.success) {
+        // Store trade record in database
+        await storage.createTrade({
+          userId: orderRequest.userId,
+          botId: null, // Manual trade
+          exchangeId: orderRequest.exchangeId,
+          symbol: orderRequest.symbol,
+          side: orderRequest.side,
+          quantity: orderRequest.quantity,
+          price: orderResult.price || '0',
+          fee: orderResult.fee || '0',
+          feeAsset: orderResult.feeAsset || 'USDT',
+          orderId: orderResult.orderId || '',
+          status: orderResult.status || 'FILLED',
+          orderType: orderRequest.orderType
+        });
+
+        const successResponse: OrderResponse = {
+          type: 'order_result',
+          success: true,
+          orderId: orderResult.orderId,
+          clientOrderId: orderRequest.clientOrderId,
+          symbol: orderRequest.symbol,
+          side: orderRequest.side,
+          quantity: orderRequest.quantity,
+          price: orderResult.price,
+          status: orderResult.status,
+          fee: orderResult.fee,
+          feeAsset: orderResult.feeAsset
+        };
+
+        ws.send(JSON.stringify(successResponse));
+        console.log(`[ORDER] ✓ Order placed successfully: ${orderResult.orderId} for ${orderRequest.symbol}`);
+      } else {
         const errorResponse: OrderResponse = {
           type: 'order_result',
           success: false,
@@ -1860,27 +1894,10 @@ export class WebSocketService {
           side: orderRequest.side,
           quantity: orderRequest.quantity,
           clientOrderId: orderRequest.clientOrderId,
-          error: 'Insufficient balance or market conditions'
+          error: orderResult.error || 'Order placement failed'
         };
         ws.send(JSON.stringify(errorResponse));
-        return;
       }
-
-      // Successful order response
-      const successResponse: OrderResponse = {
-        type: 'order_result',
-        success: true,
-        orderId: orderId,
-        clientOrderId: orderRequest.clientOrderId,
-        symbol: orderRequest.symbol,
-        side: orderRequest.side,
-        quantity: orderRequest.quantity,
-        price: orderRequest.orderType === 'LIMIT' ? orderRequest.price : currentPrice,
-        status: orderRequest.orderType === 'MARKET' ? 'FILLED' : 'NEW'
-      };
-
-      ws.send(JSON.stringify(successResponse));
-      console.log(`[ORDER] ✓ Order placed successfully: ${orderId} for ${orderRequest.symbol}`);
 
     } catch (error) {
       console.error('[ORDER] Error placing order:', error);
@@ -1896,6 +1913,98 @@ export class WebSocketService {
       };
       
       ws.send(JSON.stringify(errorResponse));
+    }
+  }
+
+  private async placeBinanceOrder(
+    apiKey: string,
+    apiSecret: string,
+    orderRequest: OrderRequest,
+    isTestnet: boolean = true
+  ): Promise<{
+    success: boolean;
+    orderId?: string;
+    price?: string;
+    status?: string;
+    fee?: string;
+    feeAsset?: string;
+    error?: string;
+  }> {
+    try {
+      const crypto = require('crypto');
+      
+      // Binance API endpoint
+      const baseUrl = isTestnet 
+        ? 'https://testnet.binance.vision'
+        : 'https://api.binance.com';
+      
+      // Prepare order parameters
+      const timestamp = Date.now();
+      const orderParams: any = {
+        symbol: orderRequest.symbol,
+        side: orderRequest.side,
+        type: orderRequest.orderType,
+        quantity: orderRequest.quantity,
+        timestamp: timestamp
+      };
+
+      // Add price for limit orders
+      if (orderRequest.orderType === 'LIMIT') {
+        orderParams.price = orderRequest.price;
+        orderParams.timeInForce = orderRequest.timeInForce || 'GTC';
+      }
+
+      // Add client order ID if provided
+      if (orderRequest.clientOrderId) {
+        orderParams.newClientOrderId = orderRequest.clientOrderId;
+      }
+
+      // Create query string for signature
+      const queryString = Object.keys(orderParams)
+        .map(key => `${key}=${encodeURIComponent(orderParams[key])}`)
+        .join('&');
+
+      // Generate signature
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(queryString)
+        .digest('hex');
+
+      // Make API request
+      const response = await fetch(`${baseUrl}/api/v3/order`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `${queryString}&signature=${signature}`
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.orderId) {
+        return {
+          success: true,
+          orderId: result.orderId.toString(),
+          price: result.price || result.fills?.[0]?.price,
+          status: result.status,
+          fee: result.fills?.[0]?.commission,
+          feeAsset: result.fills?.[0]?.commissionAsset
+        };
+      } else {
+        console.error('[ORDER] Binance API error:', result);
+        return {
+          success: false,
+          error: result.msg || 'Order placement failed'
+        };
+      }
+
+    } catch (error) {
+      console.error('[ORDER] Error calling Binance API:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'API call failed'
+      };
     }
   }
 

@@ -35,6 +35,8 @@ export function OrderForm({ className, symbol = "ICPUSDT" }: OrderFormProps) {
   const [marketPrice, setMarketPrice] = useState("");
   const [useTPSL, setUseTPSL] = useState(false);
   const [balances, setBalances] = useState<Record<string, BalanceData>>({});
+  const [orderStatus, setOrderStatus] = useState<string>("");
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   // WebSocket for real-time market data and order placement
   const { lastMessage, sendMessage, isConnected } = useOrderWebSocket(
