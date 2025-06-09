@@ -100,12 +100,21 @@ export function MartingaleProgressDialog({
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Check bot cycles and orders
-        const cycleResponse = await fetch(`/api/bot-cycles/${botId}`);
+        const token = localStorage.getItem('auth_token');
+        const cycleResponse = await fetch(`/api/bot-cycles/${botId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
         if (cycleResponse.ok) {
           const cycles = await cycleResponse.json();
           if (cycles.length > 0) {
             // Check if base order was placed successfully
-            const ordersResponse = await fetch(`/api/bot-orders/${botId}`);
+            const ordersResponse = await fetch(`/api/bot-orders/${botId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            });
             if (ordersResponse.ok) {
               const orders = await ordersResponse.json();
               const baseOrder = orders.find((order: any) => order.orderType === 'base_order');
@@ -148,10 +157,12 @@ export function MartingaleProgressDialog({
     
     try {
       // Call the actual bot creation API
+      const token = localStorage.getItem('auth_token');
       const response = await fetch('/api/bots', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           name: `Martingale Bot - ${botConfig.symbol}`,

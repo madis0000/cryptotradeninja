@@ -1,0 +1,43 @@
+[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====
+[MARTINGALE STRATEGY] Bot ID: 8, Cycle ID: 8
+[MARTINGALE STRATEGY] ✓ Bot loaded: Martingale Bot - ICPUSDT (ICPUSDT, long)
+[MARTINGALE STRATEGY] ✓ Strategy: martingale, Exchange ID: 1
+[MARTINGALE STRATEGY] ✓ Exchange loaded: binance (testnet) (binance)
+[MARTINGALE STRATEGY] 📡 Fetching current price for ICPUSDT from Binance API...
+[MARTINGALE STRATEGY] ✓ Fetched price for ICPUSDT: $5.86300000
+[MARTINGALE STRATEGY] ✓ Market price for ICPUSDT: $5.863000
+[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:
+[MARTINGALE STRATEGY]    Investment Amount: $7.5
+[MARTINGALE STRATEGY]    Current Price: $5.863000
+[MARTINGALE STRATEGY]    Calculated Quantity: 1.27920860 ICP
+[MARTINGALE STRATEGY] ✓ Created base order record in database (ID: 5)
+[MARTINGALE STRATEGY] 🚀 Placing order on binance (testnet)...
+[MARTINGALE STRATEGY]    Order Type: MARKET BUY
+[MARTINGALE STRATEGY]    Symbol: ICPUSDT
+[MARTINGALE STRATEGY]    Quantity: 1.27920860
+[REST ORDER] Placing order via REST API: {
+  symbol: 'ICPUSDT',
+  side: 'BUY',
+  type: 'MARKET',
+  quantity: '1.27920860'
+}
+[REST ORDER] ❌ Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+[REST ORDER] Error placing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3088:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3234:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:305:11)
+[ORDER] Error preparing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3088:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3234:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:305:11)
+[MARTINGALE STRATEGY] ❌ Error placing base order for bot 8: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3088:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3032:16)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3234:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:305:11)
+[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====

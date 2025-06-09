@@ -3201,12 +3201,34 @@ export class WebSocketService {
 
       // Calculate base order quantity
       const baseOrderAmount = parseFloat(bot.baseOrderAmount);
-      const quantity = baseOrderAmount / currentPrice;
+      const rawQuantity = baseOrderAmount / currentPrice;
+
+      // Apply Binance lot size filters for ICPUSDT
+      // Most Binance pairs have a minimum quantity and step size requirement
+      let quantity = rawQuantity;
+      
+      // For ICPUSDT, typical requirements are:
+      // - Minimum quantity: 0.1 ICP
+      // - Step size: 0.1 ICP (quantities must be multiples of 0.1)
+      const minQuantity = 0.1;
+      const stepSize = 0.1;
+      
+      // Round down to nearest step size
+      quantity = Math.floor(quantity / stepSize) * stepSize;
+      
+      // Ensure minimum quantity is met
+      if (quantity < minQuantity) {
+        quantity = minQuantity;
+      }
+      
+      // Round to appropriate decimal places (1 decimal for ICP)
+      quantity = Math.round(quantity * 10) / 10;
 
       console.log(`[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:`);
       console.log(`[MARTINGALE STRATEGY]    Investment Amount: $${baseOrderAmount}`);
       console.log(`[MARTINGALE STRATEGY]    Current Price: $${currentPrice.toFixed(6)}`);
-      console.log(`[MARTINGALE STRATEGY]    Calculated Quantity: ${quantity.toFixed(8)} ${symbol.replace('USDT', '')}`);
+      console.log(`[MARTINGALE STRATEGY]    Raw Quantity: ${rawQuantity.toFixed(8)} ${symbol.replace('USDT', '')}`);
+      console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${quantity.toFixed(1)} ${symbol.replace('USDT', '')} (LOT_SIZE compliant)`);
 
       // Create the base order record
       const baseOrder = await storage.createCycleOrder({
@@ -3217,7 +3239,7 @@ export class WebSocketService {
         side: bot.direction === 'long' ? 'BUY' : 'SELL',
         orderCategory: 'MARKET',
         symbol: symbol,
-        quantity: quantity.toFixed(8),
+        quantity: quantity.toFixed(1),
         price: currentPrice.toFixed(8),
         status: 'pending'
       });
@@ -3235,7 +3257,7 @@ export class WebSocketService {
           symbol: symbol,
           side: bot.direction === 'long' ? 'BUY' : 'SELL',
           type: 'MARKET',
-          quantity: quantity.toFixed(8)
+          quantity: quantity.toFixed(1)
         });
 
         if (orderResult && orderResult.orderId) {
@@ -3243,7 +3265,7 @@ export class WebSocketService {
           await storage.updateCycleOrder(baseOrder.id, {
             exchangeOrderId: orderResult.orderId.toString(),
             status: 'filled',
-            filledQuantity: quantity.toFixed(8),
+            filledQuantity: quantity.toFixed(1),
             filledPrice: currentPrice.toFixed(8),
             filledAt: new Date()
           });
@@ -3274,12 +3296,19 @@ export class WebSocketService {
 
         } else {
           console.error(`[MARTINGALE STRATEGY] ❌ Failed to place base order for bot ${botId} - No order ID returned`);
-          await storage.updateCycleOrder(baseOrder.id, { status: 'failed' });
+          await storage.updateCycleOrder(baseOrder.id, { 
+            status: 'failed',
+            errorMessage: 'Order placement failed - No order ID returned from exchange'
+          });
         }
 
       } catch (orderError) {
         console.error(`[MARTINGALE STRATEGY] ❌ Error placing base order for bot ${botId}:`, orderError);
-        await storage.updateCycleOrder(baseOrder.id, { status: 'failed' });
+        const errorMessage = orderError instanceof Error ? orderError.message : 'Unknown order placement error';
+        await storage.updateCycleOrder(baseOrder.id, { 
+          status: 'failed',
+          errorMessage: errorMessage
+        });
       }
 
     } catch (error) {
