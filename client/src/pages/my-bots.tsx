@@ -51,6 +51,27 @@ export function MyBotsPage() {
     }
   });
 
+  // Stop bot mutation
+  const stopBotMutation = useMutation({
+    mutationFn: async (botId: number) => {
+      await apiRequest(`/api/bots/${botId}`, 'PUT', { isActive: false });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      toast({
+        title: "Bot Stopped",
+        description: "Trading bot has been successfully stopped.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Stop Failed",
+        description: error.message || "Failed to stop trading bot.",
+        variant: "destructive",
+      });
+    }
+  });
+
 
 
   const sidebarItems = [
@@ -329,6 +350,15 @@ export function MyBotsPage() {
                       onClick={() => setSelectedBot(bot)}
                     >
                       View Details
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="flex-1 text-xs border-red-600 hover:border-red-500 text-red-400"
+                      onClick={() => stopBotMutation.mutate(bot.id)}
+                      disabled={stopBotMutation.isPending}
+                    >
+                      Stop Bot
                     </Button>
                     <Button 
                       size="sm" 
