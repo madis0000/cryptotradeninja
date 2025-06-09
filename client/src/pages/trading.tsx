@@ -102,7 +102,7 @@ export default function Trading() {
               />
 
               {/* Order Form Section - Full Width */}
-              <OrderForm className="h-64 border-b border-gray-800" />
+              <OrderForm className="h-64 border-b border-gray-800" symbol={selectedSymbol} />
             </div>
           </div>
 
