@@ -73,6 +73,8 @@ export class WebSocketService {
   private currentKlineSubscriptions: string[] = [];
   private binanceKlineWs: WebSocket | null = null;
   private marketRefreshInterval: NodeJS.Timeout | null = null;
+  private pendingOrderRequests = new Map<string, { resolve: Function, reject: Function, timestamp: number }>();
+  private binanceOrderWs: WebSocket | null = null;
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -3007,59 +3009,88 @@ export class WebSocketService {
     }
   }
 
-  private async placeOrderOnExchange(exchange: any, orderParams: any) {
-    try {
-      const { decryptApiCredentials } = require('./encryption');
-      const crypto = require('crypto');
-      
-      // Decrypt API credentials
-      const { apiKey, apiSecret } = decryptApiCredentials(
-        exchange.encryptedApiKey,
-        exchange.encryptedApiSecret,
-        exchange.encryptionIv
-      );
+  private async placeOrderOnExchange(exchange: any, orderParams: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      try {
+        const { decryptApiCredentials } = require('./encryption');
+        const crypto = require('crypto');
+        
+        // Decrypt API credentials
+        const { apiKey, apiSecret } = decryptApiCredentials(
+          exchange.encryptedApiKey,
+          exchange.encryptedApiSecret,
+          exchange.encryptionIv
+        );
 
-      // Prepare order parameters
-      const params = new URLSearchParams({
-        symbol: orderParams.symbol,
-        side: orderParams.side,
-        type: orderParams.type,
-        quantity: orderParams.quantity,
-        timestamp: Date.now().toString()
-      });
+        // Generate unique request ID
+        const requestId = crypto.randomUUID();
+        
+        // Prepare order parameters for WebSocket API
+        const timestamp = Date.now();
+        const params: any = {
+          symbol: orderParams.symbol,
+          side: orderParams.side,
+          type: orderParams.type,
+          quantity: orderParams.quantity,
+          apiKey: apiKey,
+          timestamp: timestamp
+        };
 
-      // Create signature
-      const signature = crypto
-        .createHmac('sha256', apiSecret)
-        .update(params.toString())
-        .digest('hex');
-      
-      params.append('signature', signature);
+        // For MARKET orders, we don't need price or timeInForce
+        if (orderParams.type === 'LIMIT') {
+          params.price = orderParams.price;
+          params.timeInForce = 'GTC';
+        }
 
-      // Make API request to place order
-      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
-        method: 'POST',
-        headers: {
-          'X-MBX-APIKEY': apiKey,
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: params.toString()
-      });
+        // Create signature string for WebSocket API
+        const paramString = Object.keys(params)
+          .sort()
+          .map(key => `${key}=${params[key]}`)
+          .join('&');
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`[ORDER] Successfully placed order:`, result);
-        return result;
-      } else {
-        const error = await response.text();
-        console.error(`[ORDER] Failed to place order:`, error);
-        return null;
+        const signature = crypto
+          .createHmac('sha256', apiSecret)
+          .update(paramString)
+          .digest('hex');
+
+        params.signature = signature;
+
+        // Create WebSocket order message
+        const orderMessage = {
+          id: requestId,
+          method: "order.place",
+          params: params
+        };
+
+        console.log(`[WS ORDER] Placing order via WebSocket:`, {
+          symbol: orderParams.symbol,
+          side: orderParams.side,
+          type: orderParams.type,
+          quantity: orderParams.quantity
+        });
+
+        // Store the resolve/reject functions for this request
+        this.pendingOrderRequests.set(requestId, { resolve, reject, timestamp: Date.now() });
+
+        // Send order via WebSocket
+        if (this.sendOrderToWebSocket(exchange, orderMessage)) {
+          // Set timeout for order response
+          setTimeout(() => {
+            if (this.pendingOrderRequests.has(requestId)) {
+              this.pendingOrderRequests.delete(requestId);
+              reject(new Error('Order request timeout'));
+            }
+          }, 10000); // 10 second timeout
+        } else {
+          this.pendingOrderRequests.delete(requestId);
+          reject(new Error('Failed to send order via WebSocket'));
+        }
+
+      } catch (error) {
+        console.error('[WS ORDER] Error preparing order:', error);
+        reject(error);
       }
-
-    } catch (error) {
-      console.error('[ORDER] Error placing order on exchange:', error);
-      return null;
-    }
+    });
   }
 
   public async placeInitialBaseOrder(botId: number, cycleId: number) {
@@ -3320,6 +3351,90 @@ export class WebSocketService {
       clearInterval(this.orderMonitoringInterval);
       this.orderMonitoringInterval = null;
       console.log('[ORDER MONITOR] Order monitoring stopped');
+    }
+  }
+
+  private sendOrderToWebSocket(exchange: any, orderMessage: any): boolean {
+    try {
+      // Create or use existing WebSocket connection for orders
+      if (!this.binanceOrderWs || this.binanceOrderWs.readyState !== WebSocket.OPEN) {
+        this.createOrderWebSocketConnection(exchange);
+      }
+
+      if (this.binanceOrderWs && this.binanceOrderWs.readyState === WebSocket.OPEN) {
+        this.binanceOrderWs.send(JSON.stringify(orderMessage));
+        console.log(`[WS ORDER] ✓ Order message sent via WebSocket`);
+        return true;
+      } else {
+        console.error(`[WS ORDER] ❌ WebSocket connection not ready`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`[WS ORDER] ❌ Error sending order via WebSocket:`, error);
+      return false;
+    }
+  }
+
+  private createOrderWebSocketConnection(exchange: any) {
+    try {
+      // Determine WebSocket endpoint based on exchange type
+      const wsEndpoint = exchange.exchangeType === 'binance' 
+        ? (exchange.name.includes('testnet') 
+            ? 'wss://testnet.binance.vision/ws-api/v3'
+            : 'wss://ws-api.binance.com/ws-api/v3')
+        : exchange.wsApiEndpoint;
+
+      console.log(`[WS ORDER] Creating order WebSocket connection to: ${wsEndpoint}`);
+
+      this.binanceOrderWs = new WebSocket(wsEndpoint);
+
+      this.binanceOrderWs.on('open', () => {
+        console.log(`[WS ORDER] ✓ Connected to ${exchange.name} order WebSocket`);
+      });
+
+      this.binanceOrderWs.on('message', (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+          this.handleOrderResponse(message);
+        } catch (error) {
+          console.error(`[WS ORDER] Error parsing order response:`, error);
+        }
+      });
+
+      this.binanceOrderWs.on('error', (error) => {
+        console.error(`[WS ORDER] WebSocket error:`, error);
+      });
+
+      this.binanceOrderWs.on('close', () => {
+        console.log(`[WS ORDER] WebSocket connection closed`);
+        this.binanceOrderWs = null;
+      });
+
+    } catch (error) {
+      console.error(`[WS ORDER] Error creating WebSocket connection:`, error);
+    }
+  }
+
+  private handleOrderResponse(message: any) {
+    try {
+      if (message.id && this.pendingOrderRequests.has(message.id)) {
+        const { resolve, reject } = this.pendingOrderRequests.get(message.id)!;
+        this.pendingOrderRequests.delete(message.id);
+
+        if (message.status === 200 && message.result) {
+          console.log(`[WS ORDER] ✓ Order executed successfully:`, {
+            orderId: message.result.orderId,
+            symbol: message.result.symbol,
+            status: message.result.status
+          });
+          resolve(message.result);
+        } else {
+          console.error(`[WS ORDER] ❌ Order failed:`, message);
+          reject(new Error(`Order failed: ${message.error?.msg || 'Unknown error'}`));
+        }
+      }
+    } catch (error) {
+      console.error(`[WS ORDER] Error handling order response:`, error);
     }
   }
 }
