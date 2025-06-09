@@ -71,6 +71,7 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
   
   // Bot creation state
   const [isCreatingBot, setIsCreatingBot] = useState(false);
+  const [createdBotId, setCreatedBotId] = useState<string | null>(null);
 
   // WebSocket for real-time balance updates
   const { connect, subscribeToBalance, unsubscribeFromBalance } = useWebSocket({
@@ -117,31 +118,13 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Handle progress dialog completion
-  const handleProgressComplete = (botId: string) => {
-    setProgressDialogOpen(false);
+  // Handle bot creation completion (called automatically via notifications)
+  const handleBotCreationComplete = () => {
     setIsCreatingBot(false);
-    
-    toast({
-      title: "Bot Created Successfully",
-      description: `Martingale bot ${botId} is now running with all orders placed`
-    });
     
     // Invalidate queries to refresh bot list
     queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
     onBotCreated?.();
-  };
-
-  // Handle progress dialog error
-  const handleProgressError = (error: string) => {
-    setProgressDialogOpen(false);
-    setIsCreatingBot(false);
-    
-    toast({
-      title: "Bot Creation Failed",
-      description: error,
-      variant: "destructive"
-    });
   };
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -174,8 +157,7 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     setConfig(prev => ({ ...prev, [field]: newValue.toString() }));
   };
 
-  // Store created bot ID for progress dialog
-  const [createdBotId, setCreatedBotId] = useState<string | null>(null);
+
 
   // Create bot mutation
   const createBotMutation = useMutation({
@@ -205,6 +187,9 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
         description: `Martingale bot for ${selectedSymbol} has been created and is starting trades`,
         variant: "default"
       });
+      
+      // Complete bot creation process
+      handleBotCreationComplete();
     },
     onError: (error: any) => {
       setIsCreatingBot(false);
@@ -213,7 +198,6 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
       const errorData = error.response?.data;
       if (errorData?.botId) {
         setCreatedBotId(errorData.botId.toString());
-        setProgressDialogOpen(true); // Still show progress dialog to track the failed bot
         toast({
           title: "Bot Created with Errors",
           description: `Bot was saved but order placement failed: ${error.message}`,
