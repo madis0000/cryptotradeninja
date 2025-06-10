@@ -37,7 +37,7 @@ export function useChartWebSocket(
     setStatus('connecting');
     
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/trading-ws`;
+    const wsUrl = `${protocol}//${window.location.hostname}:3001`;
     
     try {
       const ws = new WebSocket(wsUrl);

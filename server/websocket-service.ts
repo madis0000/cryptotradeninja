@@ -84,10 +84,10 @@ export class WebSocketService {
   private listenKeys = new Map<number, string>(); // exchangeId -> listenKey
 
   constructor(server: Server) {
-    // WebSocket server integrated with HTTP server to avoid port conflicts
+    // WebSocket server on separate port to avoid Vite conflicts
     this.wss = new WebSocketServer({ 
-      server: server,
-      path: '/trading-ws'
+      port: 3001,
+      host: '0.0.0.0'
     });
 
     this.setupWebSocket();
