@@ -174,17 +174,24 @@ export function MyBotsPage() {
     
     groups[cycleNumber].orders.push(order);
     
-    // Calculate cycle P&L
+    // Calculate cycle P&L including trading fees
     const filledPrice = parseFloat(order.filledPrice || order.price || '0');
     const filledQty = parseFloat(order.filledQuantity || order.quantity || '0');
     const orderValue = filledPrice * filledQty;
+    const fee = parseFloat(order.fee || '0');
     
     if (order.side?.toUpperCase() === 'BUY') {
-      groups[cycleNumber].totalBought += orderValue;
+      // For buy orders: cost = order value + fee (assuming fee is in quote currency like USDT)
+      // If fee is in base currency (like DOGE), we'd need to convert it
+      const feeInQuoteCurrency = order.feeAsset === 'USDT' || order.feeAsset === 'BUSD' ? fee : fee * filledPrice;
+      groups[cycleNumber].totalBought += orderValue + feeInQuoteCurrency;
     } else if (order.side?.toUpperCase() === 'SELL') {
-      groups[cycleNumber].totalSold += orderValue;
+      // For sell orders: revenue = order value - fee (fee reduces the received amount)
+      const feeInQuoteCurrency = order.feeAsset === 'USDT' || order.feeAsset === 'BUSD' ? fee : fee * filledPrice;
+      groups[cycleNumber].totalSold += orderValue - feeInQuoteCurrency;
     }
     
+    // Calculate net P&L after fees
     groups[cycleNumber].pnl = groups[cycleNumber].totalSold - groups[cycleNumber].totalBought;
     
     return groups;
@@ -760,6 +767,15 @@ export function MyBotsPage() {
                                     </td>
                                     <td className="py-2 px-4 text-white font-mono">
                                       ${orderValue.toFixed(2)}
+                                    </td>
+                                    <td className="py-2 px-4">
+                                      {order.fee && parseFloat(order.fee) > 0 ? (
+                                        <span className="text-xs text-crypto-light font-mono">
+                                          {parseFloat(order.fee).toFixed(4)} {order.feeAsset || 'USDT'}
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-crypto-light">-</span>
+                                      )}
                                     </td>
                                     <td className="py-2 px-4 text-crypto-light text-xs">
                                       {order.filledAt ? new Date(order.filledAt).toLocaleString() : 
