@@ -679,125 +679,49 @@ export function MyBotsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Bot Details Header - Table Layout */}
-            <div className="bg-crypto-darker border border-gray-800 rounded-lg overflow-hidden">
-              <table className="w-full">
-                <tbody>
-                  {/* First Row - Main Metrics */}
-                  <tr>
-                    <td className="w-4/5 p-0">
-                      <table className="w-full">
-                        <tbody>
-                          <tr>
-                            <td className="w-1/7 p-4 border-r border-gray-700 text-center">
-                              <div className="text-sm text-crypto-light mb-1">Base Order</div>
-                              <div className="text-lg font-bold text-green-400">
-                                ${parseFloat(selectedBot?.baseOrderAmount || '0').toFixed(4)}
-                              </div>
-                              <div className="text-xs text-crypto-light">Initial order size</div>
-                            </td>
-                            <td className="w-1/7 p-4 border-r border-gray-700 text-center">
-                              <div className="text-sm text-crypto-light mb-1">Safety Order</div>
-                              <div className="text-lg font-bold text-blue-400">
-                                ${parseFloat(selectedBot?.safetyOrderAmount || '0').toFixed(4)}
-                              </div>
-                              <div className="text-xs text-crypto-light">DCA order size</div>
-                            </td>
-                            <td className="w-1/7 p-4 border-r border-gray-700 text-center">
-                              <div className="text-sm text-crypto-light mb-1">Max Safety Orders</div>
-                              <div className="text-lg font-bold text-yellow-400">
-                                {selectedBot?.maxSafetyOrders || 0}
-                              </div>
-                              <div className="text-xs text-crypto-light">DCA limit</div>
-                            </td>
-                            <td className="w-1/7 p-4 border-r border-gray-700 text-center">
-                              <div className="text-sm text-crypto-light mb-1">Price Deviation</div>
-                              <div className="text-lg font-bold text-purple-400">
-                                {parseFloat(selectedBot?.priceDeviation || '0').toFixed(4)}%
-                              </div>
-                              <div className="text-xs text-crypto-light">DCA trigger</div>
-                            </td>
-                            <td className="w-1/7 p-4 border-r border-gray-700 text-center">
-                              <div className="text-sm text-crypto-light mb-1">Current Cycle</div>
-                              <div className="text-lg font-bold text-blue-400">
-                                #{currentCycle?.cycleNumber || 1}
-                              </div>
-                              <div className="text-xs text-crypto-light">Cycle number</div>
-                            </td>
-                            <td className="w-1/7 p-4 border-r border-gray-700 text-center">
-                              <div className="text-sm text-crypto-light mb-1">Cycle P&L</div>
-                              <div className={`text-lg font-bold ${parseFloat(selectedBotData?.totalPnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                ${parseFloat(selectedBotData?.totalPnl || '0').toFixed(2)}
-                              </div>
-                              <div className="text-xs text-crypto-light">Current profit</div>
-                            </td>
-                            <td className="w-1/7 p-4 text-center">
-                              <div className="text-sm text-crypto-light mb-1">Total P&L</div>
-                              <div className={`text-lg font-bold ${parseFloat(selectedBotData?.totalPnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                ${parseFloat(selectedBotData?.totalPnl || '0').toFixed(2)}
-                              </div>
-                              <div className="text-xs text-crypto-light">All-time profit</div>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </td>
-                    <td className="w-1/5 p-4 border-l border-gray-700">
-                      <div className="text-sm text-crypto-light mb-2 font-medium">Position Details</div>
-                      <div className="space-y-2">
-                        {marketData && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-crypto-light">Live Price</span>
-                            <span className="text-sm font-mono text-white">
-                              ${parseFloat(marketData.price || '0').toFixed(4)}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-crypto-light">Average Entry</span>
-                          <span className="text-sm font-mono text-white">
-                            ${averageEntryPrice.toFixed(4)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-crypto-light">Position</span>
-                          <span className="text-sm font-mono text-white">
-                            {totalPositionSize.toFixed(1)} {selectedBot?.tradingPair?.replace('USDT', '')}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-crypto-light">Total Invested</span>
-                          <span className="text-sm font-mono text-yellow-400">
-                            ${totalInvested.toFixed(2)}
-                          </span>
-                        </div>
-                        {averageEntryPrice > 0 && marketData && (
-                          <div className="pt-1 border-t border-gray-700">
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs text-crypto-light">P&L %</span>
-                              <span className={`text-sm font-medium ${
-                                parseFloat(marketData.price || '0') >= averageEntryPrice ? 'text-green-400' : 'text-red-400'
-                              }`}>
-                                {parseFloat(marketData.price || '0') > averageEntryPrice ? '+' : ''}
-                                {(((parseFloat(marketData.price || '0') - averageEntryPrice) / averageEntryPrice) * 100).toFixed(2)}%
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  {/* Second Row - TBD */}
-                  <tr className="border-t border-gray-700">
-                    <td className="p-4 text-center text-crypto-light">
-                      <div className="text-sm">TR - Additional metrics row (TBD)</div>
-                    </td>
-                    <td className="p-4 border-l border-gray-700 text-center text-crypto-light">
-                      <div className="text-sm">TD - Future details</div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            {/* Bot Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-lg">Current Cycle</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-400">
+                    {currentCycle ? `#${currentCycle.cycleNumber || 1}` : 'No Active Cycle'}
+                  </div>
+                  <p className="text-sm text-crypto-light mt-2">
+                    {currentCycle?.status === 'active' ? 'Running' : 'Completed'}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-lg">Bot P&L</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${parseFloat(selectedBotData?.totalPnl || '0') >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${parseFloat(selectedBotData?.totalPnl || '0').toFixed(4)}
+                  </div>
+                  <p className="text-sm text-crypto-light mt-2">
+                    {selectedBotData?.totalTrades || 0} trades completed
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-crypto-darker border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-white text-lg">Total Invested</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-yellow-400">
+                    ${totalInvested.toFixed(4)}
+                  </div>
+                  <p className="text-sm text-crypto-light mt-2">
+                    {totalPositionSize.toFixed(1)} {selectedBot?.tradingPair?.replace('USDT', '')} held
+                  </p>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Bot Sections */}
