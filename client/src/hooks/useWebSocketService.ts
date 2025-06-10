@@ -131,8 +131,7 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     
     // Connect to our unified WebSocket service on dedicated port
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const hostname = window.location.hostname;
-    const ws = new WebSocket(`${protocol}//${hostname}:8080`);
+    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {

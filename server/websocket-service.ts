@@ -104,7 +104,6 @@ export class WebSocketService {
   }
 
   private setupWebSocket() {
-    const wsPort = parseInt(process.env.WS_PORT || '8080');
     // Removed verbose WebSocket logging
     
     this.wss.on('connection', (ws, request) => {
