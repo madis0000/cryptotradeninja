@@ -3390,11 +3390,22 @@ export class WebSocketService {
       console.log(`[MARTINGALE STRATEGY]    Fill Quantity: ${order.quantity}`);
       console.log(`[MARTINGALE STRATEGY]    Cycle Number: ${cycle.cycleNumber || 1}`);
 
-      // Calculate profit
-      const totalInvested = parseFloat(cycle.totalInvested || '0');
+      // Calculate profit - Get actual total investment from all filled buy orders
+      const allCycleOrders = await storage.getCycleOrders(cycle.id);
+      const filledBuyOrders = allCycleOrders.filter(ord => 
+        (ord.orderType === 'base_order' || ord.orderType === 'safety_order') && 
+        ord.side === 'BUY' && 
+        ord.status === 'filled' &&
+        ord.price && ord.quantity
+      );
+      
+      const totalInvested = filledBuyOrders.reduce((sum, ord) => {
+        return sum + (parseFloat(ord.quantity) * parseFloat(ord.price || '0'));
+      }, 0);
+      
       const totalReceived = parseFloat(order.quantity) * parseFloat(order.price || '0');
       const profit = totalReceived - totalInvested;
-      const profitPercentage = (profit / totalInvested) * 100;
+      const profitPercentage = totalInvested > 0 ? (profit / totalInvested) * 100 : 0;
 
       console.log(`[MARTINGALE STRATEGY] 💰 PROFIT CALCULATION:`);
       console.log(`[MARTINGALE STRATEGY]    Total Invested: $${totalInvested.toFixed(2)}`);
