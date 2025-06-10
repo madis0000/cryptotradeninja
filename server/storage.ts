@@ -57,6 +57,7 @@ export interface IStorage {
   updateBotCycle(cycleId: number, updates: Partial<InsertBotCycle>): Promise<BotCycle>;
   completeBotCycle(cycleId: number): Promise<void>;
   getBotCyclesByBotId(botId: number): Promise<BotCycle[]>;
+  getBotCyclesByUserId(userId: number): Promise<BotCycle[]>;
 
   // Cycle Order Management
   createCycleOrder(order: InsertCycleOrder): Promise<CycleOrder>;
@@ -305,6 +306,15 @@ export class DatabaseStorage implements IStorage {
         completedAt: new Date()
       })
       .where(eq(botCycles.id, cycleId));
+  }
+
+  async getBotCyclesByUserId(userId: number): Promise<BotCycle[]> {
+    const cycles = await db
+      .select()
+      .from(botCycles)
+      .where(eq(botCycles.userId, userId))
+      .orderBy(desc(botCycles.createdAt));
+    return cycles;
   }
 
   // Cycle Order Management

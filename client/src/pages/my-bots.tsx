@@ -109,6 +109,12 @@ export function MyBotsPage() {
     refetchInterval: 30000 // Refetch every 30 seconds for fresh data
   });
 
+  // Fetch completed cycle profits for total realized P&L
+  const { data: cycleProfits = [] } = useQuery({
+    queryKey: ['/api/cycle-profits'],
+    refetchInterval: 30000 // Refetch every 30 seconds for fresh data
+  });
+
   // Dynamic Unrealized P&L calculation using database cycle data + live prices
   const calculateUnrealizedPnL = (bot: any) => {
     // Get current market price for the bot's trading pair

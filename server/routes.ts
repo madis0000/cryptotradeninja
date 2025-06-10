@@ -602,6 +602,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get completed cycle profits for user - Secured
+  app.get("/api/cycle-profits", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      const completedCycles = await storage.getBotCyclesByUserId(userId);
+      const cycleProfits = completedCycles
+        .filter(cycle => cycle.completedAt)
+        .map(cycle => ({
+          botId: cycle.botId,
+          cycleProfit: parseFloat(cycle.cycleProfit || '0')
+        }));
+      
+      res.json(cycleProfits);
+    } catch (error) {
+      console.error('Error fetching cycle profits:', error);
+      res.status(500).json({ error: "Failed to fetch cycle profits" });
+    }
+  });
+
   // Individual bot API - Secured
   app.get("/api/bots/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
