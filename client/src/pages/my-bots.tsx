@@ -137,8 +137,12 @@ export function MyBotsPage() {
     enabled: !!selectedBot?.id
   });
 
-  // Get current active cycle
-  const currentCycle = botCycles.find((cycle: any) => cycle.status === 'active') || botCycles[0];
+  // Get current active cycle (highest cycle number)
+  const currentCycle = botCycles.length > 0 
+    ? botCycles.reduce((latest: any, cycle: any) => {
+        return (!latest || cycle.cycleNumber > latest.cycleNumber) ? cycle : latest;
+      }, null)
+    : null;
 
   // Filter orders for current cycle and history
   const currentCycleOrders = botOrders.filter((order: any) => {
