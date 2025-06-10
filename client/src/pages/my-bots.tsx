@@ -47,6 +47,23 @@ export function MyBotsPage() {
     }
   };
 
+  const formatBotAge = (createdAt: string) => {
+    try {
+      const created = new Date(createdAt);
+      const now = new Date();
+      const diffInMs = now.getTime() - created.getTime();
+      
+      const days = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diffInMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diffInMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diffInMs % (1000 * 60)) / 1000);
+      
+      return `Days:${days} - ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    } catch {
+      return 'Days:0 - 00:00:00';
+    }
+  };
+
   // Fetch bots data (event-driven updates only)
   const { data: bots = [], isLoading: botsLoading } = useQuery<any[]>({
     queryKey: ['/api/bots']
@@ -104,19 +121,21 @@ export function MyBotsPage() {
     // Get bot orders from database to calculate actual position
     const botOrders = allBotOrders[bot.id] || [];
     
-    // Filter filled buy orders from current active cycle
-    const filledBuyOrders = botOrders.filter((order: any) => 
-      order.side === 'BUY' && order.status === 'filled'
+    // Filter filled buy orders from CURRENT ACTIVE CYCLE only (not completed cycles)
+    const activeCycleOrders = botOrders.filter((order: any) => 
+      order.side === 'BUY' && 
+      order.status === 'filled' && 
+      !order.completedAt // Only orders from current active cycle
     );
     
-    if (filledBuyOrders.length === 0) return 0;
+    if (activeCycleOrders.length === 0) return 0;
     
-    // Calculate actual position from filled orders
-    const totalPositionSize = filledBuyOrders.reduce((total: number, order: any) => {
+    // Calculate actual position from current active cycle filled orders only
+    const totalPositionSize = activeCycleOrders.reduce((total: number, order: any) => {
       return total + parseFloat(order.filledQuantity || order.quantity || '0');
     }, 0);
     
-    const totalInvested = filledBuyOrders.reduce((total: number, order: any) => {
+    const totalInvested = activeCycleOrders.reduce((total: number, order: any) => {
       const price = parseFloat(order.filledPrice || order.price || '0');
       const qty = parseFloat(order.filledQuantity || order.quantity || '0');
       return total + (price * qty);
@@ -130,9 +149,9 @@ export function MyBotsPage() {
     // Real-time unrealized P&L: (current_price - avg_entry_price) × position_size
     const unrealizedPnL = (currentPrice - averageEntryPrice) * totalPositionSize;
     
-    // Log for debugging - shows dynamic updates with real data
+    // Log for debugging - shows dynamic updates with real data (CURRENT CYCLE ONLY)
     if (unrealizedPnL !== 0) {
-      console.log(`[UNREALIZED P&L] ${bot.tradingPair}: Current: $${currentPrice}, Entry: $${averageEntryPrice.toFixed(6)}, Position: ${totalPositionSize.toFixed(4)}, P&L: $${unrealizedPnL.toFixed(4)}`);
+      console.log(`[UNREALIZED P&L - Current Cycle] ${bot.tradingPair}: Current: $${currentPrice}, Entry: $${averageEntryPrice.toFixed(6)}, Position: ${totalPositionSize.toFixed(4)}, P&L: $${unrealizedPnL.toFixed(4)}`);
     }
     
     return unrealizedPnL;
@@ -353,10 +372,15 @@ export function MyBotsPage() {
                               </div>
                             </div>
                             
-                            {/* Created Date */}
-                            <div className="flex items-center text-xs text-gray-500 border-t border-gray-700/50 pt-3">
-                              <Calendar className="w-3 h-3 mr-2" />
-                              Created: {formatDateTime(detailedBot.createdAt)}
+                            {/* Created Date and Bot Age */}
+                            <div className="border-t border-gray-700/50 pt-3 space-y-1">
+                              <div className="flex items-center text-xs text-gray-500">
+                                <Calendar className="w-3 h-3 mr-2" />
+                                Created: {formatDateTime(detailedBot.createdAt)}
+                              </div>
+                              <div className="text-xs text-green-400 font-mono">
+                                Age: {formatBotAge(detailedBot.createdAt)}
+                              </div>
                             </div>
                             
                             {/* Action Buttons */}
@@ -519,10 +543,15 @@ export function MyBotsPage() {
                               </div>
                             </div>
                             
-                            {/* Created Date */}
-                            <div className="flex items-center text-xs text-gray-600 border-t border-gray-600/30 pt-3">
-                              <Calendar className="w-3 h-3 mr-2" />
-                              Created: {formatDateTime(detailedBot.createdAt)}
+                            {/* Created Date and Bot Age */}
+                            <div className="border-t border-gray-600/30 pt-3 space-y-1">
+                              <div className="flex items-center text-xs text-gray-600">
+                                <Calendar className="w-3 h-3 mr-2" />
+                                Created: {formatDateTime(detailedBot.createdAt)}
+                              </div>
+                              <div className="text-xs text-gray-400 font-mono">
+                                Age: {formatBotAge(detailedBot.createdAt)}
+                              </div>
                             </div>
                             
                             {/* Action Buttons */}
