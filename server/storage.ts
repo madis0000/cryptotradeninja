@@ -9,7 +9,7 @@ import {
   type CycleOrder, type InsertCycleOrder
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, sum, count } from "drizzle-orm";
+import { eq, desc, and, sum, count, isNotNull } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -225,11 +225,11 @@ export class DatabaseStorage implements IStorage {
       return acc + (parseFloat(item.amount) * parseFloat(item.averagePrice));
     }, 0);
 
-    // Get total P&L from bots
+    // Get total P&L from completed bot cycles
     const [pnlResult] = await db
-      .select({ totalPnl: sum(tradingBots.totalPnl) })
-      .from(tradingBots)
-      .where(eq(tradingBots.userId, userId));
+      .select({ totalPnl: sum(botCycles.cycleProfit) })
+      .from(botCycles)
+      .where(and(eq(botCycles.userId, userId), isNotNull(botCycles.completedAt)));
 
     // Get active bots count
     const [activeBotsResult] = await db

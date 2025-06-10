@@ -128,6 +128,9 @@ export const botCycles = pgTable("bot_cycles", {
   totalInvested: decimal("total_invested", { precision: 20, scale: 8 }).default("0"),
   totalQuantity: decimal("total_quantity", { precision: 20, scale: 8 }).default("0"),
   
+  // P&L tracking
+  cycleProfit: decimal("cycle_profit", { precision: 20, scale: 8 }).default("0"),
+  
   // Safety order tracking
   filledSafetyOrders: integer("filled_safety_orders").default(0),
   maxSafetyOrders: integer("max_safety_orders").notNull(),
