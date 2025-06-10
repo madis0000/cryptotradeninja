@@ -313,8 +313,8 @@ export function MyBotsPage() {
                                 </div>
                               </div>
                               <div className="text-center">
-                                <div className={`text-lg font-bold font-mono ${unrealizedPnL >= 0 ? 'text-yellow-400' : 'text-orange-400'}`}>
-                                  {unrealizedPnL >= 0 ? '+' : ''}${formatCurrency(unrealizedPnL)}
+                                <div className={`text-lg font-bold font-mono ${unrealizedPnL > 0 ? 'text-green-400' : unrealizedPnL < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                                  {unrealizedPnL > 0 ? '+' : ''}${formatCurrency(unrealizedPnL)}
                                 </div>
                                 <div className="text-xs text-gray-400 flex items-center justify-center">
                                   <Target className="w-3 h-3 mr-1" />
@@ -362,12 +362,6 @@ export function MyBotsPage() {
                                 <span className="text-gray-400">Daily P&L:</span>
                                 <div className={`font-mono font-medium ${dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                   {dailyPnL >= 0 ? '+' : ''}${formatCurrency(dailyPnL)}
-                                </div>
-                              </div>
-                              <div>
-                                <span className="text-gray-400">Unrealized Daily P&L:</span>
-                                <div className={`font-mono font-medium ${unrealizedDailyPnL >= 0 ? 'text-yellow-400' : 'text-orange-400'}`}>
-                                  {unrealizedDailyPnL >= 0 ? '+' : ''}${formatCurrency(unrealizedDailyPnL)}
                                 </div>
                               </div>
                             </div>
@@ -484,8 +478,8 @@ export function MyBotsPage() {
                                 </div>
                               </div>
                               <div className="text-center">
-                                <div className={`text-lg font-bold font-mono ${unrealizedPnL >= 0 ? 'text-yellow-400/60' : 'text-orange-400/60'}`}>
-                                  {unrealizedPnL >= 0 ? '+' : ''}${formatCurrency(unrealizedPnL)}
+                                <div className={`text-lg font-bold font-mono ${unrealizedPnL > 0 ? 'text-green-400/60' : unrealizedPnL < 0 ? 'text-red-400/60' : 'text-gray-400/60'}`}>
+                                  {unrealizedPnL > 0 ? '+' : ''}${formatCurrency(unrealizedPnL)}
                                 </div>
                                 <div className="text-xs text-gray-500 flex items-center justify-center">
                                   <Target className="w-3 h-3 mr-1" />
@@ -533,12 +527,6 @@ export function MyBotsPage() {
                                 <span className="text-gray-500">Daily P&L:</span>
                                 <div className={`font-mono font-medium ${dailyPnL >= 0 ? 'text-green-400/80' : 'text-red-400/80'}`}>
                                   {dailyPnL >= 0 ? '+' : ''}${formatCurrency(dailyPnL)}
-                                </div>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Unrealized Daily P&L:</span>
-                                <div className={`font-mono font-medium ${unrealizedDailyPnL >= 0 ? 'text-yellow-400/60' : 'text-orange-400/60'}`}>
-                                  {unrealizedDailyPnL >= 0 ? '+' : ''}${formatCurrency(unrealizedDailyPnL)}
                                 </div>
                               </div>
                             </div>
