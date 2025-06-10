@@ -572,15 +572,44 @@ export function MyBotsPage() {
                                 {parseFloat(order.quantity || '0').toFixed(6)}
                               </td>
                               <td className="py-3 px-4">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  order.status === 'filled' ? 'bg-green-500/10 text-green-400' :
-                                  order.status === 'placed' ? 'bg-blue-500/10 text-blue-400' :
-                                  order.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400' :
-                                  order.status === 'cancelled' ? 'bg-gray-500/10 text-gray-400' :
-                                  'bg-red-500/10 text-red-400'
-                                }`}>
-                                  {order.status}
-                                </span>
+                                <div className="flex flex-col">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium inline-block w-fit ${
+                                    order.status === 'filled' ? 'bg-green-500/10 text-green-400' :
+                                    order.status === 'placed' ? 'bg-blue-500/10 text-blue-400' :
+                                    order.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400' :
+                                    order.status === 'cancelled' ? 'bg-gray-500/10 text-gray-400' :
+                                    'bg-red-500/10 text-red-400'
+                                  }`}>
+                                    {order.status === 'pending' ? 'Pending' :
+                                     order.status === 'placed' ? 'Placed' :
+                                     order.status === 'filled' ? 'Filled' :
+                                     order.status === 'cancelled' ? 'Cancelled' :
+                                     order.status}
+                                  </span>
+                                  {/* Fill percentage display */}
+                                  {(() => {
+                                    const originalQty = parseFloat(order.quantity || '0');
+                                    const filledQty = parseFloat(order.filledQuantity || '0');
+                                    
+                                    if (order.status === 'filled') {
+                                      return <span className="text-xs text-green-400 mt-1">100% filled</span>;
+                                    } else if (order.status === 'pending') {
+                                      return <span className="text-xs text-yellow-400 mt-1">0% filled</span>;
+                                    } else if (order.status === 'placed') {
+                                      if (filledQty > 0 && originalQty > 0) {
+                                        const fillPercentage = (filledQty / originalQty) * 100;
+                                        return (
+                                          <span className="text-xs text-blue-400 mt-1">
+                                            {fillPercentage.toFixed(1)}% filled
+                                          </span>
+                                        );
+                                      } else {
+                                        return <span className="text-xs text-blue-400 mt-1">0% filled</span>;
+                                      }
+                                    }
+                                    return null;
+                                  })()}
+                                </div>
                               </td>
                               <td className="py-3 px-4 text-crypto-light text-xs">
                                 {order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}

@@ -3104,9 +3104,8 @@ export class WebSocketService {
         ? averagePrice * (1 - adjustedDeviation / 100)
         : averagePrice * (1 + adjustedDeviation / 100);
 
-      // Apply Binance PRICE_FILTER requirements for ICPUSDT
-      const tickSize = 0.001;
-      const safetyOrderPrice = Math.round(rawSafetyOrderPrice / tickSize) * tickSize;
+      // Apply dynamic price filter using centralized function
+      const safetyOrderPrice = this.adjustPriceForSymbol(rawSafetyOrderPrice, bot.tradingPair);
 
       // Calculate safety order quantity
       const safetyOrderAmount = parseFloat(bot.safetyOrderAmount);
@@ -3116,9 +3115,9 @@ export class WebSocketService {
       const adjustedAmount = safetyOrderAmount * Math.pow(sizeMultiplier, currentSafetyOrders);
       const rawQuantity = adjustedAmount / safetyOrderPrice;
 
-      // Apply LOT_SIZE filter for quantity (0.1 ICP increments)
-      const stepSize = 0.1;
-      const quantity = Math.round(rawQuantity / stepSize) * stepSize;
+      // Apply dynamic LOT_SIZE filter using centralized function
+      const quantity = this.adjustQuantityForSymbol(rawQuantity, bot.tradingPair);
+      const filters = this.getSymbolFilters(bot.tradingPair);
 
       console.log(`[MARTINGALE STRATEGY] 📊 SAFETY ORDER ${currentSafetyOrders + 1} CALCULATION:`);
       console.log(`[MARTINGALE STRATEGY]    Current Average Price: $${averagePrice.toFixed(6)}`);
@@ -3126,12 +3125,12 @@ export class WebSocketService {
       console.log(`[MARTINGALE STRATEGY]    Deviation Multiplier: ${deviationMultiplier}x`);
       console.log(`[MARTINGALE STRATEGY]    Adjusted Deviation: ${adjustedDeviation.toFixed(2)}%`);
       console.log(`[MARTINGALE STRATEGY]    Raw SO Price: $${rawSafetyOrderPrice.toFixed(8)}`);
-      console.log(`[MARTINGALE STRATEGY]    Adjusted SO Price: $${safetyOrderPrice.toFixed(3)} (PRICE_FILTER compliant)`);
+      console.log(`[MARTINGALE STRATEGY]    Adjusted SO Price: $${safetyOrderPrice.toFixed(filters.priceDecimals)} (PRICE_FILTER compliant)`);
       console.log(`[MARTINGALE STRATEGY]    Base Amount: $${safetyOrderAmount}`);
       console.log(`[MARTINGALE STRATEGY]    Size Multiplier: ${sizeMultiplier}x`);
       console.log(`[MARTINGALE STRATEGY]    Adjusted Amount: $${adjustedAmount.toFixed(2)}`);
       console.log(`[MARTINGALE STRATEGY]    Raw Quantity: ${rawQuantity.toFixed(8)}`);
-      console.log(`[MARTINGALE STRATEGY]    Final Quantity: ${quantity.toFixed(1)} (LOT_SIZE compliant)`);
+      console.log(`[MARTINGALE STRATEGY]    Final Quantity: ${quantity.toFixed(filters.qtyDecimals)} (LOT_SIZE compliant)`);
 
       // Create safety order record
       const safetyOrder = await storage.createCycleOrder({
@@ -3142,8 +3141,8 @@ export class WebSocketService {
         side: bot.direction === 'long' ? 'BUY' : 'SELL',
         orderCategory: 'LIMIT',
         symbol: bot.tradingPair,
-        quantity: quantity.toFixed(1),
-        price: safetyOrderPrice.toFixed(3),
+        quantity: quantity.toFixed(filters.qtyDecimals),
+        price: safetyOrderPrice.toFixed(filters.priceDecimals),
         status: 'pending'
       });
 
@@ -3156,8 +3155,8 @@ export class WebSocketService {
           symbol: bot.tradingPair,
           side: bot.direction === 'long' ? 'BUY' : 'SELL',
           type: 'LIMIT',
-          quantity: quantity.toFixed(1),
-          price: safetyOrderPrice.toFixed(3),
+          quantity: quantity.toFixed(filters.qtyDecimals),
+          price: safetyOrderPrice.toFixed(filters.priceDecimals),
           timeInForce: 'GTC'
         });
 

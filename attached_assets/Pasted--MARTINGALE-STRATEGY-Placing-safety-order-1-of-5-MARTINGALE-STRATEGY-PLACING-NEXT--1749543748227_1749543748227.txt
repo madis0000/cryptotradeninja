@@ -1,0 +1,210 @@
+[MARTINGALE STRATEGY] 🔄 Placing safety order 1 of 5...
+
+[MARTINGALE STRATEGY] ===== PLACING NEXT SAFETY ORDER =====
+[MARTINGALE STRATEGY] 📊 SAFETY ORDER 1 CALCULATION:
+[MARTINGALE STRATEGY]    Current Average Price: $0.190560
+[MARTINGALE STRATEGY]    Base Deviation: 0.3%
+[MARTINGALE STRATEGY]    Deviation Multiplier: 1.5x
+[MARTINGALE STRATEGY]    Adjusted Deviation: 0.30%
+[MARTINGALE STRATEGY]    Raw SO Price: $0.18998832
+[MARTINGALE STRATEGY]    Adjusted SO Price: $0.190 (PRICE_FILTER compliant)
+[MARTINGALE STRATEGY]    Base Amount: $25
+[MARTINGALE STRATEGY]    Size Multiplier: 1.2x
+[MARTINGALE STRATEGY]    Adjusted Amount: $25.00
+[MARTINGALE STRATEGY]    Raw Quantity: 131.57894737
+[MARTINGALE STRATEGY]    Final Quantity: 131.6 (LOT_SIZE compliant)
+[MARTINGALE STRATEGY] ✓ Created safety order record (ID: 85)
+[MARTINGALE STRATEGY] 🚀 Placing safety order on binance (testnet)...
+[REST ORDER] Placing order via REST API: { symbol: 'DOGEUSDT', side: 'BUY', type: 'LIMIT', quantity: '131.6' }
+[WEBSOCKET] Live price update: DOGEUSDT = $0.19087000
+[REST ORDER] ❌ Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+[REST ORDER] Error placing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[ORDER] Error preparing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ❌ Error placing safety order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== SAFETY ORDER PLACEMENT COMPLETE =====
+
+[MARTINGALE STRATEGY] 🔄 Placing safety order 2 of 5...
+
+[MARTINGALE STRATEGY] ===== PLACING NEXT SAFETY ORDER =====
+[MARTINGALE STRATEGY] 📊 SAFETY ORDER 2 CALCULATION:
+[MARTINGALE STRATEGY]    Current Average Price: $0.190560
+[MARTINGALE STRATEGY]    Base Deviation: 0.3%
+[MARTINGALE STRATEGY]    Deviation Multiplier: 1.5x
+[MARTINGALE STRATEGY]    Adjusted Deviation: 0.45%
+[MARTINGALE STRATEGY]    Raw SO Price: $0.18970248
+[MARTINGALE STRATEGY]    Adjusted SO Price: $0.190 (PRICE_FILTER compliant)
+[MARTINGALE STRATEGY]    Base Amount: $25
+[MARTINGALE STRATEGY]    Size Multiplier: 1.2x
+[MARTINGALE STRATEGY]    Adjusted Amount: $30.00
+[MARTINGALE STRATEGY]    Raw Quantity: 157.89473684
+[MARTINGALE STRATEGY]    Final Quantity: 157.9 (LOT_SIZE compliant)
+[MARTINGALE STRATEGY] ✓ Created safety order record (ID: 86)
+[MARTINGALE STRATEGY] 🚀 Placing safety order on binance (testnet)...
+[REST ORDER] Placing order via REST API: { symbol: 'DOGEUSDT', side: 'BUY', type: 'LIMIT', quantity: '157.9' }
+[REST ORDER] ❌ Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+[REST ORDER] Error placing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[ORDER] Error preparing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ❌ Error placing safety order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== SAFETY ORDER PLACEMENT COMPLETE =====
+
+[MARTINGALE STRATEGY] 🔄 Placing safety order 3 of 5...
+
+[MARTINGALE STRATEGY] ===== PLACING NEXT SAFETY ORDER =====
+[MARTINGALE STRATEGY] 📊 SAFETY ORDER 3 CALCULATION:
+[MARTINGALE STRATEGY]    Current Average Price: $0.190560
+[MARTINGALE STRATEGY]    Base Deviation: 0.3%
+[MARTINGALE STRATEGY]    Deviation Multiplier: 1.5x
+[MARTINGALE STRATEGY]    Adjusted Deviation: 0.67%
+[MARTINGALE STRATEGY]    Raw SO Price: $0.18927372
+[MARTINGALE STRATEGY]    Adjusted SO Price: $0.189 (PRICE_FILTER compliant)
+[MARTINGALE STRATEGY]    Base Amount: $25
+[MARTINGALE STRATEGY]    Size Multiplier: 1.2x
+[MARTINGALE STRATEGY]    Adjusted Amount: $36.00
+[MARTINGALE STRATEGY]    Raw Quantity: 190.47619048
+[MARTINGALE STRATEGY]    Final Quantity: 190.5 (LOT_SIZE compliant)
+[MARTINGALE STRATEGY] ✓ Created safety order record (ID: 87)
+[MARTINGALE STRATEGY] 🚀 Placing safety order on binance (testnet)...
+[REST ORDER] Placing order via REST API: { symbol: 'DOGEUSDT', side: 'BUY', type: 'LIMIT', quantity: '190.5' }
+[REST ORDER] ❌ Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+[REST ORDER] Error placing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[ORDER] Error preparing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ❌ Error placing safety order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== SAFETY ORDER PLACEMENT COMPLETE =====
+
+[MARTINGALE STRATEGY] 🔄 Placing safety order 4 of 5...
+
+[MARTINGALE STRATEGY] ===== PLACING NEXT SAFETY ORDER =====
+[MARTINGALE STRATEGY] 📊 SAFETY ORDER 4 CALCULATION:
+[MARTINGALE STRATEGY]    Current Average Price: $0.190560
+[MARTINGALE STRATEGY]    Base Deviation: 0.3%
+[MARTINGALE STRATEGY]    Deviation Multiplier: 1.5x
+[MARTINGALE STRATEGY]    Adjusted Deviation: 1.01%
+[MARTINGALE STRATEGY]    Raw SO Price: $0.18863058
+[MARTINGALE STRATEGY]    Adjusted SO Price: $0.189 (PRICE_FILTER compliant)
+[MARTINGALE STRATEGY]    Base Amount: $25
+[MARTINGALE STRATEGY]    Size Multiplier: 1.2x
+[MARTINGALE STRATEGY]    Adjusted Amount: $43.20
+[MARTINGALE STRATEGY]    Raw Quantity: 228.57142857
+[MARTINGALE STRATEGY]    Final Quantity: 228.6 (LOT_SIZE compliant)
+[MARTINGALE STRATEGY] ✓ Created safety order record (ID: 88)
+[MARTINGALE STRATEGY] 🚀 Placing safety order on binance (testnet)...
+[REST ORDER] Placing order via REST API: { symbol: 'DOGEUSDT', side: 'BUY', type: 'LIMIT', quantity: '228.6' }
+[REST ORDER] ❌ Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+[REST ORDER] Error placing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[ORDER] Error preparing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ❌ Error placing safety order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== SAFETY ORDER PLACEMENT COMPLETE =====
+
+[MARTINGALE STRATEGY] 🔄 Placing safety order 5 of 5...
+
+[MARTINGALE STRATEGY] ===== PLACING NEXT SAFETY ORDER =====
+[MARTINGALE STRATEGY] 📊 SAFETY ORDER 5 CALCULATION:
+[MARTINGALE STRATEGY]    Current Average Price: $0.190560
+[MARTINGALE STRATEGY]    Base Deviation: 0.3%
+[MARTINGALE STRATEGY]    Deviation Multiplier: 1.5x
+[MARTINGALE STRATEGY]    Adjusted Deviation: 1.52%
+[MARTINGALE STRATEGY]    Raw SO Price: $0.18766587
+[MARTINGALE STRATEGY]    Adjusted SO Price: $0.188 (PRICE_FILTER compliant)
+[MARTINGALE STRATEGY]    Base Amount: $25
+[MARTINGALE STRATEGY]    Size Multiplier: 1.2x
+[MARTINGALE STRATEGY]    Adjusted Amount: $51.84
+[MARTINGALE STRATEGY]    Raw Quantity: 275.74468085
+[MARTINGALE STRATEGY]    Final Quantity: 275.7 (LOT_SIZE compliant)
+[MARTINGALE STRATEGY] ✓ Created safety order record (ID: 89)
+[MARTINGALE STRATEGY] 🚀 Placing safety order on binance (testnet)...
+[REST ORDER] Placing order via REST API: { symbol: 'DOGEUSDT', side: 'BUY', type: 'LIMIT', quantity: '275.7' }
+[REST ORDER] ❌ Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+[REST ORDER] Error placing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[ORDER] Error preparing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ❌ Error placing safety order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3584:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3522:16)
+    at async WebSocketService.placeNextSafetyOrder (/home/runner/workspace/server/websocket-service.ts:3155:29)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3781:15)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== SAFETY ORDER PLACEMENT COMPLETE =====
