@@ -16,7 +16,7 @@ export interface EncryptedData {
 
 export const encrypt = (text: string): EncryptedData => {
   const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipher(ALGORITHM, getEncryptionKey());
+  const cipher = crypto.createCipheriv(ALGORITHM, getEncryptionKey(), iv);
   
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
@@ -29,7 +29,7 @@ export const encrypt = (text: string): EncryptedData => {
 
 export const decrypt = (encryptedText: string, ivHex: string): string => {
   const iv = Buffer.from(ivHex, 'hex');
-  const decipher = crypto.createDecipher(ALGORITHM, getEncryptionKey());
+  const decipher = crypto.createDecipheriv(ALGORITHM, getEncryptionKey(), iv);
   
   let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
