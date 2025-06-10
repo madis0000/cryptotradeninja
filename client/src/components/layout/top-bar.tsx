@@ -32,6 +32,7 @@ export function TopBar({ onLogout }: TopBarProps) {
     { path: '/trading', label: 'Trading', icon: 'fas fa-chart-bar' },
     { path: '/bots', label: 'Bots', icon: 'fas fa-robot' },
     { path: '/my-bots', label: 'My Bots', icon: 'fas fa-cogs' },
+    { path: '/bot-logs', label: 'Bot Logs', icon: 'fas fa-file-alt' },
   ];
 
   return (
@@ -69,7 +70,7 @@ export function TopBar({ onLogout }: TopBarProps) {
                 <Button 
                   variant="ghost" 
                   className={`flex items-center space-x-2 text-sm ${
-                    location.startsWith('/trading') || location === '/bots' || location === '/my-bots'
+                    location.startsWith('/trading') || location === '/bots' || location === '/my-bots' || location === '/bot-logs'
                       ? 'text-crypto-accent bg-crypto-accent/10' 
                       : 'text-crypto-light hover:text-white hover:bg-gray-800'
                   }`}

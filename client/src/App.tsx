@@ -16,6 +16,7 @@ import MyExchanges from "@/pages/my-exchanges";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth";
+import BotLogsPage from "@/pages/bot-logs";
 
 function AuthenticatedApp() {
   const { logout } = useAuth();
@@ -29,6 +30,7 @@ function AuthenticatedApp() {
           <Route path="/trading" component={Trading} />
           <Route path="/bots" component={TradingBots} />
           <Route path="/my-bots" component={MyBotsPage} />
+          <Route path="/bot-logs" component={BotLogsPage} />
           <Route path="/api-keys" component={ApiKeys} />
           <Route path="/portfolio" component={Portfolio} />
           <Route path="/my-exchanges" component={MyExchanges} />
