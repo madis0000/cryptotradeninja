@@ -134,14 +134,7 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
     return groups;
   }, {});
 
-  // Sort grouped cycles by cycle number (descending - newest first)
-  const sortedCycleGroups = Object.entries(groupedHistoryOrders).sort(([a], [b]) => {
-    const cycleA = parseInt(a as string);
-    const cycleB = parseInt(b as string);
-    return cycleB - cycleA;
-  });
-
-  // Calculate position details
+  // Calculate position details first
   const filledBuyOrders = currentCycleOrders.filter(order => 
     order.side === 'BUY' && order.status === 'filled'
   );
@@ -157,6 +150,26 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
   }, 0);
   
   const averageEntryPrice = totalPositionSize > 0 ? totalInvested / totalPositionSize : 0;
+
+  // Sort grouped cycles by cycle number (descending - newest first)
+  const sortedCycleGroups = Object.entries(groupedHistoryOrders).sort(([a], [b]) => {
+    const cycleA = parseInt(a as string);
+    const cycleB = parseInt(b as string);
+    return cycleB - cycleA;
+  });
+
+  // Calculate P&L values for header cards
+  const completedCyclesTotal = Object.values(groupedHistoryOrders).reduce((total: number, cycle: any) => {
+    return total + cycle.pnl;
+  }, 0);
+
+  // Calculate current cycle unrealized P&L
+  const currentCycleUnrealizedPnL = averageEntryPrice > 0 && currentMarketData && totalPositionSize > 0 
+    ? (parseFloat(currentMarketData.price || '0') - averageEntryPrice) * totalPositionSize 
+    : 0;
+
+  // Total unrealized P&L = completed cycles P&L + current cycle unrealized P&L
+  const totalUnrealizedPnL = completedCyclesTotal + currentCycleUnrealizedPnL;
 
   return (
     <div className="space-y-6">
@@ -253,11 +266,17 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
 
         <Card className="bg-crypto-darker border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white text-sm">Current Cycle</CardTitle>
+            <CardTitle className="text-white text-sm">Unrealized P&L</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-cyan-400">#{currentCycle?.cycleNumber || 'N/A'}</div>
-            <p className="text-xs text-crypto-light mt-1">Cycle number</p>
+            <div className={`text-xl font-bold ${
+              totalUnrealizedPnL > 0 ? 'text-green-400' : 
+              totalUnrealizedPnL < 0 ? 'text-red-400' : 
+              'text-crypto-light'
+            }`}>
+              {totalUnrealizedPnL > 0 ? '+' : ''}${totalUnrealizedPnL.toFixed(4)}
+            </div>
+            <p className="text-xs text-crypto-light mt-1">All cycles + current</p>
           </CardContent>
         </Card>
 
@@ -266,10 +285,14 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
             <CardTitle className="text-white text-sm">Total P&L</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-emerald-400">
-              ${parseFloat(bot.totalPnl || '0').toFixed(2)}
+            <div className={`text-xl font-bold ${
+              completedCyclesTotal > 0 ? 'text-green-400' : 
+              completedCyclesTotal < 0 ? 'text-red-400' : 
+              'text-crypto-light'
+            }`}>
+              {completedCyclesTotal > 0 ? '+' : ''}${completedCyclesTotal.toFixed(4)}
             </div>
-            <p className="text-xs text-crypto-light mt-1">All-time profit</p>
+            <p className="text-xs text-crypto-light mt-1">Completed cycles only</p>
           </CardContent>
         </Card>
       </div>
@@ -277,7 +300,7 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
       {/* Position Overview */}
       <Card className="bg-crypto-darker border-gray-800">
         <CardHeader>
-          <CardTitle className="text-white">Position Overview</CardTitle>
+          <CardTitle className="text-white">Current Cycle (#{currentCycle?.cycleNumber || 'N/A'})</CardTitle>
         </CardHeader>
         <CardContent>
           {totalPositionSize > 0 ? (
