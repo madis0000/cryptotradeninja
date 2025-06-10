@@ -84,9 +84,10 @@ export class WebSocketService {
   private listenKeys = new Map<number, string>(); // exchangeId -> listenKey
 
   constructor(server: Server) {
-    // WebSocket server on separate port to avoid Vite conflicts
+    // WebSocket server on dedicated port with proper Replit binding
+    const wsPort = parseInt(process.env.WS_PORT || '8080');
     this.wss = new WebSocketServer({ 
-      port: 3001,
+      port: wsPort,
       host: '0.0.0.0'
     });
 
@@ -104,6 +105,7 @@ export class WebSocketService {
   }
 
   private setupWebSocket() {
+    const wsPort = parseInt(process.env.WS_PORT || '8080');
     // Removed verbose WebSocket logging
     
     this.wss.on('connection', (ws, request) => {

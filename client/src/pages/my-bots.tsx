@@ -34,7 +34,7 @@ export function MyBotsPage() {
     
     // WebSocket connection for live updates
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.hostname}:3001`;
+    const wsUrl = `${protocol}//${window.location.host.split(':')[0]}:8080`;
     const ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
