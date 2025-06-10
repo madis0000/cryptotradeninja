@@ -842,15 +842,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Market Data API
-  app.get("/api/market", async (req, res) => {
-    try {
-      const marketData = wsService.getMarketData();
-      res.json(Array.from(marketData.values()));
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch market data" });
-    }
-  });
+  // Market Data API - REMOVED: Using WebSocket-only communication
 
   // Markets API - Fetch trading pairs from Binance
   app.get("/api/markets", async (req, res) => {
@@ -1065,6 +1057,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error testing Martingale strategy:', error);
       res.status(500).json({ error: 'Failed to test Martingale strategy' });
+    }
+  });
+
+  // Set up WebSocket endpoint for market data
+  httpServer.on('upgrade', (request, socket, head) => {
+    const url = new URL(request.url!, `http://${request.headers.host}`);
+    
+    if (url.pathname === '/ws/market') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        console.log('[MARKET WS] Client connected to market data stream');
+        
+        // Send current market data immediately
+        const currentMarketData = wsService.getMarketData();
+        currentMarketData.forEach((data, symbol) => {
+          ws.send(JSON.stringify({
+            type: 'market_update',
+            data: data
+          }));
+        });
+        
+        // Add client to market data subscribers
+        wsService.addMarketDataClient(ws);
+        
+        ws.on('close', () => {
+          console.log('[MARKET WS] Client disconnected from market data stream');
+          wsService.removeMarketDataClient(ws);
+        });
+        
+        ws.on('error', (error) => {
+          console.error('[MARKET WS] WebSocket error:', error);
+          wsService.removeMarketDataClient(ws);
+        });
+      });
     }
   });
 

@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useQuery } from "@tanstack/react-query";
 import { MarketData } from "@/types";
+import { useMarketData } from "@/hooks/useMarketData";
 
 const cryptoLogos: { [key: string]: { bg: string; symbol: string } } = {
   'BTC/USDT': { bg: 'bg-orange-500', symbol: '₿' },

@@ -84,6 +84,7 @@ export class WebSocketService {
   private orderMonitoringInterval: NodeJS.Timeout | null = null;
   private userDataStreams = new Map<number, WebSocket>(); // exchangeId -> WebSocket
   private listenKeys = new Map<number, string>(); // exchangeId -> listenKey
+  private marketDataClients = new Set<WebSocket>(); // WebSocket clients for market data
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -4665,6 +4666,33 @@ export class WebSocketService {
     this.binanceTickerWs.on('close', () => {
       console.log('[WEBSOCKET] Ticker stream disconnected');
       this.isStreamsActive = false;
+    });
+  }
+
+  // Market data client management methods
+  public addMarketDataClient(ws: WebSocket) {
+    this.marketDataClients.add(ws);
+    console.log(`[MARKET WS] Added client, total clients: ${this.marketDataClients.size}`);
+  }
+
+  public removeMarketDataClient(ws: WebSocket) {
+    this.marketDataClients.delete(ws);
+    console.log(`[MARKET WS] Removed client, total clients: ${this.marketDataClients.size}`);
+  }
+
+  private broadcastToMarketDataClients(message: any) {
+    const messageStr = JSON.stringify(message);
+    this.marketDataClients.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(messageStr);
+        } catch (error) {
+          console.error('[MARKET WS] Error sending to client:', error);
+          this.marketDataClients.delete(ws);
+        }
+      } else {
+        this.marketDataClients.delete(ws);
+      }
     });
   }
 }
