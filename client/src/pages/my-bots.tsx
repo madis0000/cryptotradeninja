@@ -261,10 +261,10 @@ export function MyBotsPage() {
                     <div>
                       <p className="text-xs text-gray-400 uppercase tracking-wider">Total Realized P&L</p>
                       <p className={`text-lg font-bold font-mono ${
-                        bots.reduce((sum, bot) => sum + parseFloat(bot.totalPnl || '0'), 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                        cycleProfits.reduce((sum: number, cycle: any) => sum + (cycle.cycleProfit || 0), 0) >= 0 ? 'text-green-400' : 'text-red-400'
                       }`}>
-                        {bots.reduce((sum, bot) => sum + parseFloat(bot.totalPnl || '0'), 0) >= 0 ? '+' : ''}$
-                        {formatCurrency(bots.reduce((sum, bot) => sum + parseFloat(bot.totalPnl || '0'), 0))}
+                        {cycleProfits.reduce((sum: number, cycle: any) => sum + (cycle.cycleProfit || 0), 0) >= 0 ? '+' : ''}$
+                        {formatCurrency(cycleProfits.reduce((sum: number, cycle: any) => sum + (cycle.cycleProfit || 0), 0))}
                       </p>
                     </div>
                     <TrendingUp className="w-8 h-8 text-green-400" />
