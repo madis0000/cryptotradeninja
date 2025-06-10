@@ -80,14 +80,19 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
   });
 
   const historyOrders = botOrders.filter((order: any) => {
-    // Show all filled orders from previous cycles
-    if (!currentCycle) return order.status === 'filled';
-    
-    // For completed cycles or filled orders from previous cycles
-    const isFromPreviousCycle = order.cycleId !== currentCycle.id;
+    // Show all filled orders from completed cycles
+    // A cycle is completed if it has both a filled BUY and SELL order
     const isFilledOrder = order.status === 'filled';
     
-    return isFromPreviousCycle && isFilledOrder;
+    if (!isFilledOrder) return false;
+    
+    // Check if this order's cycle is completed by looking for both buy and sell orders
+    const cycleOrders = botOrders.filter((o: any) => o.cycleId === order.cycleId && o.status === 'filled');
+    const hasBuyOrder = cycleOrders.some((o: any) => o.side === 'BUY');
+    const hasSellOrder = cycleOrders.some((o: any) => o.side === 'SELL');
+    const isCycleCompleted = hasBuyOrder && hasSellOrder;
+    
+    return isCycleCompleted;
   });
 
   // Group history orders by cycle number with P&L calculation
