@@ -104,27 +104,103 @@ export class WebSocketService {
     // Removed verbose WebSocket logging
   }
 
-  // Robust filter handling with precise decimal control
-  private getSymbolFilters(symbol: string) {
-    // Use validated exchange filters with enhanced precision control
-    const filters = {
-      ICPUSDT: { minQty: 0.1, stepSize: 0.1, qtyDecimals: 1, priceDecimals: 4 },
-      DOGEUSDT: { minQty: 1.0, stepSize: 1.0, qtyDecimals: 0, priceDecimals: 5 },
-      BTCUSDT: { minQty: 0.00001, stepSize: 0.00001, qtyDecimals: 5, priceDecimals: 2 },
-      ETHUSDT: { minQty: 0.0001, stepSize: 0.0001, qtyDecimals: 4, priceDecimals: 2 },
-      ADAUSDT: { minQty: 1.0, stepSize: 1.0, qtyDecimals: 0, priceDecimals: 4 },
-      BNBUSDT: { minQty: 0.001, stepSize: 0.001, qtyDecimals: 3, priceDecimals: 2 },
-      SOLUSDT: { minQty: 0.01, stepSize: 0.01, qtyDecimals: 2, priceDecimals: 3 },
-      DEFAULT: { minQty: 0.01, stepSize: 0.01, qtyDecimals: 2, priceDecimals: 4 }
+  // Cache for dynamic symbol filters from exchange
+  private symbolFiltersCache = new Map<string, any>();
+  private exchangeInfoCache = new Map<string, any>();
+
+  // Fetch dynamic symbol filters from exchange
+  private async fetchSymbolFilters(symbol: string, exchange: any) {
+    const cacheKey = `${exchange.restApiEndpoint}-${symbol}`;
+    
+    if (this.symbolFiltersCache.has(cacheKey)) {
+      return this.symbolFiltersCache.get(cacheKey);
+    }
+
+    try {
+      console.log(`[DYNAMIC FILTERS] Fetching filters for ${symbol} from ${exchange.name}`);
+      
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/exchangeInfo?symbol=${symbol}`);
+      const data = await response.json();
+      
+      if (data.symbols && data.symbols.length > 0) {
+        const symbolInfo = data.symbols[0];
+        const filters = symbolInfo.filters;
+        
+        // Extract LOT_SIZE filter for quantity
+        const lotSizeFilter = filters.find((f: any) => f.filterType === 'LOT_SIZE');
+        const minQty = parseFloat(lotSizeFilter?.minQty || '0.01');
+        const stepSize = parseFloat(lotSizeFilter?.stepSize || '0.01');
+        
+        // Extract PRICE_FILTER for price
+        const priceFilter = filters.find((f: any) => f.filterType === 'PRICE_FILTER');
+        const tickSize = parseFloat(priceFilter?.tickSize || '0.01');
+        
+        // Calculate decimal places from step sizes
+        const qtyDecimals = this.getDecimalPlaces(stepSize);
+        const priceDecimals = this.getDecimalPlaces(tickSize);
+        
+        const symbolFilters = {
+          minQty,
+          stepSize,
+          qtyDecimals,
+          priceDecimals,
+          tickSize,
+          baseAssetPrecision: symbolInfo.baseAssetPrecision,
+          quotePrecision: symbolInfo.quotePrecision
+        };
+        
+        console.log(`[DYNAMIC FILTERS] ${symbol} - MinQty: ${minQty}, StepSize: ${stepSize}, TickSize: ${tickSize}`);
+        console.log(`[DYNAMIC FILTERS] ${symbol} - QtyDecimals: ${qtyDecimals}, PriceDecimals: ${priceDecimals}`);
+        
+        this.symbolFiltersCache.set(cacheKey, symbolFilters);
+        return symbolFilters;
+      }
+    } catch (error) {
+      console.error(`[DYNAMIC FILTERS] Error fetching filters for ${symbol}:`, error);
+    }
+    
+    // Fallback to default values
+    const defaultFilters = {
+      minQty: 0.01,
+      stepSize: 0.01,
+      qtyDecimals: 2,
+      priceDecimals: 4,
+      tickSize: 0.01
     };
     
-    const result = filters[symbol as keyof typeof filters] || filters.DEFAULT;
-    console.log(`[FILTER] ${symbol} - Min: ${result.minQty}, Step: ${result.stepSize}, QtyDec: ${result.qtyDecimals}, PriceDec: ${result.priceDecimals}`);
-    return result;
+    console.log(`[DYNAMIC FILTERS] Using default filters for ${symbol}`);
+    return defaultFilters;
   }
 
-  private adjustQuantityForSymbol(rawQuantity: number, symbol: string): number {
-    const filters = this.getSymbolFilters(symbol);
+  // Helper to calculate decimal places from step size
+  private getDecimalPlaces(stepSize: number): number {
+    const stepStr = stepSize.toString();
+    if (stepStr.includes('.')) {
+      return stepStr.split('.')[1].length;
+    }
+    return 0;
+  }
+
+  // Updated filter method using dynamic data
+  private async getSymbolFilters(symbol: string, exchange?: any) {
+    if (exchange) {
+      return await this.fetchSymbolFilters(symbol, exchange);
+    }
+    
+    // Fallback for when exchange is not provided
+    const fallbackFilters = {
+      minQty: 0.01,
+      stepSize: 0.01,
+      qtyDecimals: 2,
+      priceDecimals: 4,
+      tickSize: 0.01
+    };
+    
+    return fallbackFilters;
+  }
+
+  private async adjustQuantityForSymbol(rawQuantity: number, symbol: string, exchange?: any): Promise<number> {
+    const filters = await this.getSymbolFilters(symbol, exchange);
     
     // Round down to nearest step size
     let quantity = Math.floor(rawQuantity / filters.stepSize) * filters.stepSize;
@@ -134,7 +210,7 @@ export class WebSocketService {
       quantity = filters.minQty;
     }
     
-    // For DOGEUSDT and other whole number symbols, ensure we return integers
+    // For symbols with 0 decimal places, ensure we return integers
     if (filters.qtyDecimals === 0) {
       return Math.floor(quantity);
     }
@@ -143,9 +219,17 @@ export class WebSocketService {
     return Math.round(quantity * Math.pow(10, filters.qtyDecimals)) / Math.pow(10, filters.qtyDecimals);
   }
 
-  private adjustPriceForSymbol(rawPrice: number, symbol: string): number {
-    const filters = this.getSymbolFilters(symbol);
-    return Math.round(rawPrice * Math.pow(10, filters.priceDecimals)) / Math.pow(10, filters.priceDecimals);
+  private async adjustPriceForSymbol(rawPrice: number, symbol: string, exchange?: any): Promise<number> {
+    const filters = await this.getSymbolFilters(symbol, exchange);
+    
+    // Use the actual tick size from exchange
+    const tickSize = filters.tickSize;
+    
+    // Round to nearest tick size
+    const adjustedPrice = Math.round(rawPrice / tickSize) * tickSize;
+    
+    // Then round to the correct number of decimal places
+    return Math.round(adjustedPrice * Math.pow(10, filters.priceDecimals)) / Math.pow(10, filters.priceDecimals);
   }
 
   private setupWebSocket() {
@@ -3119,8 +3203,11 @@ export class WebSocketService {
         ? averagePrice * (1 - adjustedDeviation / 100)
         : averagePrice * (1 + adjustedDeviation / 100);
 
+      // Fetch dynamic symbol filters from exchange
+      const filters = await this.getSymbolFilters(bot.tradingPair, activeExchange);
+
       // Apply dynamic price filter using centralized function
-      const safetyOrderPrice = this.adjustPriceForSymbol(rawSafetyOrderPrice, bot.tradingPair);
+      const safetyOrderPrice = await this.adjustPriceForSymbol(rawSafetyOrderPrice, bot.tradingPair, activeExchange);
 
       // Calculate safety order quantity
       const safetyOrderAmount = parseFloat(bot.safetyOrderAmount);
@@ -3131,8 +3218,7 @@ export class WebSocketService {
       const rawQuantity = adjustedAmount / safetyOrderPrice;
 
       // Apply dynamic LOT_SIZE filter using centralized function
-      const quantity = this.adjustQuantityForSymbol(rawQuantity, bot.tradingPair);
-      const filters = this.getSymbolFilters(bot.tradingPair);
+      const quantity = await this.adjustQuantityForSymbol(rawQuantity, bot.tradingPair, activeExchange);
 
       console.log(`[MARTINGALE STRATEGY] 📊 SAFETY ORDER ${currentSafetyOrders + 1} CALCULATION:`);
       console.log(`[MARTINGALE STRATEGY]    Current Average Price: $${averagePrice.toFixed(6)}`);
