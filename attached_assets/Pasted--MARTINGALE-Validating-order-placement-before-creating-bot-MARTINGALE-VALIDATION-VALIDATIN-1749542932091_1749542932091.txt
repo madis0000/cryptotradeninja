@@ -1,0 +1,52 @@
+[MARTINGALE] Validating order placement before creating bot
+[MARTINGALE VALIDATION] ===== VALIDATING ORDER PLACEMENT =====
+[MARTINGALE VALIDATION] ✓ Validation successful:
+[MARTINGALE VALIDATION]    Symbol: DOGEUSDT
+[MARTINGALE VALIDATION]    Current Price: $0.191210
+[MARTINGALE VALIDATION]    Order Quantity: 130.7 DOGE
+[MARTINGALE VALIDATION]    Order Value: $24.99
+[MARTINGALE VALIDATION]    Exchange: binance (testnet)
+[MARTINGALE VALIDATION] ===== VALIDATION COMPLETE =====
+
+[MARTINGALE] Order placement validation successful
+[MARTINGALE] Starting new bot cycle for bot 25
+[MARTINGALE] Created initial cycle 24 for bot 25
+
+[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====
+[MARTINGALE STRATEGY] Bot ID: 25, Cycle ID: 24
+[MARTINGALE STRATEGY] ✓ Bot loaded: Martingale Bot - DOGEUSDT (DOGEUSDT, long)
+[MARTINGALE STRATEGY] ✓ Strategy: martingale, Exchange ID: 1
+[MARTINGALE STRATEGY] ✓ Exchange loaded: binance (testnet) (binance)
+[MARTINGALE STRATEGY] ✓ Using cached price for DOGEUSDT: $0.19121000
+[MARTINGALE STRATEGY] ✓ Market price for DOGEUSDT: $0.191210
+[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:
+[MARTINGALE STRATEGY]    Investment Amount: $25
+[MARTINGALE STRATEGY]    Current Price: $0.191210
+[MARTINGALE STRATEGY]    Raw Quantity: 130.74629988 DOGE
+[MARTINGALE STRATEGY]    Adjusted Quantity: 130.7 DOGE (LOT_SIZE compliant)
+[MARTINGALE STRATEGY] ✓ Created base order record in database (ID: 82)
+[MARTINGALE STRATEGY] 🚀 Placing order on binance (testnet)...
+[MARTINGALE STRATEGY]    Order Type: MARKET BUY
+[MARTINGALE STRATEGY]    Symbol: DOGEUSDT
+[MARTINGALE STRATEGY]    Quantity: 130.70000000
+[REST ORDER] Placing order via REST API: { symbol: 'DOGEUSDT', side: 'BUY', type: 'MARKET', quantity: '130.7' }
+[REST ORDER] ❌ Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+[REST ORDER] Error placing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3552:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3490:16)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3720:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[ORDER] Error preparing order: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3552:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3490:16)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3720:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ❌ Error placing base order for bot 25: Error: Order failed: {"code":-1013,"msg":"Filter failure: LOT_SIZE"}
+    at WebSocketService.placeOrderViaRest (/home/runner/workspace/server/websocket-service.ts:3552:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.placeOrderOnExchange (/home/runner/workspace/server/websocket-service.ts:3490:16)
+    at async WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3720:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====

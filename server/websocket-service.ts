@@ -104,6 +104,40 @@ export class WebSocketService {
     // Removed verbose WebSocket logging
   }
 
+  // Dynamic filter handling for different trading pairs
+  private getSymbolFilters(symbol: string) {
+    const filters = {
+      ICPUSDT: { minQty: 0.1, stepSize: 0.1, qtyDecimals: 1, priceDecimals: 4 },
+      DOGEUSDT: { minQty: 1.0, stepSize: 1.0, qtyDecimals: 0, priceDecimals: 5 },
+      BTCUSDT: { minQty: 0.00001, stepSize: 0.00001, qtyDecimals: 5, priceDecimals: 2 },
+      ETHUSDT: { minQty: 0.0001, stepSize: 0.0001, qtyDecimals: 4, priceDecimals: 2 },
+      // Default fallback
+      DEFAULT: { minQty: 0.01, stepSize: 0.01, qtyDecimals: 2, priceDecimals: 4 }
+    };
+    
+    return filters[symbol as keyof typeof filters] || filters.DEFAULT;
+  }
+
+  private adjustQuantityForSymbol(rawQuantity: number, symbol: string): number {
+    const filters = this.getSymbolFilters(symbol);
+    
+    // Round down to nearest step size
+    let quantity = Math.floor(rawQuantity / filters.stepSize) * filters.stepSize;
+    
+    // Ensure minimum quantity is met
+    if (quantity < filters.minQty) {
+      quantity = filters.minQty;
+    }
+    
+    // Round to appropriate decimal places
+    return Math.round(quantity * Math.pow(10, filters.qtyDecimals)) / Math.pow(10, filters.qtyDecimals);
+  }
+
+  private adjustPriceForSymbol(rawPrice: number, symbol: string): number {
+    const filters = this.getSymbolFilters(symbol);
+    return Math.round(rawPrice * Math.pow(10, filters.priceDecimals)) / Math.pow(10, filters.priceDecimals);
+  }
+
   private setupWebSocket() {
     const wsPort = parseInt(process.env.WS_PORT || '8080');
     // Removed verbose WebSocket logging
@@ -3667,32 +3701,15 @@ export class WebSocketService {
       const baseOrderAmount = parseFloat(bot.baseOrderAmount);
       const rawQuantity = baseOrderAmount / currentPrice;
 
-      // Apply Binance lot size filters for ICPUSDT
-      // Most Binance pairs have a minimum quantity and step size requirement
-      let quantity = rawQuantity;
-      
-      // For ICPUSDT, typical requirements are:
-      // - Minimum quantity: 0.1 ICP
-      // - Step size: 0.1 ICP (quantities must be multiples of 0.1)
-      const minQuantity = 0.1;
-      const stepSize = 0.1;
-      
-      // Round down to nearest step size
-      quantity = Math.floor(quantity / stepSize) * stepSize;
-      
-      // Ensure minimum quantity is met
-      if (quantity < minQuantity) {
-        quantity = minQuantity;
-      }
-      
-      // Round to appropriate decimal places (1 decimal for ICP)
-      quantity = Math.round(quantity * 10) / 10;
+      // Apply dynamic Binance lot size filters using centralized function
+      const quantity = this.adjustQuantityForSymbol(rawQuantity, symbol);
+      const filters = this.getSymbolFilters(symbol);
 
       console.log(`[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:`);
       console.log(`[MARTINGALE STRATEGY]    Investment Amount: $${baseOrderAmount}`);
       console.log(`[MARTINGALE STRATEGY]    Current Price: $${currentPrice.toFixed(6)}`);
       console.log(`[MARTINGALE STRATEGY]    Raw Quantity: ${rawQuantity.toFixed(8)} ${symbol.replace('USDT', '')}`);
-      console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${quantity.toFixed(1)} ${symbol.replace('USDT', '')} (LOT_SIZE compliant)`);
+      console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${quantity.toFixed(decimalPlaces)} ${symbol.replace('USDT', '')} (LOT_SIZE compliant)`);
 
       // Create the base order record
       const baseOrder = await storage.createCycleOrder({
@@ -3715,13 +3732,13 @@ export class WebSocketService {
         console.log(`[MARTINGALE STRATEGY] 🚀 Placing order on ${activeExchange.name}...`);
         console.log(`[MARTINGALE STRATEGY]    Order Type: MARKET ${bot.direction === 'long' ? 'BUY' : 'SELL'}`);
         console.log(`[MARTINGALE STRATEGY]    Symbol: ${symbol}`);
-        console.log(`[MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(8)}`);
+        console.log(`[MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(decimalPlaces)}`);
         
         const orderResult = await this.placeOrderOnExchange(activeExchange, {
           symbol: symbol,
           side: bot.direction === 'long' ? 'BUY' : 'SELL',
           type: 'MARKET',
-          quantity: quantity.toFixed(1)
+          quantity: quantity.toFixed(decimalPlaces)
         });
 
         if (orderResult && orderResult.orderId) {
@@ -3729,7 +3746,7 @@ export class WebSocketService {
           const filledOrder = await storage.updateCycleOrder(baseOrder.id, {
             exchangeOrderId: orderResult.orderId.toString(),
             status: 'filled',
-            filledQuantity: quantity.toFixed(1),
+            filledQuantity: quantity.toFixed(decimalPlaces),
             filledPrice: currentPrice.toFixed(8),
             filledAt: new Date()
           });
