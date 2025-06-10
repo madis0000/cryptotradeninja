@@ -509,13 +509,14 @@ export function MyBotsPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-700">
-                          <th className="text-left py-3 px-4 text-crypto-light">Order Type</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Side</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Price</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Distance</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Quantity</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Status</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Date Time</th>
+                          <th className="text-left py-2 px-4 text-crypto-light">Order Type</th>
+                          <th className="text-left py-2 px-4 text-crypto-light">Side</th>
+                          <th className="text-left py-2 px-4 text-crypto-light">Price</th>
+                          <th className="text-left py-2 px-4 text-crypto-light">Distance</th>
+                          <th className="text-left py-2 px-4 text-crypto-light">Quantity</th>
+                          <th className="text-left py-2 px-4 text-crypto-light">Status</th>
+                          <th className="text-left py-2 px-4 text-crypto-light">% Filled</th>
+                          <th className="text-left py-2 px-4 text-crypto-light">Date Time</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -526,92 +527,73 @@ export function MyBotsPage() {
                           const distance = currentPrice > 0 && isUnfilled ? ((orderPrice - currentPrice) / currentPrice) * 100 : 0;
                           const isCloseToFill = isUnfilled && Math.abs(distance) < 2; // Within 2% of current price
                           
+                          // Calculate fill percentage
+                          const originalQty = parseFloat(order.quantity || '0');
+                          const filledQty = parseFloat(order.filledQuantity || '0');
+                          let fillPercentage = 0;
+                          
+                          if (order.status === 'filled') {
+                            fillPercentage = 100;
+                          } else if (filledQty > 0 && originalQty > 0) {
+                            fillPercentage = (filledQty / originalQty) * 100;
+                          }
+                          
                           return (
                             <tr key={index} className={`border-b border-gray-800 hover:bg-gray-800/50 ${
                               isCloseToFill && order.status === 'placed' ? 'bg-yellow-500/5 border-yellow-500/20' : ''
                             }`}>
-                              <td className="py-3 px-4 text-white">
-                                <div className="flex flex-col">
-                                  <span className="font-medium capitalize">
-                                    {order.orderType?.replace('_', ' ') || order.order_type?.replace('_', ' ')}
-                                  </span>
-                                  {order.safetyOrderLevel && (
-                                    <span className="text-xs text-crypto-light">Level {order.safetyOrderLevel || order.safety_order_level}</span>
-                                  )}
-                                </div>
+                              <td className="py-2 px-4 text-white">
+                                <span className="font-medium">
+                                  {order.displayName || order.orderType?.replace('_', ' ') || order.order_type?.replace('_', ' ')}
+                                </span>
                               </td>
-                              <td className="py-3 px-4">
+                              <td className="py-2 px-4">
                                 <span className={`text-sm font-medium ${
                                   order.side === 'BUY' ? 'text-green-400' : 'text-red-400'
                                 }`}>
                                   {order.side}
                                 </span>
                               </td>
-                              <td className="py-3 px-4 text-white font-mono">
+                              <td className="py-2 px-4 text-white font-mono">
                                 ${parseFloat(order.price || '0').toFixed(4)}
                               </td>
-                              <td className="py-3 px-4">
+                              <td className="py-2 px-4">
                                 {isUnfilled && currentPrice > 0 ? (
-                                  <div className="flex flex-col">
-                                    <span className={`text-sm font-mono ${
-                                      Math.abs(distance) < 1 ? 'text-red-400 font-bold' :
-                                      Math.abs(distance) < 2 ? 'text-yellow-400' :
-                                      'text-crypto-light'
-                                    }`}>
-                                      {distance > 0 ? '+' : ''}{distance.toFixed(2)}%
-                                    </span>
-                                    {isCloseToFill && order.status === 'placed' && (
-                                      <span className="text-xs text-yellow-400">Near fill</span>
-                                    )}
-                                  </div>
+                                  <span className={`text-sm font-mono ${
+                                    Math.abs(distance) < 1 ? 'text-red-400 font-bold' :
+                                    Math.abs(distance) < 2 ? 'text-yellow-400' :
+                                    'text-crypto-light'
+                                  }`}>
+                                    {distance > 0 ? '+' : ''}{distance.toFixed(2)}%
+                                  </span>
                                 ) : (
                                   <span className="text-crypto-light text-sm">-</span>
                                 )}
                               </td>
-                              <td className="py-3 px-4 text-white font-mono">
-                                {parseFloat(order.quantity || '0').toFixed(6)}
+                              <td className="py-2 px-4 text-white font-mono">
+                                {parseFloat(order.quantity || '0').toFixed(2)}
                               </td>
-                              <td className="py-3 px-4">
-                                <div className="flex flex-col">
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium inline-block w-fit ${
-                                    order.status === 'filled' ? 'bg-green-500/10 text-green-400' :
-                                    order.status === 'placed' ? 'bg-blue-500/10 text-blue-400' :
-                                    order.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400' :
-                                    order.status === 'cancelled' ? 'bg-gray-500/10 text-gray-400' :
-                                    'bg-red-500/10 text-red-400'
-                                  }`}>
-                                    {order.status === 'pending' ? 'Pending' :
-                                     order.status === 'placed' ? 'Placed' :
-                                     order.status === 'filled' ? 'Filled' :
-                                     order.status === 'cancelled' ? 'Cancelled' :
-                                     order.status}
-                                  </span>
-                                  {/* Fill percentage display */}
-                                  {(() => {
-                                    const originalQty = parseFloat(order.quantity || '0');
-                                    const filledQty = parseFloat(order.filledQuantity || '0');
-                                    
-                                    if (order.status === 'filled') {
-                                      return <span className="text-xs text-green-400 mt-1">100% filled</span>;
-                                    } else if (order.status === 'pending') {
-                                      return <span className="text-xs text-yellow-400 mt-1">0% filled</span>;
-                                    } else if (order.status === 'placed') {
-                                      if (filledQty > 0 && originalQty > 0) {
-                                        const fillPercentage = (filledQty / originalQty) * 100;
-                                        return (
-                                          <span className="text-xs text-blue-400 mt-1">
-                                            {fillPercentage.toFixed(1)}% filled
-                                          </span>
-                                        );
-                                      } else {
-                                        return <span className="text-xs text-blue-400 mt-1">0% filled</span>;
-                                      }
-                                    }
-                                    return null;
-                                  })()}
-                                </div>
+                              <td className="py-2 px-4">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium inline-block w-fit ${
+                                  order.status === 'filled' ? 'bg-green-500/10 text-green-400' :
+                                  order.status === 'placed' ? 'bg-blue-500/10 text-blue-400' :
+                                  order.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400' :
+                                  order.status === 'cancelled' ? 'bg-gray-500/10 text-gray-400' :
+                                  'bg-red-500/10 text-red-400'
+                                }`}>
+                                  {order.status === 'pending' ? 'Pending' :
+                                   order.status === 'placed' ? 'Placed' :
+                                   order.status === 'filled' ? 'Filled' :
+                                   order.status === 'cancelled' ? 'Cancelled' :
+                                   order.status}
+                                </span>
                               </td>
-                              <td className="py-3 px-4 text-crypto-light text-xs">
+                              <td className="py-2 px-4">
+                                <span className="text-sm text-crypto-light">
+                                  {fillPercentage > 0 ? `${fillPercentage.toFixed(0)}%` : '-'}
+                                </span>
+                              </td>
+                              <td className="py-2 px-4 text-crypto-light text-xs">
                                 {order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
                               </td>
                             </tr>
