@@ -120,7 +120,6 @@ export function MyBotsPage() {
 
     // Get bot orders from database to calculate actual position
     const botOrders = allBotOrders[bot.id] || [];
-    
     // Filter filled buy orders from CURRENT ACTIVE CYCLE only (not completed cycles)
     const activeCycleOrders = botOrders.filter((order: any) => 
       order.side === 'BUY' && 
@@ -128,7 +127,9 @@ export function MyBotsPage() {
       !order.completedAt // Only orders from current active cycle
     );
     
-    if (activeCycleOrders.length === 0) return 0;
+    if (activeCycleOrders.length === 0) {
+      return 0;
+    }
     
     // Calculate actual position from current active cycle filled orders only
     const totalPositionSize = activeCycleOrders.reduce((total: number, order: any) => {
@@ -149,9 +150,9 @@ export function MyBotsPage() {
     // Real-time unrealized P&L: (current_price - avg_entry_price) × position_size
     const unrealizedPnL = (currentPrice - averageEntryPrice) * totalPositionSize;
     
-    // Log for debugging - shows dynamic updates with real data (CURRENT CYCLE ONLY)
+    // Log P&L updates for active positions only
     if (unrealizedPnL !== 0) {
-      console.log(`[UNREALIZED P&L - Current Cycle] ${bot.tradingPair}: Current: $${currentPrice}, Entry: $${averageEntryPrice.toFixed(6)}, Position: ${totalPositionSize.toFixed(4)}, P&L: $${unrealizedPnL.toFixed(4)}`);
+      console.log(`[P&L] ${bot.tradingPair}: $${unrealizedPnL.toFixed(4)}`);
     }
     
     return unrealizedPnL;

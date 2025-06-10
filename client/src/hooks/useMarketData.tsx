@@ -37,11 +37,11 @@ export function useMarketData() {
           reconnectTimeoutRef.current = null;
         }
         
-        // Send subscription request for ticker data
+        // Send subscription request for all available ticker data
         wsRef.current?.send(JSON.stringify({
           type: 'subscribe',
           dataType: 'ticker',
-          symbols: ['DOGEUSDT'] // Subscribe to active trading pairs
+          symbols: ['DOGEUSDT', 'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'SOLUSDT', 'DOTUSDT', 'LINKUSDT', 'AVAXUSDT', 'ICPUSDT', '1INCHUSDT']
         }));
       };
 
@@ -49,8 +49,8 @@ export function useMarketData() {
         try {
           const message = JSON.parse(event.data);
           
-          if (message.type === 'market_update') {
-            const update = message.data;
+          if (message.type === 'market_update' || message.type === 'ticker_update') {
+            const update = message.data || message;
             
             setMarketData(prev => {
               const existingIndex = prev.findIndex(item => item.symbol === update.symbol);
