@@ -4581,4 +4581,82 @@ export class WebSocketService {
       console.error(`[WS ORDER] Error handling order response:`, error);
     }
   }
+
+  // Update market data subscriptions for new trading pairs
+  async updateMarketSubscriptions(symbols: string[]) {
+    console.log(`[WEBSOCKET] Updating market subscriptions to: ${symbols.join(', ')}`);
+    
+    // Stop current streams
+    this.stopBinanceStreams();
+    
+    // Start new streams for the provided symbols
+    await this.startLiveStreamsForSymbols(symbols);
+  }
+
+  private async startLiveStreamsForSymbols(symbols: string[]) {
+    if (symbols.length === 0) return;
+    
+    console.log(`[WEBSOCKET] Starting live streams for symbols: ${symbols.join(', ')}`);
+    
+    // Start ticker stream for the symbols
+    const tickerSymbols = symbols.map(s => s.toLowerCase() + '@ticker').join('/');
+    const tickerUrl = `wss://stream.testnet.binance.vision/ws/${tickerSymbols}`;
+    
+    console.log(`[WEBSOCKET] Connecting to live ticker stream: ${tickerUrl}`);
+    
+    this.binanceTickerWs = new WebSocket(tickerUrl);
+    
+    this.binanceTickerWs.on('open', () => {
+      console.log(`[WEBSOCKET] Live ticker stream connected for symbols: ${symbols.join(', ')}`);
+      this.isStreamsActive = true;
+    });
+    
+    this.binanceTickerWs.on('message', (data) => {
+      try {
+        const ticker = JSON.parse(data.toString());
+        const symbol = ticker.s;
+        const price = ticker.c;
+        
+        console.log(`[WEBSOCKET] Live price update: ${symbol} = $${price}`);
+        
+        // Update market data
+        this.marketData.set(symbol, {
+          symbol,
+          price,
+          priceChange: ticker.P,
+          priceChangePercent: ticker.P,
+          highPrice: ticker.h,
+          lowPrice: ticker.l,
+          volume: ticker.v,
+          quoteVolume: ticker.q,
+          timestamp: Date.now()
+        });
+        
+        // Broadcast to connected clients
+        this.broadcastMarketUpdate(symbol, {
+          symbol,
+          price,
+          priceChange: ticker.P,
+          priceChangePercent: ticker.P,
+          highPrice: ticker.h,
+          lowPrice: ticker.l,
+          volume: ticker.v,
+          quoteVolume: ticker.q,
+          timestamp: Date.now()
+        });
+        
+      } catch (error) {
+        console.error('[WEBSOCKET] Error parsing ticker data:', error);
+      }
+    });
+    
+    this.binanceTickerWs.on('error', (error) => {
+      console.error('[WEBSOCKET] Ticker stream error:', error);
+    });
+    
+    this.binanceTickerWs.on('close', () => {
+      console.log('[WEBSOCKET] Ticker stream disconnected');
+      this.isStreamsActive = false;
+    });
+  }
 }

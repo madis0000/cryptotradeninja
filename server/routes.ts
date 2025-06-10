@@ -323,6 +323,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Place the initial base order to start the cycle
           await wsService.placeInitialBaseOrder(bot.id, cycle.id);
           
+          // Update WebSocket market data subscription for the new trading pair
+          await wsService.updateMarketSubscriptions([bot.tradingPair]);
+          console.log(`[WEBSOCKET] Updated market data subscription to ${bot.tradingPair}`);
+          
           // Mark bot as active after successful order placement
           await storage.updateTradingBot(bot.id, {
             status: 'active',
