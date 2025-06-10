@@ -441,7 +441,7 @@ export function MyBotsPage() {
                   <CardTitle className="text-white text-sm">Current Cycle</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold text-cyan-400">#{selectedBot.currentCycle || 1}</div>
+                  <div className="text-xl font-bold text-cyan-400">#{currentCycle?.cycleNumber || 'N/A'}</div>
                   <p className="text-xs text-crypto-light mt-1">Cycle number</p>
                 </CardContent>
               </Card>
