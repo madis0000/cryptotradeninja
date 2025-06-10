@@ -3593,21 +3593,48 @@ export class WebSocketService {
         return;
       }
 
-      // Calculate new take profit price based on updated average
+      // Get cycle orders first to calculate accurate average price
+      const allCycleOrders = await storage.getCycleOrders(cycle.id);
+      
+      // Calculate accurate average entry price from all filled buy orders
+      const allFilledBuyOrders = allCycleOrders.filter(order => 
+        (order.orderType === 'base_order' || order.orderType === 'safety_order') &&
+        order.status === 'filled' && 
+        order.side === 'BUY'
+      );
+      
+      const totalInvested = allFilledBuyOrders.reduce((total, order) => {
+        return total + (parseFloat(order.quantity || '0') * parseFloat(order.price || '0'));
+      }, 0);
+      
+      const totalQuantityBought = allFilledBuyOrders.reduce((total, order) => {
+        return total + parseFloat(order.quantity || '0');
+      }, 0);
+      
+      const actualAveragePrice = totalQuantityBought > 0 ? totalInvested / totalQuantityBought : 0;
+      
+      if (actualAveragePrice === 0) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Cannot calculate average price - no filled buy orders found`);
+        return;
+      }
+      
+      // Calculate new take profit price based on accurate average
       const takeProfitPercentage = parseFloat(bot.takeProfitPercentage || '1.5');
       const newTakeProfitPrice = bot.direction === 'long' 
-        ? newAveragePrice * (1 + takeProfitPercentage / 100)
-        : newAveragePrice * (1 - takeProfitPercentage / 100);
+        ? actualAveragePrice * (1 + takeProfitPercentage / 100)
+        : actualAveragePrice * (1 - takeProfitPercentage / 100);
 
       console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT UPDATE CALCULATION:`);
-      console.log(`[MARTINGALE STRATEGY]    Previous Average: $${parseFloat(cycle.baseOrderPrice || '0').toFixed(6)}`);
-      console.log(`[MARTINGALE STRATEGY]    New Average Price: $${newAveragePrice.toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    Filled Buy Orders: ${allFilledBuyOrders.length}`);
+      console.log(`[MARTINGALE STRATEGY]    Total Invested: $${totalInvested.toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    Total Quantity: ${totalQuantityBought.toFixed(8)}`);
+      console.log(`[MARTINGALE STRATEGY]    Calculated Average Price: $${actualAveragePrice.toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    Parameter Average (old): $${newAveragePrice.toFixed(6)}`);
       console.log(`[MARTINGALE STRATEGY]    Take Profit %: ${takeProfitPercentage}%`);
       console.log(`[MARTINGALE STRATEGY]    New Take Profit Price: $${newTakeProfitPrice.toFixed(6)}`);
 
       // Find existing take profit order for this cycle
-      const cycleOrders = await storage.getCycleOrders(cycle.id);
-      const existingTakeProfit = cycleOrders.find(order => 
+      const existingTakeProfit = allCycleOrders.find(order => 
         order.orderType === 'take_profit' && 
         (order.status === 'placed' || order.status === 'pending')
       );
@@ -3621,8 +3648,24 @@ export class WebSocketService {
         console.log(`[MARTINGALE STRATEGY] ✓ Cancelled existing take profit order`);
       }
 
-      // Get total quantity to sell
-      const totalQuantity = parseFloat(cycle.totalQuantity || '0');
+      // Use the already fetched cycleOrders to calculate total quantity
+      const filledBuyOrdersForQuantity = allCycleOrders.filter(order => 
+        order.orderType === 'base_order' || order.orderType === 'safety_order'
+      ).filter(order => order.status === 'filled' && order.side === 'BUY');
+      
+      const totalQuantity = filledBuyOrdersForQuantity.reduce((total: number, order: any) => {
+        return total + parseFloat(order.quantity || '0');
+      }, 0);
+      
+      console.log(`[MARTINGALE STRATEGY] 📊 QUANTITY CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Filled Buy Orders: ${filledBuyOrdersForQuantity.length}`);
+      console.log(`[MARTINGALE STRATEGY]    Calculated Total Quantity: ${totalQuantity.toFixed(8)}`);
+      console.log(`[MARTINGALE STRATEGY]    Cycle Total Quantity (old): ${parseFloat(cycle.totalQuantity || '0').toFixed(8)}`);
+      
+      if (totalQuantity === 0) {
+        console.error(`[MARTINGALE STRATEGY] ❌ No filled buy orders found for take profit calculation`);
+        return;
+      }
 
       // Create new take profit order
       const newTakeProfitOrder = await storage.createCycleOrder({
