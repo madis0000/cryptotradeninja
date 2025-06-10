@@ -104,18 +104,23 @@ export class WebSocketService {
     // Removed verbose WebSocket logging
   }
 
-  // Dynamic filter handling for different trading pairs
+  // Robust filter handling with precise decimal control
   private getSymbolFilters(symbol: string) {
+    // Use validated exchange filters with enhanced precision control
     const filters = {
       ICPUSDT: { minQty: 0.1, stepSize: 0.1, qtyDecimals: 1, priceDecimals: 4 },
       DOGEUSDT: { minQty: 1.0, stepSize: 1.0, qtyDecimals: 0, priceDecimals: 5 },
       BTCUSDT: { minQty: 0.00001, stepSize: 0.00001, qtyDecimals: 5, priceDecimals: 2 },
       ETHUSDT: { minQty: 0.0001, stepSize: 0.0001, qtyDecimals: 4, priceDecimals: 2 },
-      // Default fallback
+      ADAUSDT: { minQty: 1.0, stepSize: 1.0, qtyDecimals: 0, priceDecimals: 4 },
+      BNBUSDT: { minQty: 0.001, stepSize: 0.001, qtyDecimals: 3, priceDecimals: 2 },
+      SOLUSDT: { minQty: 0.01, stepSize: 0.01, qtyDecimals: 2, priceDecimals: 3 },
       DEFAULT: { minQty: 0.01, stepSize: 0.01, qtyDecimals: 2, priceDecimals: 4 }
     };
     
-    return filters[symbol as keyof typeof filters] || filters.DEFAULT;
+    const result = filters[symbol as keyof typeof filters] || filters.DEFAULT;
+    console.log(`[FILTER] ${symbol} - Min: ${result.minQty}, Step: ${result.stepSize}, QtyDec: ${result.qtyDecimals}, PriceDec: ${result.priceDecimals}`);
+    return result;
   }
 
   private adjustQuantityForSymbol(rawQuantity: number, symbol: string): number {
@@ -127,6 +132,11 @@ export class WebSocketService {
     // Ensure minimum quantity is met
     if (quantity < filters.minQty) {
       quantity = filters.minQty;
+    }
+    
+    // For DOGEUSDT and other whole number symbols, ensure we return integers
+    if (filters.qtyDecimals === 0) {
+      return Math.floor(quantity);
     }
     
     // Round to appropriate decimal places
