@@ -20,8 +20,10 @@ export function useMarketData() {
 
   const connect = () => {
     try {
+      // Connect to the existing WebSocket service on port 8080
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/market`;
+      const host = window.location.hostname;
+      const wsUrl = `${protocol}//${host}:8080`;
       
       wsRef.current = new WebSocket(wsUrl);
 
@@ -34,6 +36,13 @@ export function useMarketData() {
           clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = null;
         }
+        
+        // Send subscription request for ticker data
+        wsRef.current?.send(JSON.stringify({
+          type: 'subscribe',
+          dataType: 'ticker',
+          symbols: ['DOGEUSDT'] // Subscribe to active trading pairs
+        }));
       };
 
       wsRef.current.onmessage = (event) => {

@@ -4642,7 +4642,7 @@ export class WebSocketService {
         });
         
         // Broadcast to connected clients
-        this.broadcastMarketUpdate(symbol, {
+        const marketUpdate = {
           symbol,
           price,
           priceChange: ticker.P,
@@ -4652,6 +4652,14 @@ export class WebSocketService {
           volume: ticker.v,
           quoteVolume: ticker.q,
           timestamp: Date.now()
+        };
+        
+        this.broadcastMarketUpdate(marketUpdate);
+        
+        // Also broadcast to market data WebSocket clients
+        this.broadcastToMarketDataClients({
+          type: 'market_update',
+          data: marketUpdate
         });
         
       } catch (error) {
@@ -4694,5 +4702,9 @@ export class WebSocketService {
         this.marketDataClients.delete(ws);
       }
     });
+  }
+
+  public getWebSocketServer() {
+    return this.wss;
   }
 }

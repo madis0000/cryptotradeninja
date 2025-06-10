@@ -1060,38 +1060,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Set up WebSocket endpoint for market data
-  httpServer.on('upgrade', (request, socket, head) => {
-    const url = new URL(request.url!, `http://${request.headers.host}`);
-    
-    if (url.pathname === '/ws/market') {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        console.log('[MARKET WS] Client connected to market data stream');
-        
-        // Send current market data immediately
-        const currentMarketData = wsService.getMarketData();
-        currentMarketData.forEach((data, symbol) => {
-          ws.send(JSON.stringify({
-            type: 'market_update',
-            data: data
-          }));
-        });
-        
-        // Add client to market data subscribers
-        wsService.addMarketDataClient(ws);
-        
-        ws.on('close', () => {
-          console.log('[MARKET WS] Client disconnected from market data stream');
-          wsService.removeMarketDataClient(ws);
-        });
-        
-        ws.on('error', (error) => {
-          console.error('[MARKET WS] WebSocket error:', error);
-          wsService.removeMarketDataClient(ws);
-        });
-      });
-    }
-  });
+  // Market data is now served through WebSocket-only communication
+  // Frontend connects directly to the main WebSocket service
 
   return httpServer;
 }
