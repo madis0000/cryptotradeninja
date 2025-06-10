@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Play, Square, TrendingUp, TrendingDown } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { ArrowLeft, Play, Square, TrendingUp, TrendingDown, Trash2 } from 'lucide-react';
 import { useMarketData } from '@/hooks/useMarketData';
+import { apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 
 interface BotDetailsProps {
   bot: any;
@@ -13,6 +16,74 @@ interface BotDetailsProps {
 
 export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
   const [activeSection, setActiveSection] = useState('current-cycle');
+  const [showStopDialog, setShowStopDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Stop bot mutation
+  const stopBotMutation = useMutation({
+    mutationFn: async (botId: number) => {
+      return await apiRequest(`/api/bots/${botId}/stop`, 'POST');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bots', bot.id] });
+      toast({
+        title: "Bot Stopped",
+        description: "Trading bot has been stopped and safety orders cancelled.",
+      });
+      setShowStopDialog(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to stop bot",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsProcessing(false);
+    }
+  });
+
+  // Delete bot mutation
+  const deleteBotMutation = useMutation({
+    mutationFn: async (botId: number) => {
+      return await apiRequest(`/api/bots/${botId}`, 'DELETE');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      toast({
+        title: "Bot Deleted",
+        description: "Trading bot has been permanently deleted.",
+      });
+      setShowDeleteDialog(false);
+      onBack(); // Navigate back to bots list
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete bot",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsProcessing(false);
+    }
+  });
+
+  const handleStopBot = () => {
+    setIsProcessing(true);
+    stopBotMutation.mutate(bot.id);
+  };
+
+  const handleDeleteBot = () => {
+    setIsProcessing(true);
+    deleteBotMutation.mutate(bot.id);
+  };
 
   // Get real-time market data via WebSocket
   const { getSymbolData } = useMarketData();
@@ -208,17 +279,35 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
             </div>
             <div className="text-sm text-crypto-light">Live Price</div>
           </div>
-          {bot.status === 'active' ? (
-            <Button variant="outline" size="sm" className="text-red-400 border-red-600 hover:bg-red-600/10">
-              <Square className="h-4 w-4 mr-2" />
-              Stop Bot
+          <div className="flex items-center space-x-2">
+            {bot.status === 'active' ? (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-red-400 border-red-600 hover:bg-red-600/10"
+                onClick={() => setShowStopDialog(true)}
+                disabled={isProcessing}
+              >
+                <Square className="h-4 w-4 mr-2" />
+                Stop Bot
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" className="text-green-400 border-green-600 hover:bg-green-600/10">
+                <Play className="h-4 w-4 mr-2" />
+                Start Bot
+              </Button>
+            )}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="text-red-400 border-red-600 hover:bg-red-600/10"
+              onClick={() => setShowDeleteDialog(true)}
+              disabled={isProcessing}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Bot
             </Button>
-          ) : (
-            <Button variant="outline" size="sm" className="text-green-400 border-green-600 hover:bg-green-600/10">
-              <Play className="h-4 w-4 mr-2" />
-              Start Bot
-            </Button>
-          )}
+          </div>
         </div>
       </div>
 
@@ -619,6 +708,125 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Stop Bot Warning Dialog */}
+      <Dialog open={showStopDialog} onOpenChange={setShowStopDialog}>
+        <DialogContent className="bg-crypto-darker border-gray-800">
+          <DialogHeader>
+            <DialogTitle className="text-white">Stop Trading Bot</DialogTitle>
+            <DialogDescription className="text-crypto-light">
+              Are you sure you want to stop this trading bot?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <div className="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center mt-0.5">
+                  <span className="text-xs text-black font-bold">!</span>
+                </div>
+                <div>
+                  <h4 className="text-yellow-400 font-medium mb-2">Warning: Assets will be sold at market price</h4>
+                  <p className="text-crypto-light text-sm">
+                    Stopping the bot will:
+                  </p>
+                  <ul className="text-crypto-light text-sm mt-2 list-disc list-inside space-y-1">
+                    <li>Cancel all unfilled safety orders</li>
+                    <li>Sell any purchased assets at current market price</li>
+                    <li>Complete the current cycle immediately</li>
+                    <li>Change bot status to inactive</li>
+                  </ul>
+                  {totalPositionSize > 0 && (
+                    <div className="mt-3 p-2 bg-gray-800/50 rounded">
+                      <p className="text-white text-sm">
+                        Current position: <span className="font-mono">{totalPositionSize.toFixed(2)} {bot.tradingPair?.replace('USDT', '')}</span>
+                      </p>
+                      <p className="text-crypto-light text-sm">
+                        Estimated market value: <span className="font-mono">${(totalPositionSize * parseFloat(currentMarketData?.price || '0')).toFixed(2)}</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowStopDialog(false)}
+              disabled={isProcessing}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleStopBot}
+              disabled={isProcessing}
+            >
+              {isProcessing ? 'Stopping...' : 'Stop Bot'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Bot Warning Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="bg-crypto-darker border-gray-800">
+          <DialogHeader>
+            <DialogTitle className="text-white">Delete Trading Bot</DialogTitle>
+            <DialogDescription className="text-crypto-light">
+              Are you sure you want to permanently delete this trading bot?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center mt-0.5">
+                  <span className="text-xs text-white font-bold">!</span>
+                </div>
+                <div>
+                  <h4 className="text-red-400 font-medium mb-2">Permanent Action: This cannot be undone</h4>
+                  <p className="text-crypto-light text-sm">
+                    Deleting the bot will:
+                  </p>
+                  <ul className="text-crypto-light text-sm mt-2 list-disc list-inside space-y-1">
+                    <li>Cancel all unfilled safety orders</li>
+                    <li>Sell any purchased assets at current market price</li>
+                    <li>Permanently delete all bot data and history</li>
+                    <li>Remove all cycle and order records</li>
+                    <li>This action cannot be reversed</li>
+                  </ul>
+                  {totalPositionSize > 0 && (
+                    <div className="mt-3 p-2 bg-gray-800/50 rounded">
+                      <p className="text-white text-sm">
+                        Current position: <span className="font-mono">{totalPositionSize.toFixed(2)} {bot.tradingPair?.replace('USDT', '')}</span>
+                      </p>
+                      <p className="text-crypto-light text-sm">
+                        Estimated market value: <span className="font-mono">${(totalPositionSize * parseFloat(currentMarketData?.price || '0')).toFixed(2)}</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={isProcessing}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteBot}
+              disabled={isProcessing}
+            >
+              {isProcessing ? 'Deleting...' : 'Delete Bot'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
