@@ -3409,25 +3409,23 @@ export class WebSocketService {
       try {
         console.log(`[MARTINGALE STRATEGY] 🚀 Placing updated take profit order on ${activeExchange.name}...`);
         
-        // Apply price filter compliance for take profit order
-        // For ICPUSDT: PRICE_FILTER requires 4 decimal places maximum
-        const adjustedTakeProfitPrice = Math.round(newTakeProfitPrice * 10000) / 10000;
-        
-        // For ICPUSDT: LOT_SIZE requires 0.1 step size
-        const adjustedQuantity = Math.round(totalQuantity * 10) / 10;
+        // Apply price and quantity filters using centralized functions
+        const adjustedTakeProfitPrice = this.adjustPriceForSymbol(newTakeProfitPrice, bot.tradingPair);
+        const adjustedQuantity = this.adjustQuantityForSymbol(totalQuantity, bot.tradingPair);
+        const filters = this.getSymbolFilters(bot.tradingPair);
 
         console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT ORDER ADJUSTMENTS:`);
         console.log(`[MARTINGALE STRATEGY]    Raw Price: $${newTakeProfitPrice.toFixed(8)}`);
-        console.log(`[MARTINGALE STRATEGY]    Adjusted Price: $${adjustedTakeProfitPrice.toFixed(4)} (PRICE_FILTER compliant)`);
+        console.log(`[MARTINGALE STRATEGY]    Adjusted Price: $${adjustedTakeProfitPrice.toFixed(filters.priceDecimals)} (PRICE_FILTER compliant)`);
         console.log(`[MARTINGALE STRATEGY]    Raw Quantity: ${totalQuantity.toFixed(8)}`);
-        console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${adjustedQuantity.toFixed(1)} (LOT_SIZE compliant)`);
+        console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${adjustedQuantity.toFixed(filters.qtyDecimals)} (LOT_SIZE compliant)`);
 
         const orderResult = await this.placeOrderOnExchange(activeExchange, {
           symbol: bot.tradingPair,
           side: bot.direction === 'long' ? 'SELL' : 'BUY',
           type: 'LIMIT',
-          quantity: adjustedQuantity.toFixed(1),
-          price: adjustedTakeProfitPrice.toFixed(4),
+          quantity: adjustedQuantity.toFixed(filters.qtyDecimals),
+          price: adjustedTakeProfitPrice.toFixed(filters.priceDecimals),
           timeInForce: 'GTC'
         });
 
@@ -3709,7 +3707,7 @@ export class WebSocketService {
       console.log(`[MARTINGALE STRATEGY]    Investment Amount: $${baseOrderAmount}`);
       console.log(`[MARTINGALE STRATEGY]    Current Price: $${currentPrice.toFixed(6)}`);
       console.log(`[MARTINGALE STRATEGY]    Raw Quantity: ${rawQuantity.toFixed(8)} ${symbol.replace('USDT', '')}`);
-      console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${quantity.toFixed(decimalPlaces)} ${symbol.replace('USDT', '')} (LOT_SIZE compliant)`);
+      console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${quantity.toFixed(filters.qtyDecimals)} ${symbol.replace('USDT', '')} (LOT_SIZE compliant)`);
 
       // Create the base order record
       const baseOrder = await storage.createCycleOrder({
@@ -3732,13 +3730,13 @@ export class WebSocketService {
         console.log(`[MARTINGALE STRATEGY] 🚀 Placing order on ${activeExchange.name}...`);
         console.log(`[MARTINGALE STRATEGY]    Order Type: MARKET ${bot.direction === 'long' ? 'BUY' : 'SELL'}`);
         console.log(`[MARTINGALE STRATEGY]    Symbol: ${symbol}`);
-        console.log(`[MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(decimalPlaces)}`);
+        console.log(`[MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(filters.qtyDecimals)}`);
         
         const orderResult = await this.placeOrderOnExchange(activeExchange, {
           symbol: symbol,
           side: bot.direction === 'long' ? 'BUY' : 'SELL',
           type: 'MARKET',
-          quantity: quantity.toFixed(decimalPlaces)
+          quantity: quantity.toFixed(filters.qtyDecimals)
         });
 
         if (orderResult && orderResult.orderId) {
@@ -3746,7 +3744,7 @@ export class WebSocketService {
           const filledOrder = await storage.updateCycleOrder(baseOrder.id, {
             exchangeOrderId: orderResult.orderId.toString(),
             status: 'filled',
-            filledQuantity: quantity.toFixed(decimalPlaces),
+            filledQuantity: quantity.toFixed(filters.qtyDecimals),
             filledPrice: currentPrice.toFixed(8),
             filledAt: new Date()
           });
