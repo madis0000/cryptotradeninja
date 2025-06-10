@@ -3800,9 +3800,11 @@ export class WebSocketService {
       const baseOrderAmount = parseFloat(bot.baseOrderAmount);
       const rawQuantity = baseOrderAmount / currentPrice;
 
-      // Apply dynamic Binance lot size filters using centralized function
-      const quantity = this.adjustQuantityForSymbol(rawQuantity, symbol);
-      const filters = this.getSymbolFilters(symbol);
+      // Fetch dynamic symbol filters from exchange
+      const filters = await symbolFilterService.fetchSymbolFilters(symbol, activeExchange);
+      
+      // Apply dynamic lot size filters using symbol filter service
+      const quantity = symbolFilterService.adjustQuantity(rawQuantity, filters);
 
       console.log(`[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:`);
       console.log(`[MARTINGALE STRATEGY]    Investment Amount: $${baseOrderAmount}`);
@@ -3819,8 +3821,8 @@ export class WebSocketService {
         side: bot.direction === 'long' ? 'BUY' : 'SELL',
         orderCategory: 'MARKET',
         symbol: symbol,
-        quantity: quantity.toFixed(1),
-        price: currentPrice.toFixed(8),
+        quantity: quantity.toFixed(filters.qtyDecimals),
+        price: currentPrice.toFixed(filters.priceDecimals),
         status: 'pending'
       });
 
@@ -3846,7 +3848,7 @@ export class WebSocketService {
             exchangeOrderId: orderResult.orderId.toString(),
             status: 'filled',
             filledQuantity: quantity.toFixed(filters.qtyDecimals),
-            filledPrice: currentPrice.toFixed(8),
+            filledPrice: currentPrice.toFixed(filters.priceDecimals),
             filledAt: new Date()
           });
 
@@ -3870,7 +3872,7 @@ export class WebSocketService {
           console.log(`[MARTINGALE STRATEGY]    Total Investment: $${baseOrderAmount}`);
           
           // Now place take profit order
-          await this.placeTakeProfitOrder(botId, cycleId, currentPrice, quantity);
+          await this.placeTakeProfitOrder(null, bot, cycleId, baseOrder, currentPrice);
           
           // Get current cycle for safety order placement
           const currentCycle = await storage.getActiveBotCycle(botId);

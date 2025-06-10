@@ -1,0 +1,48 @@
+[USER DATA STREAM] ✅ Connected to binance (testnet) user data stream
+8:41:21 AM [express] GET /api/auth/me 304 in 24ms :: {"user":{"id":1,"username":"madis","email":"mad…
+8:41:21 AM [express] GET /api/market 200 in 1ms :: []
+8:41:21 AM [express] GET /api/stats 200 in 115ms :: {"totalBalance":"0","totalPnl":"0","activeBots":…
+8:41:21 AM [express] GET /api/exchanges 304 in 106ms :: [{"id":1,"userId":1,"name":"binance (testnet…
+8:41:21 AM [express] GET /api/bots 304 in 124ms :: []
+8:41:39 AM [express] GET /api/exchanges/1/balance/ICPUSDT 304 in 42ms :: {"asset":"","free":"0.00000…
+[BINANCE STREAM] WebSocket error: Error: WebSocket was closed before the connection was established
+    at WebSocket.close (/home/runner/workspace/node_modules/ws/lib/websocket.js:299:7)
+    at WebSocketService.connectWithSubscription (/home/runner/workspace/server/websocket-service.ts:860:28)
+    at WebSocketService.createNewBinanceConnection (/home/runner/workspace/server/websocket-service.ts:685:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WebSocketService.updateBinanceSubscription (/home/runner/workspace/server/websocket-service.ts:695:7)
+    at async WebSocket.<anonymous> (/home/runner/workspace/server/websocket-service.ts:299:15)
+[BINANCE STREAM] Attempting reconnection in 5 seconds...
+[BALANCE] Started balance update interval
+[BINANCE STREAM] Attempting reconnection in 5 seconds...
+[MARTINGALE] Validating order placement before creating bot
+[MARTINGALE VALIDATION] ===== VALIDATING ORDER PLACEMENT =====
+[MARTINGALE VALIDATION] ✓ Validation successful:
+[MARTINGALE VALIDATION]    Symbol: ICPUSDT
+[MARTINGALE VALIDATION]    Current Price: $5.939000
+[MARTINGALE VALIDATION]    Order Quantity: 4.2 ICP
+[MARTINGALE VALIDATION]    Order Value: $24.94
+[MARTINGALE VALIDATION]    Exchange: binance (testnet)
+[MARTINGALE VALIDATION] ===== VALIDATION COMPLETE =====
+
+[MARTINGALE] Order placement validation successful
+[MARTINGALE] Starting new bot cycle for bot 29
+[MARTINGALE] Created initial cycle 28 for bot 29
+
+[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====
+[MARTINGALE STRATEGY] Bot ID: 29, Cycle ID: 28
+[MARTINGALE STRATEGY] ✓ Bot loaded: Martingale Bot - ICPUSDT (ICPUSDT, long)
+[MARTINGALE STRATEGY] ✓ Strategy: martingale, Exchange ID: 1
+[MARTINGALE STRATEGY] ✓ Exchange loaded: binance (testnet) (binance)
+[MARTINGALE STRATEGY] 📡 Fetching current price for ICPUSDT from Binance API...
+[MARTINGALE STRATEGY] ✓ Fetched price for ICPUSDT: $5.93900000
+[MARTINGALE STRATEGY] ✓ Market price for ICPUSDT: $5.939000
+[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:
+[MARTINGALE STRATEGY]    Investment Amount: $25
+[MARTINGALE STRATEGY]    Current Price: $5.939000
+[MARTINGALE STRATEGY]    Raw Quantity: 4.20946287 ICP
+[MARTINGALE STRATEGY] ❌ Critical error in placeInitialBaseOrder for bot 29: TypeError: quantity.toFixed is not a function
+    at WebSocketService.placeInitialBaseOrder (/home/runner/workspace/server/websocket-service.ts:3811:75)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:324:11)
+[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====
