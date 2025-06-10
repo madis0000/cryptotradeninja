@@ -543,8 +543,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const orders = await storage.getCycleOrdersByBotId(botId);
-      console.log(`[API] Found ${orders.length} orders for bot ${botId}`);
-      res.json(orders);
+      
+      // Sort orders by priority: Base order first, Take profit second, Safety orders last
+      const sortedOrders = orders.sort((a, b) => {
+        // Define order priority
+        const orderPriority = {
+          'base_order': 1,
+          'take_profit': 2,
+          'safety_order': 3
+        };
+        
+        const aPriority = orderPriority[a.orderType as keyof typeof orderPriority] || 999;
+        const bPriority = orderPriority[b.orderType as keyof typeof orderPriority] || 999;
+        
+        if (aPriority !== bPriority) {
+          return aPriority - bPriority;
+        }
+        
+        // For safety orders, sort by creation time (first created = Safety Order 1)
+        if (a.orderType === 'safety_order' && b.orderType === 'safety_order') {
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        }
+        
+        return 0;
+      });
+      
+      // Add display names for orders
+      let safetyOrderCounter = 1;
+      const ordersWithNames = sortedOrders.map(order => {
+        let displayName = '';
+        
+        switch (order.orderType) {
+          case 'base_order':
+            displayName = 'Base Order';
+            break;
+          case 'take_profit':
+            displayName = 'Take Profit';
+            break;
+          case 'safety_order':
+            displayName = `Safety Order ${safetyOrderCounter}`;
+            safetyOrderCounter++;
+            break;
+          default:
+            displayName = order.orderType;
+        }
+        
+        return {
+          ...order,
+          displayName
+        };
+      });
+      
+      console.log(`[API] Found ${orders.length} orders for bot ${botId}, sorted and named`);
+      res.json(ordersWithNames);
     } catch (error) {
       console.error('Error fetching bot orders:', error);
       res.status(500).json({ error: "Failed to fetch bot orders" });
