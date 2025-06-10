@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, TrendingUp, TrendingDown, Calendar, Target, RefreshCw } from "lucide-react";
+import { Trash2, TrendingUp, TrendingDown, Calendar, Target, RefreshCw, Activity, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
@@ -223,6 +223,73 @@ export function MyBotsPage() {
             <div>
               <h1 className="text-3xl font-bold text-white mb-2">My Trading Bots</h1>
               <p className="text-crypto-light">Manage your automated trading strategies</p>
+            </div>
+
+            {/* Portfolio Statistics */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <Card className="bg-gradient-to-br from-crypto-darker to-gray-900/50 border border-gray-800/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-400 uppercase tracking-wider">Total Unrealized P&L</p>
+                      <p className={`text-lg font-bold font-mono ${
+                        activeBots.reduce((sum, bot) => sum + calculateUnrealizedPnL(getBotData(bot.id)), 0) > 0 
+                          ? 'text-green-400' 
+                          : activeBots.reduce((sum, bot) => sum + calculateUnrealizedPnL(getBotData(bot.id)), 0) < 0 
+                          ? 'text-red-400' 
+                          : 'text-gray-400'
+                      }`}>
+                        {activeBots.reduce((sum, bot) => sum + calculateUnrealizedPnL(getBotData(bot.id)), 0) > 0 ? '+' : ''}$
+                        {formatCurrency(activeBots.reduce((sum, bot) => sum + calculateUnrealizedPnL(getBotData(bot.id)), 0))}
+                      </p>
+                    </div>
+                    <Target className="w-8 h-8 text-yellow-400" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-crypto-darker to-gray-900/50 border border-gray-800/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-400 uppercase tracking-wider">Total Realized P&L</p>
+                      <p className={`text-lg font-bold font-mono ${
+                        bots.reduce((sum, bot) => sum + parseFloat(bot.totalPnl || '0'), 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        {bots.reduce((sum, bot) => sum + parseFloat(bot.totalPnl || '0'), 0) >= 0 ? '+' : ''}$
+                        {formatCurrency(bots.reduce((sum, bot) => sum + parseFloat(bot.totalPnl || '0'), 0))}
+                      </p>
+                    </div>
+                    <TrendingUp className="w-8 h-8 text-green-400" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-crypto-darker to-gray-900/50 border border-gray-800/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-400 uppercase tracking-wider">Active Bots</p>
+                      <p className="text-lg font-bold text-white">{activeBots.length}</p>
+                    </div>
+                    <RefreshCw className="w-8 h-8 text-blue-400" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-crypto-darker to-gray-900/50 border border-gray-800/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-400 uppercase tracking-wider">Total Invested</p>
+                      <p className="text-lg font-bold text-purple-400">
+                        ${formatCurrency(bots.reduce((sum, bot) => sum + parseFloat(bot.totalInvested || '0'), 0))}
+                      </p>
+                    </div>
+                    <Target className="w-8 h-8 text-purple-400" />
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Bot Sections */}
