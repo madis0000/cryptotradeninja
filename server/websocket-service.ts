@@ -3408,11 +3408,27 @@ export class WebSocketService {
       const profitPercentage = totalInvested > 0 ? (profit / totalInvested) * 100 : 0;
 
       console.log(`[MARTINGALE STRATEGY] 💰 PROFIT CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Filled Buy Orders: ${filledBuyOrders.length}`);
+      filledBuyOrders.forEach((ord, idx) => {
+        const orderValue = parseFloat(ord.quantity) * parseFloat(ord.price || '0');
+        console.log(`[MARTINGALE STRATEGY]      ${ord.orderType}: ${ord.quantity} × $${ord.price} = $${orderValue.toFixed(2)}`);
+      });
       console.log(`[MARTINGALE STRATEGY]    Total Invested: $${totalInvested.toFixed(2)}`);
       console.log(`[MARTINGALE STRATEGY]    Total Received: $${totalReceived.toFixed(2)}`);
       console.log(`[MARTINGALE STRATEGY]    Net Profit: $${profit.toFixed(2)}`);
       console.log(`[MARTINGALE STRATEGY]    Profit Percentage: ${profitPercentage.toFixed(2)}%`);
       console.log(`[MARTINGALE STRATEGY]    Safety Orders Used: ${cycle.filledSafetyOrders || 0}/${bot.maxSafetyOrders}`);
+      
+      // Log calculation details for debugging
+      const cycleLogger = BotLoggerManager.getLogger(cycle.botId, bot.tradingPair);
+      cycleLogger.logCustom('INFO', 'PROFIT_CALCULATION', `Cycle ${cycle.cycleNumber}: Invested=${totalInvested.toFixed(2)}, Received=${totalReceived.toFixed(2)}, Profit=${profit.toFixed(2)}`, {
+        cycleId: cycle.id,
+        filledBuyOrders: filledBuyOrders.length,
+        totalInvested,
+        totalReceived,
+        profit,
+        profitPercentage
+      });
 
       // Record the trade for analytics
       await storage.createTrade({
@@ -3506,10 +3522,10 @@ export class WebSocketService {
       });
       
       // Log cycle completion
-      const logger = BotLoggerManager.getLogger(cycle.botId, bot.tradingPair);
+      const completionLogger = BotLoggerManager.getLogger(cycle.botId, bot.tradingPair);
       const duration = cycle.createdAt ? new Date().getTime() - new Date(cycle.createdAt).getTime() : 0;
       const durationStr = `${Math.floor(duration / 60000)}m ${Math.floor((duration % 60000) / 1000)}s`;
-      logger.logCycleCompleted(cycle.cycleNumber || 1, cycle.id, profit, durationStr);
+      completionLogger.logCycleCompleted(cycle.cycleNumber || 1, cycle.id, profit, durationStr);
       
       console.log(`[MARTINGALE STRATEGY] ✓ Cycle ${cycle.cycleNumber || 1} completed successfully with profit: $${profit.toFixed(2)}`);
 
