@@ -6,6 +6,7 @@ import { BotCycle, CycleOrder, tradingBots } from '@shared/schema';
 import { db } from './db';
 import { eq } from 'drizzle-orm';
 import crypto from 'crypto';
+import { symbolFilterService, SymbolFilters } from './symbol-filters';
 
 interface UserConnection {
   ws: WebSocket;
@@ -3204,10 +3205,10 @@ export class WebSocketService {
         : averagePrice * (1 + adjustedDeviation / 100);
 
       // Fetch dynamic symbol filters from exchange
-      const filters = await this.getSymbolFilters(bot.tradingPair, activeExchange);
+      const filters = await symbolFilterService.fetchSymbolFilters(bot.tradingPair, activeExchange);
 
-      // Apply dynamic price filter using centralized function
-      const safetyOrderPrice = await this.adjustPriceForSymbol(rawSafetyOrderPrice, bot.tradingPair, activeExchange);
+      // Apply dynamic price filter using symbol filter service
+      const safetyOrderPrice = symbolFilterService.adjustPrice(rawSafetyOrderPrice, filters);
 
       // Calculate safety order quantity
       const safetyOrderAmount = parseFloat(bot.safetyOrderAmount);
@@ -3217,8 +3218,8 @@ export class WebSocketService {
       const adjustedAmount = safetyOrderAmount * Math.pow(sizeMultiplier, currentSafetyOrders);
       const rawQuantity = adjustedAmount / safetyOrderPrice;
 
-      // Apply dynamic LOT_SIZE filter using centralized function
-      const quantity = await this.adjustQuantityForSymbol(rawQuantity, bot.tradingPair, activeExchange);
+      // Apply dynamic LOT_SIZE filter using symbol filter service
+      const quantity = symbolFilterService.adjustQuantity(rawQuantity, filters);
 
       console.log(`[MARTINGALE STRATEGY] 📊 SAFETY ORDER ${currentSafetyOrders + 1} CALCULATION:`);
       console.log(`[MARTINGALE STRATEGY]    Current Average Price: $${averagePrice.toFixed(6)}`);
