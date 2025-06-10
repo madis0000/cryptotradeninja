@@ -110,7 +110,7 @@ export function MyBotsPage() {
   });
 
   // Fetch completed cycle profits for total realized P&L
-  const { data: cycleProfits = [] } = useQuery({
+  const { data: cycleProfits = [] } = useQuery<Array<{ botId: number; cycleProfit: number }>>({
     queryKey: ['/api/cycle-profits'],
     refetchInterval: 30000 // Refetch every 30 seconds for fresh data
   });
@@ -261,10 +261,10 @@ export function MyBotsPage() {
                     <div>
                       <p className="text-xs text-gray-400 uppercase tracking-wider">Total Realized P&L</p>
                       <p className={`text-lg font-bold font-mono ${
-                        cycleProfits.reduce((sum: number, cycle: any) => sum + (cycle.cycleProfit || 0), 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                        cycleProfits.reduce((sum: number, cycle) => sum + (cycle.cycleProfit || 0), 0) >= 0 ? 'text-green-400' : 'text-red-400'
                       }`}>
-                        {cycleProfits.reduce((sum: number, cycle: any) => sum + (cycle.cycleProfit || 0), 0) >= 0 ? '+' : ''}$
-                        {formatCurrency(cycleProfits.reduce((sum: number, cycle: any) => sum + (cycle.cycleProfit || 0), 0))}
+                        {cycleProfits.reduce((sum: number, cycle) => sum + (cycle.cycleProfit || 0), 0) >= 0 ? '+' : ''}$
+                        {formatCurrency(cycleProfits.reduce((sum: number, cycle) => sum + (cycle.cycleProfit || 0), 0))}
                       </p>
                     </div>
                     <TrendingUp className="w-8 h-8 text-green-400" />

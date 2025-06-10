@@ -85,6 +85,10 @@ export class WebSocketService {
   private userDataStreams = new Map<number, WebSocket>(); // exchangeId -> WebSocket
   private listenKeys = new Map<number, string>(); // exchangeId -> listenKey
   private marketDataClients = new Set<WebSocket>(); // WebSocket clients for market data
+  
+  // Cycle management optimization for concurrent operations
+  private cycleOperationLocks = new Map<number, Promise<void>>(); // botId -> operation promise
+  private pendingCycleStarts = new Map<number, NodeJS.Timeout>(); // botId -> timeout handle
 
   constructor(server: Server) {
     // WebSocket server on dedicated port with proper Replit binding
@@ -3493,13 +3497,24 @@ export class WebSocketService {
         const cooldown = cooldownSeconds * 1000; // Convert to milliseconds
         console.log(`[MARTINGALE STRATEGY] ⏱️ Applying cooldown: ${cooldownSeconds}s`);
         
-        setTimeout(async () => {
+        // Cancel any existing pending cycle start for this bot
+        const existingTimeout = this.pendingCycleStarts.get(cycle.botId);
+        if (existingTimeout) {
+          clearTimeout(existingTimeout);
+          console.log(`[MARTINGALE STRATEGY] ⏹️ Cancelled existing pending cycle for bot ${cycle.botId}`);
+        }
+
+        // Schedule new cycle start with proper queue management
+        const timeoutHandle = setTimeout(async () => {
+          this.pendingCycleStarts.delete(cycle.botId);
           try {
-            await this.startNewMartingaleCycle(cycle.botId, (cycle.cycleNumber || 1) + 1);
+            await this.startNewMartingaleCycleOptimized(cycle.botId, (cycle.cycleNumber || 1) + 1);
           } catch (error) {
             console.error(`[MARTINGALE STRATEGY] ❌ Error starting new cycle after cooldown:`, error);
           }
         }, cooldown);
+        
+        this.pendingCycleStarts.set(cycle.botId, timeoutHandle);
 
       } else {
         console.log(`[MARTINGALE STRATEGY] ⏸️ Bot is inactive - No new cycle will be started`);
@@ -3678,6 +3693,85 @@ export class WebSocketService {
     }
     
     console.log(`[MARTINGALE STRATEGY] ===== NEW CYCLE INITIALIZATION COMPLETE =====\n`);
+  }
+
+  // Optimized cycle management with concurrency control
+  private async startNewMartingaleCycleOptimized(botId: number, cycleNumber: number) {
+    // Check if there's already an operation in progress for this bot
+    const existingOperation = this.cycleOperationLocks.get(botId);
+    if (existingOperation) {
+      console.log(`[MARTINGALE STRATEGY] ⏳ Bot ${botId} already has cycle operation in progress - waiting...`);
+      try {
+        await existingOperation;
+      } catch (error) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Previous operation failed for bot ${botId}:`, error);
+      }
+    }
+
+    // Create new operation promise
+    const operationPromise = this.executeCycleStart(botId, cycleNumber);
+    this.cycleOperationLocks.set(botId, operationPromise);
+
+    try {
+      await operationPromise;
+    } finally {
+      // Clean up the lock
+      this.cycleOperationLocks.delete(botId);
+    }
+  }
+
+  private async executeCycleStart(botId: number, cycleNumber: number): Promise<void> {
+    console.log(`\n[MARTINGALE STRATEGY] ===== STARTING NEW CYCLE (OPTIMIZED) =====`);
+    console.log(`[MARTINGALE STRATEGY] Bot ID: ${botId}, Cycle Number: ${cycleNumber}`);
+    
+    try {
+      // Quick bot validation with minimal database queries
+      const bot = await storage.getTradingBot(botId);
+      if (!bot?.isActive) {
+        console.log(`[MARTINGALE STRATEGY] ⏸️ Bot ${botId} is inactive or not found - cancelling cycle start`);
+        return;
+      }
+
+      // Check for existing active cycle to prevent duplicates
+      const existingCycle = await storage.getActiveBotCycle(botId);
+      if (existingCycle) {
+        console.log(`[MARTINGALE STRATEGY] ⚠️ Bot ${botId} already has active cycle ${existingCycle.cycleNumber} - skipping`);
+        return;
+      }
+
+      console.log(`[MARTINGALE STRATEGY] ✓ Bot verified: ${bot.name} (${bot.tradingPair})`);
+
+      // Create new cycle with atomic operation
+      const newCycle = await storage.createBotCycle({
+        botId: botId,
+        userId: bot.userId,
+        cycleNumber: cycleNumber,
+        maxSafetyOrders: bot.maxSafetyOrders,
+        baseOrderPrice: '0',
+        currentAveragePrice: '0',
+        totalInvested: '0',
+        totalQuantity: '0'
+      });
+
+      console.log(`[MARTINGALE STRATEGY] ✓ Created new cycle ${cycleNumber} (ID: ${newCycle.id})`);
+
+      // Place the initial base order
+      await this.placeInitialBaseOrder(botId, newCycle.id);
+
+      console.log(`[MARTINGALE STRATEGY] ✅ New cycle ${cycleNumber} started successfully for bot ${botId}`);
+
+    } catch (error) {
+      console.error(`[MARTINGALE STRATEGY] ❌ Error in optimized cycle start for bot ${botId}:`, error);
+      
+      // If we have a database constraint error, it might be a race condition
+      if (error instanceof Error && error.message.includes('constraint')) {
+        console.log(`[MARTINGALE STRATEGY] 🔄 Detected potential race condition for bot ${botId} - will retry on next interval`);
+      }
+      
+      throw error;
+    }
+    
+    console.log(`[MARTINGALE STRATEGY] ===== OPTIMIZED CYCLE INITIALIZATION COMPLETE =====\n`);
   }
 
   private async placeOrderOnExchange(exchange: any, orderParams: any): Promise<any> {
