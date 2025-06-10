@@ -229,7 +229,7 @@ export class DatabaseStorage implements IStorage {
     const [pnlResult] = await db
       .select({ totalPnl: sum(botCycles.cycleProfit) })
       .from(botCycles)
-      .where(and(eq(botCycles.userId, userId), isNotNull(botCycles.completedAt)));
+      .where(and(eq(botCycles.userId, userId), sql`${botCycles.completedAt} IS NOT NULL`));
 
     // Get active bots count
     const [activeBotsResult] = await db
