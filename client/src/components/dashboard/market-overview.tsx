@@ -23,9 +23,8 @@ interface MarketDataResponse {
 }
 
 export function MarketOverview() {
-  const { data: marketData, isLoading } = useQuery<MarketDataResponse[]>({
-    queryKey: ['/api/market'],
-  });
+  const { marketData, isConnected } = useMarketData();
+  const isLoading = !isConnected;
 
   if (isLoading) {
     return (

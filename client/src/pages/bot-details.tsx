@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Play, Square, TrendingUp, TrendingDown } from 'lucide-react';
+import { useMarketData } from '@/hooks/useMarketData';
 
 interface BotDetailsProps {
   bot: any;
@@ -13,13 +14,9 @@ interface BotDetailsProps {
 export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
   const [activeSection, setActiveSection] = useState('current-cycle');
 
-  // Fetch market data for live price
-  const { data: marketData } = useQuery({
-    queryKey: ['/api/market'],
-    refetchInterval: 3000
-  });
-
-  const currentMarketData = Array.isArray(marketData) ? marketData.find((item: any) => item.symbol === bot.tradingPair) : null;
+  // Get real-time market data via WebSocket
+  const { getSymbolData } = useMarketData();
+  const currentMarketData = getSymbolData(bot.tradingPair);
 
   // Fetch bot orders for selected bot (event-driven updates only)
   const { data: botOrders = [], isLoading: ordersLoading } = useQuery<any[]>({
