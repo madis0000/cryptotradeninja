@@ -580,6 +580,7 @@ export function MyBotsPage() {
                           <th className="text-left py-2 px-4 text-crypto-light">Quantity</th>
                           <th className="text-left py-2 px-4 text-crypto-light">Status</th>
                           <th className="text-left py-2 px-4 text-crypto-light">% Filled</th>
+                          <th className="text-left py-2 px-4 text-crypto-light">Fee</th>
                           <th className="text-left py-2 px-4 text-crypto-light">Date Time</th>
                         </tr>
                       </thead>
@@ -657,6 +658,15 @@ export function MyBotsPage() {
                                   {fillPercentage > 0 ? `${fillPercentage.toFixed(0)}%` : '-'}
                                 </span>
                               </td>
+                              <td className="py-2 px-4">
+                                {order.status === 'filled' && order.fee ? (
+                                  <span className="text-xs text-crypto-light font-mono">
+                                    {parseFloat(order.fee).toFixed(4)} {order.feeAsset || 'USDT'}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-crypto-light">-</span>
+                                )}
+                              </td>
                               <td className="py-2 px-4 text-crypto-light text-xs">
                                 {order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
                               </td>
@@ -718,6 +728,7 @@ export function MyBotsPage() {
                                 <th className="text-left py-2 px-4 text-crypto-light">Filled Price</th>
                                 <th className="text-left py-2 px-4 text-crypto-light">Filled Qty</th>
                                 <th className="text-left py-2 px-4 text-crypto-light">Value</th>
+                                <th className="text-left py-2 px-4 text-crypto-light">Fee</th>
                                 <th className="text-left py-2 px-4 text-crypto-light">Filled Date</th>
                               </tr>
                             </thead>

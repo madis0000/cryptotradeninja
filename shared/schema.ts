@@ -158,6 +158,11 @@ export const cycleOrders = pgTable("cycle_orders", {
   status: text("status").notNull().default("pending"), // pending, filled, cancelled, partially_filled, failed
   filledQuantity: decimal("filled_quantity", { precision: 20, scale: 8 }).default("0"),
   filledPrice: decimal("filled_price", { precision: 20, scale: 8 }),
+  
+  // Fee information (added for accurate P&L calculation)
+  fee: decimal("fee", { precision: 20, scale: 8 }).default("0"),
+  feeAsset: text("fee_asset"), // BNB, USDT, DOGE, etc. - currency in which fee was charged
+  
   errorMessage: text("error_message"), // Store detailed error messages for failed orders
   
   createdAt: timestamp("created_at").defaultNow().notNull(),

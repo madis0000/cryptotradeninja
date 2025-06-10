@@ -3036,11 +3036,19 @@ export class WebSocketService {
         if (cycleOrder) {
           console.log(`[USER STREAM] 🎯 MATCHED ORDER FILL - Cycle Order ID: ${cycleOrder.id}`);
           
-          // Update order with fill data
+          // Extract fee information from Binance execution report
+          const commission = message.n || '0'; // Commission amount
+          const commissionAsset = message.N || ''; // Commission asset (BNB, USDT, etc.)
+          
+          console.log(`[USER STREAM] Fee info - Amount: ${commission} ${commissionAsset}`);
+          
+          // Update order with fill data including fees
           await storage.updateCycleOrder(cycleOrder.id, {
             status: 'filled',
             filledQuantity: message.q, // Executed quantity
             filledPrice: message.L,    // Last executed price
+            fee: commission,           // Trading fee amount
+            feeAsset: commissionAsset, // Currency in which fee was charged
             filledAt: new Date()
           });
 
