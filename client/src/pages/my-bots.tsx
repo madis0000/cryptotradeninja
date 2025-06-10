@@ -812,6 +812,9 @@ export function MyBotsPage() {
                   <div className="text-2xl font-bold text-blue-400">
                     {currentCycle ? `#${currentCycle.cycleNumber}` : 'No Active Cycle'}
                   </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Debug: {JSON.stringify({cycleId: currentCycle?.id, cycleNum: currentCycle?.cycleNumber})}
+                  </div>
                   <p className="text-sm text-crypto-light mt-2">
                     {currentCycle?.status === 'active' ? 'Running' : 'Completed'}
                   </p>
