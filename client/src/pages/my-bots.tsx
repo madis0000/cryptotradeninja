@@ -94,7 +94,7 @@ export function MyBotsPage() {
   };
 
   const calculateDailyPnL = (bot: any) => {
-    const totalPnL = parseFloat(bot.totalPnl || '0');
+    const totalPnL = getTotalPnL(bot);
     const ageInDays = getBotAge(bot.createdAt);
     return totalPnL / ageInDays;
   };
@@ -426,7 +426,7 @@ export function MyBotsPage() {
                                 <div className="text-crypto-primary font-mono font-semibold">{completedCycles}</div>
                                 <div className="text-gray-400 flex items-center justify-center mt-1">
                                   <RefreshCw className="w-3 h-3 mr-1" />
-                                  Cycles
+                                  Cycles Completed
                                 </div>
                               </div>
                               <div className="text-center p-2 bg-gray-800/20 rounded border border-gray-700/30">
@@ -527,8 +527,8 @@ export function MyBotsPage() {
                       const detailedBot = getBotData(bot.id);
                       const unrealizedPnL = calculateUnrealizedPnL(detailedBot);
                       const completedCycles = getCompletedCycles(detailedBot);
-                      const totalPnL = parseFloat(detailedBot.totalPnl || '0');
-                      const totalInvested = parseFloat(detailedBot.totalInvested || '0');
+                      const totalPnL = getTotalPnL(detailedBot);
+                      const totalInvested = getTotalInvested(detailedBot);
                       const dailyPnL = calculateDailyPnL(detailedBot);
                       const unrealizedDailyPnL = calculateUnrealizedDailyPnL(detailedBot);
                       
@@ -591,7 +591,7 @@ export function MyBotsPage() {
                                 <div className="text-gray-400 font-mono font-semibold">{completedCycles}</div>
                                 <div className="text-gray-500 flex items-center justify-center mt-1">
                                   <RefreshCw className="w-3 h-3 mr-1" />
-                                  Cycles
+                                  Cycles Completed
                                 </div>
                               </div>
                               <div className="text-center p-2 bg-gray-700/15 rounded border border-gray-600/20">
