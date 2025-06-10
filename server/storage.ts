@@ -64,7 +64,7 @@ export interface IStorage {
   updateCycleOrder(orderId: number, updates: Partial<InsertCycleOrder> & { filledAt?: Date }): Promise<CycleOrder>;
   getCycleOrderByExchangeId(exchangeOrderId: string): Promise<CycleOrder | undefined>;
   getPendingCycleOrders(botId: number): Promise<CycleOrder[]>;
-  getCycleOrdersByBotId(botId: number): Promise<CycleOrder[]>;
+  getCycleOrdersByBotId(botId: number): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -344,17 +344,6 @@ export class DatabaseStorage implements IStorage {
     return order || undefined;
   }
 
-  async getPendingCycleOrders(botId: number): Promise<CycleOrder[]> {
-    return await db
-      .select()
-      .from(cycleOrders)
-      .where(and(
-        eq(cycleOrders.botId, botId),
-        eq(cycleOrders.status, 'pending')
-      ))
-      .orderBy(desc(cycleOrders.createdAt));
-  }
-
   async getBotCyclesByBotId(botId: number): Promise<BotCycle[]> {
     return await db
       .select()
@@ -363,12 +352,33 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(botCycles.createdAt));
   }
 
-  async getCycleOrdersByBotId(botId: number): Promise<CycleOrder[]> {
-    return await db
-      .select()
+  async getCycleOrdersByBotId(botId: number): Promise<any[]> {
+    const results = await db
+      .select({
+        id: cycleOrders.id,
+        cycleId: cycleOrders.cycleId,
+        botId: cycleOrders.botId,
+        userId: cycleOrders.userId,
+        orderType: cycleOrders.orderType,
+        side: cycleOrders.side,
+        price: cycleOrders.price,
+        quantity: cycleOrders.quantity,
+        filledPrice: cycleOrders.filledPrice,
+        filledQuantity: cycleOrders.filledQuantity,
+        status: cycleOrders.status,
+        exchangeOrderId: cycleOrders.exchangeOrderId,
+        fee: cycleOrders.fee,
+        feeAsset: cycleOrders.feeAsset,
+        createdAt: cycleOrders.createdAt,
+        filledAt: cycleOrders.filledAt,
+        cycleNumber: botCycles.cycleNumber
+      })
       .from(cycleOrders)
+      .leftJoin(botCycles, eq(cycleOrders.cycleId, botCycles.id))
       .where(eq(cycleOrders.botId, botId))
       .orderBy(desc(cycleOrders.createdAt));
+    
+    return results;
   }
 
   async getPendingCycleOrders(botId: number): Promise<CycleOrder[]> {
