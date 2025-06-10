@@ -87,7 +87,7 @@ export class WebSocketService {
     // WebSocket server integrated with HTTP server to avoid port conflicts
     this.wss = new WebSocketServer({ 
       server: server,
-      path: '/ws'
+      path: '/api/ws'
     });
 
     this.setupWebSocket();

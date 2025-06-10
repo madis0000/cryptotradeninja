@@ -23,7 +23,7 @@ export function useOrderNotifications() {
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const wsUrl = `${protocol}//${window.location.host}/api/ws`;
     
     const connectWebSocket = () => {
       const ws = new WebSocket(wsUrl);

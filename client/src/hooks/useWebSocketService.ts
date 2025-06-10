@@ -39,13 +39,12 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     
     // Connect to backend WebSocket server (not external exchanges)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const hostname = window.location.hostname;
-    const ws = new WebSocket(`${protocol}//${hostname}:8080`);
+    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('[CLIENT WS] ===== CONNECTED TO BACKEND SERVER =====');
-      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:8080`);
+      console.log(`[CLIENT WS] Connected to: ${protocol}//${window.location.host}/api/ws`);
       setStatus('connected');
       options.onConnect?.();
       
