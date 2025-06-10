@@ -3587,14 +3587,6 @@ export class WebSocketService {
         console.log(`[MARTINGALE STRATEGY] 🚀 Placing updated take profit order on ${activeExchange.name}...`);
         
         // Apply price and quantity filters using centralized functions
-        // Get exchange for dynamic filters
-        const exchanges = await storage.getExchangesByUserId(bot.userId);
-        const activeExchange = exchanges.find(ex => ex.id === bot.exchangeId && ex.isActive);
-        
-        if (!activeExchange) {
-          console.error(`[MARTINGALE STRATEGY] ❌ No active exchange found for take profit order`);
-          return;
-        }
 
         const filters = await getBinanceSymbolFilters(bot.tradingPair, activeExchange.restApiEndpoint);
         const adjustedTakeProfitPrice = adjustPrice(newTakeProfitPrice, filters.tickSize, filters.priceDecimals);
