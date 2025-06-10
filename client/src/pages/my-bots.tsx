@@ -143,6 +143,10 @@ export function MyBotsPage() {
         return (!latest || cycle.cycleNumber > latest.cycleNumber) ? cycle : latest;
       }, null)
     : null;
+    
+  // Debug logging for cycle data
+  console.log('[DEBUG] Bot Cycles:', botCycles);
+  console.log('[DEBUG] Current Cycle:', currentCycle);
 
   // Filter orders for current cycle and history
   const currentCycleOrders = botOrders.filter((order: any) => {
