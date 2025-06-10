@@ -45,31 +45,23 @@ export function MyBotsPage() {
     }
   };
 
-  const getCompletedCycles = (botId: number) => {
-    const cycles = allBotCycles[botId] || [];
-    return cycles.filter((cycle: any) => cycle.status === 'completed').length;
+  const getBotData = (botId: number) => {
+    // Use detailed bot data if available, fallback to basic bot data
+    return detailedBots[botId] || bots.find(b => b.id === botId) || {};
   };
 
-  const calculateUnrealizedPnL = (botId: number) => {
-    const cycles = allBotCycles[botId] || [];
-    const orders = allBotOrders[botId] || [];
-    
-    // Find current active cycle
-    const activeCycle = cycles.find((cycle: any) => cycle.status === 'active');
-    if (!activeCycle) return 0;
-    
-    // Calculate total invested in current cycle from filled orders
-    const currentCycleOrders = orders.filter((order: any) => 
-      order.cycleId === activeCycle.id && order.status === 'filled' && order.side === 'buy'
-    );
-    
-    const totalInvested = currentCycleOrders.reduce((sum: number, order: any) => 
-      sum + parseFloat(order.executedQuantity || '0') * parseFloat(order.price || '0'), 0
-    );
-    
-    // This would need current market price to calculate unrealized P&L properly
-    // For now, return a calculated value based on cycle data
-    return parseFloat(activeCycle.unrealizedPnl || '0');
+  const getCompletedCycles = (bot: any) => {
+    // Use total trades as a proxy for completed cycles since each trade represents a cycle completion
+    return bot.totalTrades || 0;
+  };
+
+  const calculateUnrealizedPnL = (bot: any) => {
+    // Use the totalInvested as unrealized P&L for active bots
+    // This represents the current position value
+    if (bot.status === 'active' && bot.totalInvested) {
+      return parseFloat(bot.totalInvested || '0');
+    }
+    return 0;
   };
 
   const calculateDailyPnL = (bot: any) => {
@@ -78,8 +70,8 @@ export function MyBotsPage() {
     return totalPnL / ageInDays;
   };
 
-  const calculateUnrealizedDailyPnL = (botId: number, bot: any) => {
-    const unrealizedPnL = calculateUnrealizedPnL(botId);
+  const calculateUnrealizedDailyPnL = (bot: any) => {
+    const unrealizedPnL = calculateUnrealizedPnL(bot);
     const ageInDays = getBotAge(bot.createdAt);
     return unrealizedPnL / ageInDays;
   };
@@ -89,49 +81,26 @@ export function MyBotsPage() {
     queryKey: ['/api/bots']
   });
 
-  // Fetch cycles and orders data for all bots to get dynamic metrics
-  const { data: allBotCycles = {} } = useQuery({
-    queryKey: ['/api/all-bot-cycles'],
+  // Fetch individual bot data to get real-time metrics
+  const { data: detailedBots = {} } = useQuery({
+    queryKey: ['/api/detailed-bots'],
     queryFn: async () => {
-      const cyclesData: Record<number, any[]> = {};
+      const detailedData: Record<number, any> = {};
       for (const bot of bots) {
         try {
-          const response = await fetch(`/api/bot-cycles/${bot.id}`, {
+          const response = await fetch(`/api/bots/${bot.id}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('token')}`
             }
           });
           if (response.ok) {
-            cyclesData[bot.id] = await response.json();
+            detailedData[bot.id] = await response.json();
           }
         } catch (error) {
-          console.error(`Failed to fetch cycles for bot ${bot.id}:`, error);
+          console.error(`Failed to fetch detailed data for bot ${bot.id}:`, error);
         }
       }
-      return cyclesData;
-    },
-    enabled: bots.length > 0
-  });
-
-  const { data: allBotOrders = {} } = useQuery({
-    queryKey: ['/api/all-bot-orders'],
-    queryFn: async () => {
-      const ordersData: Record<number, any[]> = {};
-      for (const bot of bots) {
-        try {
-          const response = await fetch(`/api/bot-orders/${bot.id}`, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-          });
-          if (response.ok) {
-            ordersData[bot.id] = await response.json();
-          }
-        } catch (error) {
-          console.error(`Failed to fetch orders for bot ${bot.id}:`, error);
-        }
-      }
-      return ordersData;
+      return detailedData;
     },
     enabled: bots.length > 0
   });
@@ -237,12 +206,13 @@ export function MyBotsPage() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     {activeBots.map((bot: any) => {
-                      const unrealizedPnL = calculateUnrealizedPnL(bot.id);
-                      const completedCycles = getCompletedCycles(bot.id);
-                      const totalPnL = parseFloat(bot.totalPnl || '0');
-                      const totalInvested = parseFloat(bot.totalInvested || '0');
-                      const dailyPnL = calculateDailyPnL(bot);
-                      const unrealizedDailyPnL = calculateUnrealizedDailyPnL(bot.id, bot);
+                      const detailedBot = getBotData(bot.id);
+                      const unrealizedPnL = calculateUnrealizedPnL(detailedBot);
+                      const completedCycles = getCompletedCycles(detailedBot);
+                      const totalPnL = parseFloat(detailedBot.totalPnl || '0');
+                      const totalInvested = parseFloat(detailedBot.totalInvested || '0');
+                      const dailyPnL = calculateDailyPnL(detailedBot);
+                      const unrealizedDailyPnL = calculateUnrealizedDailyPnL(detailedBot);
                       
                       return (
                         <Card key={bot.id} className="bg-gradient-to-br from-crypto-darker to-gray-900/50 border border-gray-800/50 hover:border-green-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-green-500/10 group">
@@ -320,15 +290,15 @@ export function MyBotsPage() {
                             <div className="grid grid-cols-2 gap-3 text-xs">
                               <div>
                                 <span className="text-gray-400">Safety Amount:</span>
-                                <div className="text-white font-mono">${formatCurrency(bot.safetyOrderAmount)}</div>
+                                <div className="text-white font-mono">${formatCurrency(detailedBot.safetyOrderAmount)}</div>
                               </div>
                               <div>
                                 <span className="text-gray-400">Max Safety Orders:</span>
-                                <div className="text-white font-medium">{bot.maxSafetyOrders}</div>
+                                <div className="text-white font-medium">{detailedBot.maxSafetyOrders}</div>
                               </div>
                               <div>
                                 <span className="text-gray-400">Price Deviation:</span>
-                                <div className="text-white font-medium">{formatCurrency(bot.priceDeviation)}%</div>
+                                <div className="text-white font-medium">{formatCurrency(detailedBot.priceDeviation)}%</div>
                               </div>
                               <div>
                                 <span className="text-gray-400">Daily P&L:</span>
@@ -347,7 +317,7 @@ export function MyBotsPage() {
                             {/* Created Date */}
                             <div className="flex items-center text-xs text-gray-500 border-t border-gray-700/50 pt-3">
                               <Calendar className="w-3 h-3 mr-2" />
-                              Created: {formatDateTime(bot.createdAt)}
+                              Created: {formatDateTime(detailedBot.createdAt)}
                             </div>
                             
                             {/* Action Buttons */}
@@ -402,12 +372,13 @@ export function MyBotsPage() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     {inactiveBots.map((bot: any) => {
-                      const unrealizedPnL = calculateUnrealizedPnL(bot.id);
-                      const completedCycles = getCompletedCycles(bot.id);
-                      const totalPnL = parseFloat(bot.totalPnl || '0');
-                      const totalInvested = parseFloat(bot.totalInvested || '0');
-                      const dailyPnL = calculateDailyPnL(bot);
-                      const unrealizedDailyPnL = calculateUnrealizedDailyPnL(bot.id, bot);
+                      const detailedBot = getBotData(bot.id);
+                      const unrealizedPnL = calculateUnrealizedPnL(detailedBot);
+                      const completedCycles = getCompletedCycles(detailedBot);
+                      const totalPnL = parseFloat(detailedBot.totalPnl || '0');
+                      const totalInvested = parseFloat(detailedBot.totalInvested || '0');
+                      const dailyPnL = calculateDailyPnL(detailedBot);
+                      const unrealizedDailyPnL = calculateUnrealizedDailyPnL(detailedBot);
                       
                       return (
                         <Card key={bot.id} className="bg-gradient-to-br from-gray-900/80 to-gray-800/30 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-300 hover:shadow-lg hover:shadow-gray-500/5 group opacity-90">
@@ -485,15 +456,15 @@ export function MyBotsPage() {
                             <div className="grid grid-cols-2 gap-3 text-xs">
                               <div>
                                 <span className="text-gray-500">Safety Amount:</span>
-                                <div className="text-gray-300 font-mono">${formatCurrency(bot.safetyOrderAmount)}</div>
+                                <div className="text-gray-300 font-mono">${formatCurrency(detailedBot.safetyOrderAmount)}</div>
                               </div>
                               <div>
                                 <span className="text-gray-500">Max Safety Orders:</span>
-                                <div className="text-gray-300 font-medium">{bot.maxSafetyOrders}</div>
+                                <div className="text-gray-300 font-medium">{detailedBot.maxSafetyOrders}</div>
                               </div>
                               <div>
                                 <span className="text-gray-500">Price Deviation:</span>
-                                <div className="text-gray-300 font-medium">{formatCurrency(bot.priceDeviation)}%</div>
+                                <div className="text-gray-300 font-medium">{formatCurrency(detailedBot.priceDeviation)}%</div>
                               </div>
                               <div>
                                 <span className="text-gray-500">Daily P&L:</span>
@@ -512,7 +483,7 @@ export function MyBotsPage() {
                             {/* Created Date */}
                             <div className="flex items-center text-xs text-gray-600 border-t border-gray-600/30 pt-3">
                               <Calendar className="w-3 h-3 mr-2" />
-                              Created: {formatDateTime(bot.createdAt)}
+                              Created: {formatDateTime(detailedBot.createdAt)}
                             </div>
                             
                             {/* Action Buttons */}
