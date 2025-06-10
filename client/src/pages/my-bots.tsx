@@ -52,6 +52,15 @@ export function MyBotsPage() {
         if (message.type === 'market_update' && message.data.symbol === selectedBot.tradingPair) {
           setMarketData(message.data);
         }
+        
+        // Listen for order notifications to trigger data refresh
+        if (message.type === 'order_notification' && message.data.botId === selectedBot.id) {
+          console.log('[CLIENT WS] Order notification received, refreshing data');
+          // Invalidate queries to fetch latest data
+          queryClient.invalidateQueries({ queryKey: ['/api/bot-orders', selectedBot.id] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles', selectedBot.id] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+        }
       } catch (error) {
         console.error('WebSocket message error:', error);
       }
@@ -66,12 +75,14 @@ export function MyBotsPage() {
     };
   }, [selectedBot?.tradingPair]);
 
-  // Fetch bots data
+  // Fetch bots data with auto-refresh
   const { data: bots = [], isLoading: botsLoading } = useQuery<any[]>({
-    queryKey: ['/api/bots']
+    queryKey: ['/api/bots'],
+    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchIntervalInBackground: true
   });
 
-  // Fetch bot orders for selected bot
+  // Fetch bot orders for selected bot with auto-refresh
   const { data: botOrders = [], isLoading: ordersLoading } = useQuery<any[]>({
     queryKey: ['/api/bot-orders', selectedBot?.id],
     queryFn: async () => {
@@ -84,7 +95,9 @@ export function MyBotsPage() {
       if (!response.ok) throw new Error('Failed to fetch orders');
       return response.json();
     },
-    enabled: !!selectedBot?.id
+    enabled: !!selectedBot?.id,
+    refetchInterval: 5000, // Refresh every 5 seconds for real-time updates
+    refetchIntervalInBackground: true
   });
 
   // Fetch individual bot data for the selected bot
@@ -103,7 +116,7 @@ export function MyBotsPage() {
     enabled: !!selectedBot?.id
   });
 
-  // Fetch bot cycles for current cycle information
+  // Fetch bot cycles for current cycle information with auto-refresh
   const { data: botCycles = [] } = useQuery({
     queryKey: ['/api/bot-cycles', selectedBot?.id],
     queryFn: async () => {
@@ -116,7 +129,9 @@ export function MyBotsPage() {
       if (!response.ok) throw new Error('Failed to fetch cycles');
       return response.json();
     },
-    enabled: !!selectedBot?.id
+    enabled: !!selectedBot?.id,
+    refetchInterval: 5000, // Refresh every 5 seconds for real-time updates
+    refetchIntervalInBackground: true
   });
 
   // Get current active cycle
@@ -129,8 +144,14 @@ export function MyBotsPage() {
   });
 
   const historyOrders = botOrders.filter((order: any) => {
+    // Show all filled orders from previous cycles
     if (!currentCycle) return order.status === 'filled';
-    return order.cycleId !== currentCycle.id && order.status === 'filled';
+    
+    // For completed cycles or filled orders from previous cycles
+    const isFromPreviousCycle = order.cycleId !== currentCycle.id;
+    const isFilledOrder = order.status === 'filled';
+    
+    return isFromPreviousCycle && isFilledOrder;
   });
 
   // Fetch general stats for dashboard overview
