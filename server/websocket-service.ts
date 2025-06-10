@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import crypto from 'crypto';
 import { symbolFilterService, SymbolFilters } from './symbol-filters';
 import { getBinanceSymbolFilters, adjustPrice, adjustQuantity } from './binance-filters';
+import { BotLoggerManager } from './bot-logger';
 
 interface UserConnection {
   ws: WebSocket;
@@ -2324,6 +2325,9 @@ export class WebSocketService {
     try {
       console.log(`[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====`);
       
+      // Get bot logger
+      const logger = BotLoggerManager.getLogger(bot.id, bot.tradingPair);
+      
       // Create new bot cycle
       const cycle = await storage.createBotCycle({
         userId: bot.userId,
@@ -2333,6 +2337,7 @@ export class WebSocketService {
         totalInvested: bot.baseOrderAmount
       });
       
+      logger.logCycleStarted(cycle.cycleNumber || 1, cycle.id);
       console.log(`[MARTINGALE STRATEGY] Bot ID: ${bot.id}, Cycle ID: ${cycle.id}`);
       
       // Get current market price
@@ -3488,6 +3493,13 @@ export class WebSocketService {
         completedAt: new Date(),
         cycleProfit: profit.toString()
       });
+      
+      // Log cycle completion
+      const logger = BotLoggerManager.getLogger(cycle.botId, bot.tradingPair);
+      const duration = cycle.createdAt ? new Date().getTime() - new Date(cycle.createdAt).getTime() : 0;
+      const durationStr = `${Math.floor(duration / 60000)}m ${Math.floor((duration % 60000) / 1000)}s`;
+      logger.logCycleCompleted(cycle.cycleNumber || 1, cycle.id, profit, durationStr);
+      
       console.log(`[MARTINGALE STRATEGY] ✓ Cycle ${cycle.cycleNumber || 1} completed successfully with profit: $${profit.toFixed(2)}`);
 
       // Check if bot should continue (not paused/stopped)
@@ -3940,12 +3952,24 @@ export class WebSocketService {
     console.log(`\n[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====`);
     console.log(`[MARTINGALE STRATEGY] Bot ID: ${botId}, Cycle ID: ${cycleId}`);
     
+    // Get bot logger
+    let logger: any = null;
+    
     try {
       const bot = await storage.getTradingBot(botId);
       if (!bot) {
         console.error(`[MARTINGALE STRATEGY] ❌ Bot ${botId} not found`);
         return;
       }
+
+      // Initialize logger
+      logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
+      logger.logStrategyAction('BASE_ORDER_START', {
+        botId,
+        cycleId,
+        strategy: bot.strategy,
+        tradingPair: bot.tradingPair
+      });
 
       console.log(`[MARTINGALE STRATEGY] ✓ Bot loaded: ${bot.name} (${bot.tradingPair}, ${bot.direction})`);
       console.log(`[MARTINGALE STRATEGY] ✓ Strategy: ${bot.strategy}, Exchange ID: ${bot.exchangeId}`);

@@ -674,6 +674,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bot logging API endpoints - Secured
+  app.get("/api/bot-logs/:botId", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const botId = parseInt(req.params.botId);
+      
+      // Verify bot belongs to user
+      const bot = await storage.getTradingBot(botId);
+      if (!bot || bot.userId !== userId) {
+        return res.status(404).json({ error: "Bot not found" });
+      }
+      
+      // Get bot logger and recent logs
+      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
+      const lines = parseInt(req.query.lines as string) || 100;
+      const logs = logger.getRecentLogs(lines);
+      
+      res.json({
+        botId,
+        tradingPair: bot.tradingPair,
+        logFilePath: logger.getLogFilePath(),
+        totalLines: logs.length,
+        logs
+      });
+    } catch (error) {
+      console.error('Error fetching bot logs:', error);
+      res.status(500).json({ error: "Failed to fetch bot logs" });
+    }
+  });
+
+  app.get("/api/bot-logs/:botId/download", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const botId = parseInt(req.params.botId);
+      
+      // Verify bot belongs to user
+      const bot = await storage.getTradingBot(botId);
+      if (!bot || bot.userId !== userId) {
+        return res.status(404).json({ error: "Bot not found" });
+      }
+      
+      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
+      const logFilePath = logger.getLogFilePath();
+      
+      // Set headers for file download
+      res.setHeader('Content-Disposition', `attachment; filename="bot_${botId}_${bot.tradingPair}.log"`);
+      res.setHeader('Content-Type', 'text/plain');
+      
+      // Send file
+      res.sendFile(logFilePath);
+    } catch (error) {
+      console.error('Error downloading bot logs:', error);
+      res.status(500).json({ error: "Failed to download bot logs" });
+    }
+  });
+
+  app.delete("/api/bot-logs/:botId", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const botId = parseInt(req.params.botId);
+      
+      // Verify bot belongs to user
+      const bot = await storage.getTradingBot(botId);
+      if (!bot || bot.userId !== userId) {
+        return res.status(404).json({ error: "Bot not found" });
+      }
+      
+      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
+      logger.clearLogs();
+      
+      res.json({ success: true, message: "Bot logs cleared successfully" });
+    } catch (error) {
+      console.error('Error clearing bot logs:', error);
+      res.status(500).json({ error: "Failed to clear bot logs" });
+    }
+  });
+
+  // System logs API - Secured  
+  app.get("/api/system-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      
+      const systemLogPath = path.join(process.cwd(), 'logs', 'system.log');
+      const lines = parseInt(req.query.lines as string) || 100;
+      
+      if (!fs.existsSync(systemLogPath)) {
+        return res.json({ logs: [], totalLines: 0 });
+      }
+      
+      const content = fs.readFileSync(systemLogPath, 'utf8');
+      const allLines = content.split('\n').filter(line => line.trim());
+      const logs = allLines.slice(-lines);
+      
+      res.json({
+        totalLines: logs.length,
+        logs
+      });
+    } catch (error) {
+      console.error('Error fetching system logs:', error);
+      res.status(500).json({ error: "Failed to fetch system logs" });
+    }
+  });
+
   // Individual bot API - Secured
   app.get("/api/bots/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
