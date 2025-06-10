@@ -7,6 +7,7 @@ import { Trash2, TrendingUp, TrendingDown, Calendar, Target, RefreshCw } from "l
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
+import { useMarketData } from "@/hooks/useMarketData";
 import { BotDetailsPage } from "./bot-details";
 import { format } from 'date-fns';
 
@@ -16,8 +17,9 @@ export function MyBotsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Initialize order notifications
+  // Initialize order notifications and market data
   useOrderNotifications();
+  const marketData = useMarketData();
 
   // Utility functions for bot data calculations
   const formatCurrency = (amount: string | number) => {
@@ -43,36 +45,6 @@ export function MyBotsPage() {
     } catch {
       return 1;
     }
-  };
-
-  const getBotData = (botId: number) => {
-    // Use detailed bot data if available, fallback to basic bot data
-    const detailed = detailedBots[botId];
-    const basic = bots.find(b => b.id === botId);
-    return detailed || basic || {};
-  };
-
-  const getCompletedCycles = (bot: any) => {
-    // Use total trades as a proxy for completed cycles since each trade represents a cycle completion
-    return bot.totalTrades || 0;
-  };
-
-  const calculateUnrealizedPnL = (bot: any) => {
-    // Return actual unrealized P&L or total invested amount
-    const unrealized = bot.unrealizedPnl || bot.totalInvested || '0';
-    return parseFloat(unrealized);
-  };
-
-  const calculateDailyPnL = (bot: any) => {
-    const totalPnL = parseFloat(bot.totalPnl || '0');
-    const ageInDays = getBotAge(bot.createdAt);
-    return totalPnL / ageInDays;
-  };
-
-  const calculateUnrealizedDailyPnL = (bot: any) => {
-    const unrealizedPnL = calculateUnrealizedPnL(bot);
-    const ageInDays = getBotAge(bot.createdAt);
-    return unrealizedPnL / ageInDays;
   };
 
   // Fetch bots data (event-driven updates only)
