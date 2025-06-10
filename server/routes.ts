@@ -7,6 +7,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";
 import { encryptApiCredentials, decryptApiCredentials } from "./encryption";
 import { WebSocketService } from "./websocket-service";
+import { BotLoggerManager } from "./bot-logger";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import cors from "cors";
@@ -303,9 +304,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create the bot in database only after validation succeeds
       const bot = await storage.createTradingBot(botData);
       
+      // Initialize bot logger and log creation
+      const logger = BotLoggerManager.getLogger(bot.id, bot.tradingPair);
+      logger.logBotCreated(bot);
+      
       // If it's a Martingale bot and active, start the first cycle
       if (bot.strategy === 'martingale' && bot.isActive) {
         console.log(`[MARTINGALE] Starting new bot cycle for bot ${bot.id}`);
+        logger.logBotStarted();
         
         try {
           // Create initial bot cycle
@@ -317,6 +323,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             totalInvested: '0',
             maxSafetyOrders: bot.maxSafetyOrders
           });
+          
+          logger.logCycleStarted(1, cycle.id);
           
           console.log(`[MARTINGALE] Created initial cycle ${cycle.id} for bot ${bot.id}`);
           
@@ -461,6 +469,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: false,
         status: 'inactive'
       });
+      
+      // Log bot stop
+      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
+      logger.logBotStopped(`Manual stop - ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}`);
       
       console.log(`[BOT STOP] Bot ${botId} stopped successfully. Cancelled: ${cancelledOrders} orders, Liquidated: ${liquidated}`);
       
