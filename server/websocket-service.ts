@@ -3482,9 +3482,13 @@ export class WebSocketService {
 
       console.log(`[MARTINGALE STRATEGY] ✓ Updated bot statistics: P&L: $${newTotalPnl.toFixed(2)}, Trades: ${newTotalTrades}, Win Rate: ${winRate.toFixed(1)}%`);
 
-      // Complete current cycle
-      await storage.completeBotCycle(cycle.id);
-      console.log(`[MARTINGALE STRATEGY] ✓ Cycle ${cycle.cycleNumber || 1} completed successfully`);
+      // Complete current cycle with profit data
+      await storage.updateBotCycle(cycle.id, {
+        status: 'completed',
+        completedAt: new Date(),
+        cycleProfit: profit.toString()
+      });
+      console.log(`[MARTINGALE STRATEGY] ✓ Cycle ${cycle.cycleNumber || 1} completed successfully with profit: $${profit.toFixed(2)}`);
 
       // Check if bot should continue (not paused/stopped)
       if (bot.isActive) {
