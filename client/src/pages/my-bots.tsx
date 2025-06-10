@@ -47,7 +47,9 @@ export function MyBotsPage() {
 
   const getBotData = (botId: number) => {
     // Use detailed bot data if available, fallback to basic bot data
-    return detailedBots[botId] || bots.find(b => b.id === botId) || {};
+    const detailed = detailedBots[botId];
+    const basic = bots.find(b => b.id === botId);
+    return detailed || basic || {};
   };
 
   const getCompletedCycles = (bot: any) => {
@@ -56,12 +58,9 @@ export function MyBotsPage() {
   };
 
   const calculateUnrealizedPnL = (bot: any) => {
-    // Use the totalInvested as unrealized P&L for active bots
-    // This represents the current position value
-    if (bot.status === 'active' && bot.totalInvested) {
-      return parseFloat(bot.totalInvested || '0');
-    }
-    return 0;
+    // Return actual unrealized P&L or total invested amount
+    const unrealized = bot.unrealizedPnl || bot.totalInvested || '0';
+    return parseFloat(unrealized);
   };
 
   const calculateDailyPnL = (bot: any) => {
@@ -281,7 +280,7 @@ export function MyBotsPage() {
                                 <div className="text-gray-400">Invested</div>
                               </div>
                               <div className="text-center p-2 bg-gray-800/20 rounded border border-gray-700/30">
-                                <div className="text-white font-mono font-semibold">${formatCurrency(bot.baseOrderAmount)}</div>
+                                <div className="text-white font-mono font-semibold">${formatCurrency(detailedBot.baseOrderAmount)}</div>
                                 <div className="text-gray-400">Base</div>
                               </div>
                             </div>
@@ -447,7 +446,7 @@ export function MyBotsPage() {
                                 <div className="text-gray-500">Invested</div>
                               </div>
                               <div className="text-center p-2 bg-gray-700/15 rounded border border-gray-600/20">
-                                <div className="text-gray-300 font-mono font-semibold">${formatCurrency(bot.baseOrderAmount)}</div>
+                                <div className="text-gray-300 font-mono font-semibold">${formatCurrency(detailedBot.baseOrderAmount)}</div>
                                 <div className="text-gray-500">Base</div>
                               </div>
                             </div>
