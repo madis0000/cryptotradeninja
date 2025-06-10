@@ -67,7 +67,32 @@ export function MyBotsPage() {
     return totalPnL / ageInDays;
   };
 
-  // Dynamic Unrealized P&L calculation using real market data
+  // Fetch bot orders for accurate position calculation
+  const { data: allBotOrders = {} } = useQuery({
+    queryKey: ['/api/all-bot-orders'],
+    queryFn: async () => {
+      const ordersData: Record<number, any[]> = {};
+      for (const bot of bots) {
+        try {
+          const response = await fetch(`/api/bot-orders/${bot.id}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          if (response.ok) {
+            ordersData[bot.id] = await response.json();
+          }
+        } catch (error) {
+          console.error(`Failed to fetch orders for bot ${bot.id}:`, error);
+        }
+      }
+      return ordersData;
+    },
+    enabled: bots.length > 0,
+    refetchInterval: 30000 // Refetch every 30 seconds for fresh data
+  });
+
+  // Dynamic Unrealized P&L calculation using database cycle data + live prices
   const calculateUnrealizedPnL = (bot: any) => {
     // Get current market price for the bot's trading pair
     const currentMarketData = marketData.getSymbolData(bot.tradingPair);
@@ -76,28 +101,41 @@ export function MyBotsPage() {
     const currentPrice = parseFloat(currentMarketData.price || '0');
     if (currentPrice === 0) return 0;
 
-    // For bots with active positions, calculate real-time P&L
-    const totalInvested = parseFloat(bot.totalInvested || '0');
+    // Get bot orders from database to calculate actual position
+    const botOrders = allBotOrders[bot.id] || [];
     
-    // If bot has active investment, calculate unrealized P&L
-    if (totalInvested > 0) {
-      // Use base order amount as position estimate for active positions
-      const baseOrderAmount = parseFloat(bot.baseOrderAmount || '0');
-      const averageEntryPrice = baseOrderAmount > 0 ? totalInvested / (baseOrderAmount / currentPrice) : currentPrice * 0.995; // Estimate 0.5% below current price
-      
-      // Calculate position size in base currency (e.g., DOGE)
-      const positionSize = totalInvested / averageEntryPrice;
-      
-      // Real-time P&L calculation: (current_price - entry_price) * position_size
-      const unrealizedPnL = (currentPrice - averageEntryPrice) * positionSize;
-      
-      // Log for debugging - shows dynamic updates
-      console.log(`[UNREALIZED P&L] ${bot.tradingPair}: Current: $${currentPrice}, Entry: $${averageEntryPrice.toFixed(6)}, Position: ${positionSize.toFixed(4)}, P&L: $${unrealizedPnL.toFixed(4)}`);
-      
-      return unrealizedPnL;
+    // Filter filled buy orders from current active cycle
+    const filledBuyOrders = botOrders.filter((order: any) => 
+      order.side === 'BUY' && order.status === 'filled'
+    );
+    
+    if (filledBuyOrders.length === 0) return 0;
+    
+    // Calculate actual position from filled orders
+    const totalPositionSize = filledBuyOrders.reduce((total: number, order: any) => {
+      return total + parseFloat(order.filledQuantity || order.quantity || '0');
+    }, 0);
+    
+    const totalInvested = filledBuyOrders.reduce((total: number, order: any) => {
+      const price = parseFloat(order.filledPrice || order.price || '0');
+      const qty = parseFloat(order.filledQuantity || order.quantity || '0');
+      return total + (price * qty);
+    }, 0);
+    
+    if (totalPositionSize === 0 || totalInvested === 0) return 0;
+    
+    // Calculate average entry price from actual filled orders
+    const averageEntryPrice = totalInvested / totalPositionSize;
+    
+    // Real-time unrealized P&L: (current_price - avg_entry_price) × position_size
+    const unrealizedPnL = (currentPrice - averageEntryPrice) * totalPositionSize;
+    
+    // Log for debugging - shows dynamic updates with real data
+    if (unrealizedPnL !== 0) {
+      console.log(`[UNREALIZED P&L] ${bot.tradingPair}: Current: $${currentPrice}, Entry: $${averageEntryPrice.toFixed(6)}, Position: ${totalPositionSize.toFixed(4)}, P&L: $${unrealizedPnL.toFixed(4)}`);
     }
     
-    return 0;
+    return unrealizedPnL;
   };
 
   const calculateUnrealizedDailyPnL = (bot: any) => {
