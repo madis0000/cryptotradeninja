@@ -84,11 +84,10 @@ export class WebSocketService {
   private listenKeys = new Map<number, string>(); // exchangeId -> listenKey
 
   constructor(server: Server) {
-    // WebSocket server on dedicated port with proper Replit binding
-    const wsPort = parseInt(process.env.WS_PORT || '8080');
+    // WebSocket server integrated with HTTP server to avoid port conflicts
     this.wss = new WebSocketServer({ 
-      port: wsPort,
-      host: '0.0.0.0'
+      server: server,
+      path: '/ws'
     });
 
     this.setupWebSocket();
