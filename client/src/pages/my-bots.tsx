@@ -280,7 +280,7 @@ export function MyBotsPage() {
                                 <div className="text-gray-400">Invested</div>
                               </div>
                               <div className="text-center p-2 bg-gray-800/20 rounded border border-gray-700/30">
-                                <div className="text-white font-mono font-semibold">${formatCurrency(detailedBot.baseOrderAmount)}</div>
+                                <div className="text-white font-mono font-semibold">${formatCurrency(detailedBot.baseOrderAmount || '0')}</div>
                                 <div className="text-gray-400">Base</div>
                               </div>
                             </div>
