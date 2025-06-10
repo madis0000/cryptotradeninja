@@ -39,12 +39,12 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     
     // Connect to backend WebSocket server (not external exchanges)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+    const ws = new WebSocket(`${protocol}//${window.location.host}/trading-ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('[CLIENT WS] ===== CONNECTED TO BACKEND SERVER =====');
-      console.log(`[CLIENT WS] Connected to: ${protocol}//${window.location.host}/api/ws`);
+      console.log(`[CLIENT WS] Connected to: ${protocol}//${window.location.host}/trading-ws`);
       setStatus('connected');
       options.onConnect?.();
       
@@ -131,7 +131,7 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     
     // Connect to our unified WebSocket service on dedicated port
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+    const ws = new WebSocket(`${protocol}//${window.location.host}/trading-ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
