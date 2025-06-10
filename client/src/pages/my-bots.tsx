@@ -144,9 +144,7 @@ export function MyBotsPage() {
       }, null)
     : null;
     
-  // Debug logging for cycle data
-  console.log('[DEBUG] Bot Cycles:', botCycles);
-  console.log('[DEBUG] Current Cycle:', currentCycle);
+
 
   // Filter orders for current cycle and history
   const currentCycleOrders = botOrders.filter((order: any) => {
@@ -812,7 +810,7 @@ export function MyBotsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-blue-400">
-                    {currentCycle ? `#${currentCycle.cycleNumber || 1}` : 'No Active Cycle'}
+                    {currentCycle ? `#${currentCycle.cycleNumber}` : 'No Active Cycle'}
                   </div>
                   <p className="text-sm text-crypto-light mt-2">
                     {currentCycle?.status === 'active' ? 'Running' : 'Completed'}
