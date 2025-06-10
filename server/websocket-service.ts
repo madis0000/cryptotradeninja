@@ -330,8 +330,10 @@ export class WebSocketService {
                   params: tickerStreams,
                   id: Date.now()
                 };
-                // Removed verbose WebSocket logging
-                this.binancePublicWs?.send(JSON.stringify(subscribeMessage));
+                // Check connection state before sending
+                if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+                  this.binancePublicWs.send(JSON.stringify(subscribeMessage));
+                }
                 this.currentSubscriptions = tickerStreams;
               }
             }
@@ -793,8 +795,10 @@ export class WebSocketService {
           params: this.currentSubscriptions,
           id: 1
         };
-        // Removed verbose Binance stream logging
-        this.binancePublicWs?.send(JSON.stringify(unsubscribeMessage));
+        // Check connection state before sending
+        if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+          this.binancePublicWs.send(JSON.stringify(unsubscribeMessage));
+        }
       }
       
       // Then subscribe to new streams
@@ -804,9 +808,10 @@ export class WebSocketService {
         id: 2
       };
       
-      // Removed verbose Binance stream logging
-      // Removed verbose Binance stream logging
-      this.binancePublicWs?.send(JSON.stringify(subscriptionMessage));
+      // Check connection state before sending
+      if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+        this.binancePublicWs.send(JSON.stringify(subscriptionMessage));
+      }
       
       // Update current subscriptions
       this.currentSubscriptions = [...streamPaths];
@@ -4072,107 +4077,7 @@ export class WebSocketService {
     }
   }
 
-  private async placeTakeProfitOrder(botId: number, cycleId: number, basePrice: number, quantity: number) {
-    console.log(`\n[MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====`);
-    
-    try {
-      const bot = await storage.getTradingBot(botId);
-      if (!bot) {
-        console.error(`[MARTINGALE STRATEGY] ❌ Bot ${botId} not found for take profit order`);
-        return;
-      }
 
-      const exchange = await storage.getExchangesByUserId(bot.userId);
-      const activeExchange = exchange.find(ex => ex.id === bot.exchangeId && ex.isActive);
-      
-      if (!activeExchange) {
-        console.error(`[MARTINGALE STRATEGY] ❌ No active exchange found for take profit order`);
-        return;
-      }
-
-      // Calculate take profit price
-      const takeProfitPercentage = parseFloat(bot.takeProfitPercentage || '1.5');
-      const rawTakeProfitPrice = bot.direction === 'long' 
-        ? basePrice * (1 + takeProfitPercentage / 100)
-        : basePrice * (1 - takeProfitPercentage / 100);
-
-      // Apply Binance PRICE_FILTER requirements for ICPUSDT
-      // For ICPUSDT on Binance testnet: tick size is 0.001 (3 decimals)
-      // This matches the price precision seen in successful MARKET orders
-      const tickSize = 0.001;
-      const takeProfitPrice = Math.round(rawTakeProfitPrice / tickSize) * tickSize;
-
-      console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:`);
-      console.log(`[MARTINGALE STRATEGY]    Base Price: $${basePrice.toFixed(6)}`);
-      console.log(`[MARTINGALE STRATEGY]    Take Profit %: ${takeProfitPercentage}%`);
-      console.log(`[MARTINGALE STRATEGY]    Raw TP Price: $${rawTakeProfitPrice.toFixed(8)}`);
-      console.log(`[MARTINGALE STRATEGY]    Adjusted TP Price: $${takeProfitPrice.toFixed(3)} (PRICE_FILTER compliant)`);
-      console.log(`[MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(1)}`);
-
-      // Create take profit order record
-      const takeProfitOrder = await storage.createCycleOrder({
-        cycleId: cycleId,
-        botId: botId,
-        userId: bot.userId,
-        orderType: 'take_profit',
-        side: bot.direction === 'long' ? 'SELL' : 'BUY',
-        orderCategory: 'LIMIT',
-        symbol: bot.tradingPair,
-        quantity: quantity.toFixed(1),
-        price: takeProfitPrice.toFixed(3),
-        status: 'pending'
-      });
-
-      console.log(`[MARTINGALE STRATEGY] ✓ Created take profit order record (ID: ${takeProfitOrder.id})`);
-
-      try {
-        console.log(`[MARTINGALE STRATEGY] 🚀 Placing take profit order on ${activeExchange.name}...`);
-        console.log(`[MARTINGALE STRATEGY]    Order Type: LIMIT ${bot.direction === 'long' ? 'SELL' : 'BUY'}`);
-        console.log(`[MARTINGALE STRATEGY]    Symbol: ${bot.tradingPair}`);
-        console.log(`[MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(8)}`);
-        console.log(`[MARTINGALE STRATEGY]    Price: $${takeProfitPrice.toFixed(6)}`);
-
-        const orderResult = await this.placeOrderOnExchange(activeExchange, {
-          symbol: bot.tradingPair,
-          side: bot.direction === 'long' ? 'SELL' : 'BUY',
-          type: 'LIMIT',
-          quantity: quantity.toFixed(1),
-          price: takeProfitPrice.toFixed(3),
-          timeInForce: 'GTC'
-        });
-
-        if (orderResult && orderResult.orderId) {
-          const updatedOrder = await storage.updateCycleOrder(takeProfitOrder.id, {
-            exchangeOrderId: orderResult.orderId.toString(),
-            status: 'placed'
-          });
-
-          console.log(`[MARTINGALE STRATEGY] ✅ TAKE PROFIT ORDER SUCCESSFULLY PLACED!`);
-          console.log(`[MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
-          console.log(`[MARTINGALE STRATEGY]    Target Price: $${takeProfitPrice.toFixed(6)}`);
-          console.log(`[MARTINGALE STRATEGY]    Expected Profit: ${takeProfitPercentage}%`);
-
-          // Broadcast order placement notification
-          this.broadcastOrderNotification(updatedOrder, 'placed');
-
-        } else {
-          console.error(`[MARTINGALE STRATEGY] ❌ Failed to place take profit order - No order ID returned`);
-          const failedOrder = await storage.updateCycleOrder(takeProfitOrder.id, { status: 'failed' });
-          this.broadcastOrderNotification(failedOrder, 'failed');
-        }
-
-      } catch (orderError) {
-        console.error(`[MARTINGALE STRATEGY] ❌ Error placing take profit order:`, orderError);
-        const failedOrder = await storage.updateCycleOrder(takeProfitOrder.id, { status: 'failed' });
-        this.broadcastOrderNotification(failedOrder, 'failed');
-      }
-
-    } catch (error) {
-      console.error(`[MARTINGALE STRATEGY] ❌ Critical error in placeTakeProfitOrder:`, error);
-    }
-    
-    console.log(`[MARTINGALE STRATEGY] ===== TAKE PROFIT ORDER COMPLETE =====\n`);
-  }
 
   private broadcastOrderFill(order: CycleOrder) {
     const message = JSON.stringify({
