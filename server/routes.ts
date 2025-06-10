@@ -622,6 +622,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get bot statistics (cycles completed, total P&L, total invested) - Secured
+  app.get("/api/bot-stats", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const bots = await storage.getTradingBotsByUserId(userId);
+      
+      const botStats = await Promise.all(bots.map(async (bot) => {
+        // Get completed cycles count
+        const cycles = await storage.getBotCyclesByBotId(bot.id);
+        const completedCycles = cycles.filter(cycle => cycle.status === 'completed');
+        
+        // Calculate total P&L from completed cycles
+        const totalPnL = completedCycles.reduce((sum, cycle) => {
+          return sum + parseFloat(cycle.cycleProfit || '0');
+        }, 0);
+        
+        // Calculate total invested from all filled orders (base + safety orders)
+        const allOrders = await storage.getCycleOrdersByBotId(bot.id);
+        const filledOrders = allOrders.filter((order: any) => order.status === 'filled');
+        const totalInvested = filledOrders.reduce((sum: number, order: any) => {
+          const price = parseFloat(order.filledPrice || order.price || '0');
+          const quantity = parseFloat(order.filledQuantity || order.quantity || '0');
+          return sum + (price * quantity);
+        }, 0);
+        
+        return {
+          botId: bot.id,
+          completedCycles: completedCycles.length,
+          totalPnL,
+          totalInvested
+        };
+      }));
+      
+      res.json(botStats);
+    } catch (error) {
+      console.error('Error fetching bot stats:', error);
+      res.status(500).json({ error: "Failed to fetch bot stats" });
+    }
+  });
+
   // Individual bot API - Secured
   app.get("/api/bots/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {

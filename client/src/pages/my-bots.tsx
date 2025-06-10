@@ -74,8 +74,23 @@ export function MyBotsPage() {
     return bots.find(b => b.id === botId) || {};
   };
 
+  const getBotStats = (botId: number) => {
+    return botStats.find(stats => stats.botId === botId) || { completedCycles: 0, totalPnL: 0, totalInvested: 0 };
+  };
+
   const getCompletedCycles = (bot: any) => {
-    return bot.totalTrades || 0;
+    const stats = getBotStats(bot.id);
+    return stats.completedCycles;
+  };
+
+  const getTotalPnL = (bot: any) => {
+    const stats = getBotStats(bot.id);
+    return stats.totalPnL;
+  };
+
+  const getTotalInvested = (bot: any) => {
+    const stats = getBotStats(bot.id);
+    return stats.totalInvested;
   };
 
   const calculateDailyPnL = (bot: any) => {
@@ -112,6 +127,12 @@ export function MyBotsPage() {
   // Fetch completed cycle profits for total realized P&L
   const { data: cycleProfits = [] } = useQuery<Array<{ botId: number; cycleProfit: number }>>({
     queryKey: ['/api/cycle-profits'],
+    refetchInterval: 30000 // Refetch every 30 seconds for fresh data
+  });
+
+  // Fetch bot statistics (cycles completed, total P&L, total invested)
+  const { data: botStats = [] } = useQuery<Array<{ botId: number; completedCycles: number; totalPnL: number; totalInvested: number }>>({
+    queryKey: ['/api/bot-stats'],
     refetchInterval: 30000 // Refetch every 30 seconds for fresh data
   });
 
@@ -290,7 +311,7 @@ export function MyBotsPage() {
                     <div>
                       <p className="text-xs text-gray-400 uppercase tracking-wider">Total Invested</p>
                       <p className="text-lg font-bold text-purple-400">
-                        ${formatCurrency(bots.reduce((sum, bot) => sum + parseFloat(bot.totalInvested || '0'), 0))}
+                        ${formatCurrency(botStats.reduce((sum, stats) => sum + stats.totalInvested, 0))}
                       </p>
                     </div>
                     <Target className="w-8 h-8 text-purple-400" />
@@ -341,8 +362,8 @@ export function MyBotsPage() {
                       const detailedBot = getBotData(bot.id);
                       const unrealizedPnL = calculateUnrealizedPnL(detailedBot);
                       const completedCycles = getCompletedCycles(detailedBot);
-                      const totalPnL = parseFloat(detailedBot.totalPnl || '0');
-                      const totalInvested = parseFloat(detailedBot.totalInvested || '0');
+                      const totalPnL = getTotalPnL(detailedBot);
+                      const totalInvested = getTotalInvested(detailedBot);
                       const dailyPnL = calculateDailyPnL(detailedBot);
                       const unrealizedDailyPnL = calculateUnrealizedDailyPnL(detailedBot);
                       
