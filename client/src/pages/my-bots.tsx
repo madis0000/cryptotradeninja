@@ -53,13 +53,22 @@ export function MyBotsPage() {
           setMarketData(message.data);
         }
         
-        // Listen for order notifications to trigger data refresh
+        // Listen for order notifications to trigger targeted updates
         if (message.type === 'order_notification' && message.data.botId === selectedBot.id) {
-          console.log('[CLIENT WS] Order notification received, refreshing data');
-          // Invalidate queries to fetch latest data
-          queryClient.invalidateQueries({ queryKey: ['/api/bot-orders', selectedBot.id] });
-          queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles', selectedBot.id] });
-          queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+          console.log('[CLIENT WS] Order notification received:', message.data.orderType);
+          
+          // Only update when a new cycle starts (base order filled)
+          if (message.data.orderType === 'base_order' && message.data.status === 'filled') {
+            console.log('[CLIENT WS] New cycle detected - updating cycle data');
+            queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles', selectedBot.id] });
+            queryClient.invalidateQueries({ queryKey: ['/api/bots'] }); // For total P&L
+          }
+          
+          // Update orders when new orders are placed or filled
+          if (message.data.status === 'filled' || message.data.status === 'new') {
+            console.log('[CLIENT WS] Order update - refreshing order data');
+            queryClient.invalidateQueries({ queryKey: ['/api/bot-orders', selectedBot.id] });
+          }
         }
       } catch (error) {
         console.error('WebSocket message error:', error);
@@ -75,14 +84,12 @@ export function MyBotsPage() {
     };
   }, [selectedBot?.tradingPair]);
 
-  // Fetch bots data with auto-refresh
+  // Fetch bots data (event-driven updates only)
   const { data: bots = [], isLoading: botsLoading } = useQuery<any[]>({
-    queryKey: ['/api/bots'],
-    refetchInterval: 10000, // Refresh every 10 seconds
-    refetchIntervalInBackground: true
+    queryKey: ['/api/bots']
   });
 
-  // Fetch bot orders for selected bot with auto-refresh
+  // Fetch bot orders for selected bot (event-driven updates only)
   const { data: botOrders = [], isLoading: ordersLoading } = useQuery<any[]>({
     queryKey: ['/api/bot-orders', selectedBot?.id],
     queryFn: async () => {
@@ -95,9 +102,7 @@ export function MyBotsPage() {
       if (!response.ok) throw new Error('Failed to fetch orders');
       return response.json();
     },
-    enabled: !!selectedBot?.id,
-    refetchInterval: 5000, // Refresh every 5 seconds for real-time updates
-    refetchIntervalInBackground: true
+    enabled: !!selectedBot?.id
   });
 
   // Fetch individual bot data for the selected bot
@@ -116,7 +121,7 @@ export function MyBotsPage() {
     enabled: !!selectedBot?.id
   });
 
-  // Fetch bot cycles for current cycle information with auto-refresh
+  // Fetch bot cycles for current cycle information (event-driven updates only)
   const { data: botCycles = [] } = useQuery({
     queryKey: ['/api/bot-cycles', selectedBot?.id],
     queryFn: async () => {
@@ -129,9 +134,7 @@ export function MyBotsPage() {
       if (!response.ok) throw new Error('Failed to fetch cycles');
       return response.json();
     },
-    enabled: !!selectedBot?.id,
-    refetchInterval: 5000, // Refresh every 5 seconds for real-time updates
-    refetchIntervalInBackground: true
+    enabled: !!selectedBot?.id
   });
 
   // Get current active cycle
@@ -152,6 +155,46 @@ export function MyBotsPage() {
     const isFilledOrder = order.status === 'filled';
     
     return isFromPreviousCycle && isFilledOrder;
+  });
+
+  // Group history orders by cycle number and calculate P&L per cycle
+  const groupedHistoryOrders = historyOrders.reduce((groups: any, order: any) => {
+    const cycle = botCycles.find((c: any) => c.id === order.cycleId);
+    const cycleNumber = cycle?.cycleNumber || 'Unknown';
+    
+    if (!groups[cycleNumber]) {
+      groups[cycleNumber] = {
+        orders: [],
+        cycleData: cycle,
+        totalBought: 0,
+        totalSold: 0,
+        pnl: 0
+      };
+    }
+    
+    groups[cycleNumber].orders.push(order);
+    
+    // Calculate cycle P&L
+    const filledPrice = parseFloat(order.filledPrice || order.price || '0');
+    const filledQty = parseFloat(order.filledQuantity || order.quantity || '0');
+    const orderValue = filledPrice * filledQty;
+    
+    if (order.side?.toUpperCase() === 'BUY') {
+      groups[cycleNumber].totalBought += orderValue;
+    } else if (order.side?.toUpperCase() === 'SELL') {
+      groups[cycleNumber].totalSold += orderValue;
+    }
+    
+    groups[cycleNumber].pnl = groups[cycleNumber].totalSold - groups[cycleNumber].totalBought;
+    
+    return groups;
+  }, {});
+
+  // Sort grouped cycles by cycle number (descending - newest first)
+  const sortedCycleGroups = Object.entries(groupedHistoryOrders).sort(([a], [b]) => {
+    const cycleA = parseInt(a as string);
+    const cycleB = parseInt(b as string);
+    return cycleB - cycleA;
   });
 
   // Fetch general stats for dashboard overview
@@ -636,74 +679,89 @@ export function MyBotsPage() {
                 </p>
               </CardHeader>
               <CardContent>
-                {historyOrders.length === 0 ? (
+                {sortedCycleGroups.length === 0 ? (
                   <div className="text-center py-8">
                     <div className="text-crypto-light">No completed orders from previous cycles</div>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-700">
-                          <th className="text-left py-3 px-4 text-crypto-light">Cycle</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Order Type</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Side</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Filled Price</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Filled Qty</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">P&L</th>
-                          <th className="text-left py-3 px-4 text-crypto-light">Filled Date</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {historyOrders.map((order: any, index: number) => {
-                          const filledPrice = parseFloat(order.filledPrice || order.price || '0');
-                          const filledQty = parseFloat(order.filledQuantity || order.quantity || '0');
-                          const orderValue = filledPrice * filledQty;
-                          
-                          return (
-                            <tr key={index} className="border-b border-gray-800 hover:bg-gray-800/50">
-                              <td className="py-3 px-4 text-white">
-                                <span className="text-sm font-medium">
-                                  #{order.cycleNumber || 'N/A'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 text-white">
-                                <div className="flex flex-col">
-                                  <span className="font-medium capitalize">
-                                    {order.orderType?.replace('_', ' ') || order.order_type?.replace('_', ' ')}
-                                  </span>
-                                  {order.safetyOrderLevel && (
-                                    <span className="text-xs text-crypto-light">Level {order.safetyOrderLevel || order.safety_order_level}</span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-3 px-4">
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  order.side === 'BUY' 
-                                    ? 'bg-green-500/20 text-green-400' 
-                                    : 'bg-red-500/20 text-red-400'
-                                }`}>
-                                  {order.side}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 text-white font-mono">
-                                ${filledPrice.toFixed(4)}
-                              </td>
-                              <td className="py-3 px-4 text-white font-mono">
-                                {filledQty.toFixed(1)}
-                              </td>
-                              <td className="py-3 px-4 text-white font-mono">
-                                ${orderValue.toFixed(4)}
-                              </td>
-                              <td className="py-3 px-4 text-crypto-light text-xs">
-                                {order.filledAt ? new Date(order.filledAt).toLocaleString() : 
-                                 order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  <div className="space-y-6">
+                    {sortedCycleGroups.map(([cycleNumber, cycleGroup]: [string, any]) => (
+                      <div key={cycleNumber} className="border border-gray-700 rounded-lg overflow-hidden">
+                        {/* Cycle Header */}
+                        <div className="bg-gray-800/50 px-4 py-3 border-b border-gray-700">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-white font-semibold">
+                              Cycle #{cycleNumber}
+                            </h4>
+                            <div className="flex items-center space-x-4">
+                              <span className="text-sm text-crypto-light">
+                                {cycleGroup.orders.length} orders
+                              </span>
+                              <span className={`font-mono text-sm font-semibold ${
+                                cycleGroup.pnl > 0 ? 'text-green-400' : 
+                                cycleGroup.pnl < 0 ? 'text-red-400' : 
+                                'text-crypto-light'
+                              }`}>
+                                P&L: {cycleGroup.pnl > 0 ? '+' : ''}${cycleGroup.pnl.toFixed(4)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Cycle Orders Table */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-gray-700 bg-gray-800/30">
+                                <th className="text-left py-2 px-4 text-crypto-light">Order Type</th>
+                                <th className="text-left py-2 px-4 text-crypto-light">Side</th>
+                                <th className="text-left py-2 px-4 text-crypto-light">Filled Price</th>
+                                <th className="text-left py-2 px-4 text-crypto-light">Filled Qty</th>
+                                <th className="text-left py-2 px-4 text-crypto-light">Value</th>
+                                <th className="text-left py-2 px-4 text-crypto-light">Filled Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cycleGroup.orders.map((order: any, index: number) => {
+                                const filledPrice = parseFloat(order.filledPrice || order.price || '0');
+                                const filledQty = parseFloat(order.filledQuantity || order.quantity || '0');
+                                const orderValue = filledPrice * filledQty;
+                                
+                                return (
+                                  <tr key={index} className="border-b border-gray-800 hover:bg-gray-800/30">
+                                    <td className="py-2 px-4 text-white">
+                                      <span className="font-medium">
+                                        {order.displayName || order.orderType?.replace('_', ' ') || 'Unknown'}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-4">
+                                      <span className={`text-sm font-medium ${
+                                        order.side === 'BUY' ? 'text-green-400' : 'text-red-400'
+                                      }`}>
+                                        {order.side || 'N/A'}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-4 text-white font-mono">
+                                      ${filledPrice.toFixed(4)}
+                                    </td>
+                                    <td className="py-2 px-4 text-white font-mono">
+                                      {filledQty.toFixed(2)}
+                                    </td>
+                                    <td className="py-2 px-4 text-white font-mono">
+                                      ${orderValue.toFixed(2)}
+                                    </td>
+                                    <td className="py-2 px-4 text-crypto-light text-xs">
+                                      {order.filledAt ? new Date(order.filledAt).toLocaleString() : 
+                                      order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>
