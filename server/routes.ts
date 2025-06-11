@@ -283,7 +283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const botData = insertTradingBotSchema.parse({ ...req.body, userId });
       
       // For Martingale bots, validate order placement first before creating the bot
-      if (botData.strategy === 'martingale' && botData.isActive) {
+      if (botData.strategy === 'martingale' && botData.status === 'active') {
         console.log(`[MARTINGALE] Validating order placement before creating bot`);
         
         try {
@@ -309,7 +309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       logger.logBotCreated(bot);
       
       // If it's a Martingale bot and active, start the first cycle
-      if (bot.strategy === 'martingale' && bot.isActive) {
+      if (bot.strategy === 'martingale' && bot.status === 'active') {
         console.log(`[MARTINGALE] Starting new bot cycle for bot ${bot.id}`);
         logger.logBotStarted();
         
