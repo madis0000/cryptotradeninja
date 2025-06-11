@@ -56,8 +56,8 @@ export function MartingaleStrategy({
     // Advanced Settings
     triggerType: "market",
     triggerPrice: "",
-    priceDeviationMultiplier: [1.5],
-    safetyOrderSizeMultiplier: [1.5],
+    priceDeviationMultiplier: [2.0],
+    safetyOrderSizeMultiplier: [2.0],
     cooldownBetweenRounds: "60",
     
     // Risk Management

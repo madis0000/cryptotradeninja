@@ -990,8 +990,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Exchange not found" });
       }
 
-      // Extract quote currency from symbol (e.g., ICPUSDT -> USDT)
-      const quoteCurrency = symbol.replace(/^[A-Z]+/, '');
+      // For direct USDT requests, use symbol as-is, otherwise extract quote currency
+      const quoteCurrency = symbol === 'USDT' ? 'USDT' : symbol.replace(/^[A-Z]+/, '');
       
       // For testnet, return mock balance for demo purposes
       if (targetExchange.isTestnet) {
