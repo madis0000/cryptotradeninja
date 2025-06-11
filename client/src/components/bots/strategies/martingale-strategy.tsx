@@ -327,58 +327,59 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
   const baseCurrency = selectedSymbol.replace('USDT', '');
 
   return (
-    <div className={`space-y-4 ${className}`}>
-      {/* Exchange Selector */}
-      <div className="space-y-2">
-        <Label className="text-sm text-gray-400">Exchange Account</Label>
-        <Select 
-          value={selectedExchangeId?.toString()} 
-          onValueChange={(value) => onExchangeChange?.(parseInt(value))}
-        >
-          <SelectTrigger className="w-full bg-crypto-darker border-gray-600 text-white">
-            <SelectValue placeholder="Select exchange account" />
-          </SelectTrigger>
-          <SelectContent className="bg-crypto-darker border-gray-600">
-            {exchanges?.map((exchange: any) => (
-              <SelectItem 
-                key={exchange.id} 
-                value={exchange.id.toString()}
-                className="text-white hover:bg-gray-700"
-              >
-                {exchange.name} {exchange.isTestnet ? "(Testnet)" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <div className={`h-full flex flex-col ${className}`}>
+      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        {/* Exchange Selector */}
+        <div className="space-y-2">
+          <Label className="text-sm text-gray-400">Exchange Account</Label>
+          <Select 
+            value={selectedExchangeId?.toString()} 
+            onValueChange={(value) => onExchangeChange?.(parseInt(value))}
+          >
+            <SelectTrigger className="w-full bg-crypto-darker border-gray-600 text-white">
+              <SelectValue placeholder="Select exchange account" />
+            </SelectTrigger>
+            <SelectContent className="bg-crypto-darker border-gray-600">
+              {exchanges?.map((exchange: any) => (
+                <SelectItem 
+                  key={exchange.id} 
+                  value={exchange.id.toString()}
+                  className="text-white hover:bg-gray-700"
+                >
+                  {exchange.name} {exchange.isTestnet ? "(Testnet)" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-      {/* Direction Selector */}
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setLocalDirection("long")}
-          className={`w-full text-xs px-3 py-1.5 ${
-            localDirection === "long"
-              ? 'text-green-400 bg-green-400/10 border border-green-400/20' 
-              : 'text-gray-400 hover:text-white hover:bg-gray-800'
-          }`}
-        >
-          Long
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setLocalDirection("short")}
-          className={`w-full text-xs px-3 py-1.5 ${
-            localDirection === "short"
-              ? 'text-red-400 bg-red-400/10 border border-red-400/20' 
-              : 'text-gray-400 hover:text-white hover:bg-gray-800'
-          }`}
-        >
-          Short
-        </Button>
-      </div>
+        {/* Direction Selector */}
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLocalDirection("long")}
+            className={`w-full text-xs px-3 py-1.5 ${
+              localDirection === "long"
+                ? 'text-green-400 bg-green-400/10 border border-green-400/20' 
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            Long
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLocalDirection("short")}
+            className={`w-full text-xs px-3 py-1.5 ${
+              localDirection === "short"
+                ? 'text-red-400 bg-red-400/10 border border-red-400/20' 
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            Short
+          </Button>
+        </div>
 
       {/* Price Settings */}
       <div className="space-y-3">
@@ -849,6 +850,7 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
       </div>
 
       {/* Real-time order notifications are now handled by useOrderNotifications hook */}
+      </div>
     </div>
   );
 }
