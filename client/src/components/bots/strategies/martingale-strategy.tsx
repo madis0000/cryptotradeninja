@@ -329,99 +329,99 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
   return (
     <div className={`${className}`}>
       <div className="space-y-4 max-h-screen overflow-y-auto pr-2">
-      {/* Exchange Selector */}
-      <div className="space-y-2">
-        <Label className="text-sm text-gray-400">Exchange Account</Label>
-        <Select 
-          value={selectedExchangeId?.toString()} 
-          onValueChange={(value) => onExchangeChange?.(parseInt(value))}
-        >
-          <SelectTrigger className="w-full bg-crypto-darker border-gray-600 text-white">
-            <SelectValue placeholder="Select exchange account" />
-          </SelectTrigger>
-          <SelectContent className="bg-crypto-darker border-gray-600">
-            {exchanges?.map((exchange: any) => (
-              <SelectItem 
-                key={exchange.id} 
-                value={exchange.id.toString()}
-                className="text-white hover:bg-gray-700"
-              >
-                {exchange.name} {exchange.isTestnet ? "(Testnet)" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        {/* Exchange Selector */}
+        <div className="space-y-2">
+          <Label className="text-sm text-gray-400">Exchange Account</Label>
+          <Select 
+            value={selectedExchangeId?.toString()} 
+            onValueChange={(value) => onExchangeChange?.(parseInt(value))}
+          >
+            <SelectTrigger className="w-full bg-crypto-darker border-gray-600 text-white">
+              <SelectValue placeholder="Select exchange account" />
+            </SelectTrigger>
+            <SelectContent className="bg-crypto-darker border-gray-600">
+              {exchanges?.map((exchange: any) => (
+                <SelectItem 
+                  key={exchange.id} 
+                  value={exchange.id.toString()}
+                  className="text-white hover:bg-gray-700"
+                >
+                  {exchange.name} {exchange.isTestnet ? "(Testnet)" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-      {/* Direction Selector */}
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setLocalDirection("long")}
-          className={`w-full text-xs px-3 py-1.5 ${
-            localDirection === "long"
-              ? 'text-green-400 bg-green-400/10 border border-green-400/20' 
-              : 'text-gray-400 hover:text-white hover:bg-gray-800'
-          }`}
-        >
-          Long
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setLocalDirection("short")}
-          className={`w-full text-xs px-3 py-1.5 ${
-            localDirection === "short"
-              ? 'text-red-400 bg-red-400/10 border border-red-400/20' 
-              : 'text-gray-400 hover:text-white hover:bg-gray-800'
-          }`}
-        >
-          Short
-        </Button>
-      </div>
+        {/* Direction Selector */}
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLocalDirection("long")}
+            className={`w-full text-xs px-3 py-1.5 ${
+              localDirection === "long"
+                ? 'text-green-400 bg-green-400/10 border border-green-400/20' 
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            Long
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLocalDirection("short")}
+            className={`w-full text-xs px-3 py-1.5 ${
+              localDirection === "short"
+                ? 'text-red-400 bg-red-400/10 border border-red-400/20' 
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            Short
+          </Button>
+        </div>
 
-      {/* Price Settings */}
-      <div className="space-y-3">
-        <h4 className="text-sm font-medium text-white">1. Price Settings</h4>
-        
+        {/* Price Settings */}
         <div className="space-y-3">
-          <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-            <Label className="text-sm text-gray-400">Price Deviation</Label>
-            <div className="flex items-center space-x-2">
-              <div className="flex flex-col">
-                <button
-                  onClick={() => adjustPercentageValue('priceDeviation', 0.1)}
-                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                >
-                  <ChevronUp className="h-2 w-2 text-gray-400" />
-                </button>
-                <button
-                  onClick={() => adjustPercentageValue('priceDeviation', -0.1)}
-                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                >
-                  <ChevronDown className="h-2 w-2 text-gray-400" />
-                </button>
+          <h4 className="text-sm font-medium text-white">1. Price Settings</h4>
+          
+          <div className="space-y-3">
+            <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
+              <Label className="text-sm text-gray-400">Price Deviation</Label>
+              <div className="flex items-center space-x-2">
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => adjustPercentageValue('priceDeviation', 0.1)}
+                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                  >
+                    <ChevronUp className="h-2 w-2 text-gray-400" />
+                  </button>
+                  <button
+                    onClick={() => adjustPercentageValue('priceDeviation', -0.1)}
+                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                  >
+                    <ChevronDown className="h-2 w-2 text-gray-400" />
+                  </button>
+                </div>
+                <Input
+                  value={config.priceDeviation}
+                  onChange={(e) => handleInputChange('priceDeviation', e.target.value)}
+                  className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+                />
+                <span className="text-sm text-gray-400">%</span>
               </div>
-              <Input
-                value={config.priceDeviation}
-                onChange={(e) => handleInputChange('priceDeviation', e.target.value)}
-                className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
-              />
-              <span className="text-sm text-gray-400">%</span>
             </div>
-          </div>
 
-          <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-            <Label className="text-sm text-gray-400">Take Profit</Label>
-            <div className="flex items-center space-x-2">
-              <div className="flex flex-col">
-                <button
-                  onClick={() => adjustPercentageValue('takeProfit', 0.1)}
-                  className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                >
-                  <ChevronUp className="h-2 w-2 text-gray-400" />
-                </button>
+            <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
+              <Label className="text-sm text-gray-400">Take Profit</Label>
+              <div className="flex items-center space-x-2">
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => adjustPercentageValue('takeProfit', 0.1)}
+                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                  >
+                    <ChevronUp className="h-2 w-2 text-gray-400" />
+                  </button>
                 <button
                   onClick={() => adjustPercentageValue('takeProfit', -0.1)}
                   className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
