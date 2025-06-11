@@ -105,7 +105,7 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
     enabled: !!bot?.id
   });
 
-  // Fetch bot cycles for current cycle information (event-driven updates only)
+  // Fetch bot cycles for current cycle information
   const { data: botCycles = [] } = useQuery({
     queryKey: ['/api/bot-cycles', bot?.id],
     queryFn: async () => {
@@ -137,11 +137,18 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
     enabled: !!bot?.id
   });
 
-  // Get current active cycle (highest cycle number)
+  // Get current active cycle - prioritize active cycles, then get highest cycle number
   const currentCycle = botCycles.length > 0 
-    ? botCycles.reduce((latest: any, cycle: any) => {
-        return (!latest || cycle.cycleNumber > latest.cycleNumber) ? cycle : latest;
-      }, null)
+    ? (() => {
+        // First try to find an active cycle
+        const activeCycle = botCycles.find((cycle: any) => cycle.status === 'active');
+        if (activeCycle) return activeCycle;
+        
+        // If no active cycle, get the latest completed cycle
+        return botCycles.reduce((latest: any, cycle: any) => {
+          return (!latest || cycle.cycleNumber > latest.cycleNumber) ? cycle : latest;
+        }, null);
+      })()
     : null;
 
   // Filter orders for current cycle and history
