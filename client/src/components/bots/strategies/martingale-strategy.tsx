@@ -381,9 +381,9 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
           </Button>
         </div>
 
-      {/* Price Settings */}
-      <div className="space-y-3">
-        <h4 className="text-sm font-medium text-white">1. Price Settings</h4>
+        {/* Price Settings */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-medium text-white">1. Price Settings</h4>
         
         <div className="space-y-3">
           <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
