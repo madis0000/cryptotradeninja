@@ -54,6 +54,7 @@ export interface IStorage {
   // Bot Cycle Management
   createBotCycle(cycle: InsertBotCycle): Promise<BotCycle>;
   getActiveBotCycle(botId: number): Promise<BotCycle | undefined>;
+  getActiveCycles(): Promise<BotCycle[]>;
   updateBotCycle(cycleId: number, updates: Partial<InsertBotCycle>): Promise<BotCycle>;
   completeBotCycle(cycleId: number): Promise<void>;
   getBotCyclesByBotId(botId: number): Promise<BotCycle[]>;

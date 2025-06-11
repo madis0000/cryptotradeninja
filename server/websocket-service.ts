@@ -109,6 +109,9 @@ export class WebSocketService {
     // Start order monitoring for Martingale bots
     this.startOrderMonitoring();
     
+    // Start stuck cycle recovery system
+    this.startStuckCycleRecovery();
+    
     // Removed verbose WebSocket logging
   }
 
@@ -3557,6 +3560,39 @@ export class WebSocketService {
 
       console.log(`[MARTINGALE STRATEGY] ✓ Updated bot statistics: P&L: $${newTotalPnl.toFixed(2)}, Trades: ${newTotalTrades}, Win Rate: ${winRate.toFixed(1)}%`);
 
+      // ATOMIC CYCLE TRANSITION: Complete current cycle and immediately create next cycle
+      let nextCycleId = null;
+      
+      // Check if bot should continue (not paused/stopped) before completing current cycle
+      if (bot.isActive) {
+        console.log(`[MARTINGALE STRATEGY] 🔄 Bot is active - Creating next cycle atomically...`);
+        
+        // Create the next cycle BEFORE completing current one to prevent gaps
+        try {
+          const nextCycleNumber = (cycle.cycleNumber || 1) + 1;
+          const nextCycle = await storage.createBotCycle({
+            botId: cycle.botId,
+            userId: bot.userId,
+            cycleNumber: nextCycleNumber,
+            status: 'active',
+            maxSafetyOrders: bot.maxSafetyOrders || 5,
+            totalInvested: '0.00000000',
+            totalQuantity: '0.00000000',
+            filledSafetyOrders: 0,
+            baseOrderPrice: '0.00000000',
+            currentAveragePrice: '0.00000000',
+            cycleProfit: '0.00000000'
+          });
+          
+          nextCycleId = nextCycle.id;
+          console.log(`[MARTINGALE STRATEGY] ✓ Next cycle ${nextCycleNumber} created atomically (ID: ${nextCycleId})`);
+          
+        } catch (error) {
+          console.error(`[MARTINGALE STRATEGY] ❌ Failed to create next cycle atomically:`, error);
+          // Continue with cycle completion even if next cycle creation fails
+        }
+      }
+
       // Complete current cycle with profit data
       await storage.updateBotCycle(cycle.id, {
         status: 'completed',
@@ -3572,16 +3608,13 @@ export class WebSocketService {
       
       console.log(`[MARTINGALE STRATEGY] ✓ Cycle ${cycle.cycleNumber || 1} completed successfully with profit: $${profit.toFixed(2)}`);
 
-      // Check if bot should continue (not paused/stopped)
-      if (bot.isActive) {
-        console.log(`[MARTINGALE STRATEGY] 🔄 Bot is active - Starting new cycle...`);
-        
-        // Wait a moment before starting new cycle (cooldown)
+      // If next cycle was created, schedule its execution after cooldown
+      if (nextCycleId && bot.isActive) {
         const cooldownSeconds = typeof bot.cooldownBetweenRounds === 'string' 
           ? parseInt(bot.cooldownBetweenRounds) 
           : (bot.cooldownBetweenRounds || 60);
         const cooldown = cooldownSeconds * 1000; // Convert to milliseconds
-        console.log(`[MARTINGALE STRATEGY] ⏱️ Applying cooldown: ${cooldownSeconds}s`);
+        console.log(`[MARTINGALE STRATEGY] ⏱️ Scheduling next cycle start after cooldown: ${cooldownSeconds}s`);
         
         // Cancel any existing pending cycle start for this bot
         const existingTimeout = this.pendingCycleStarts.get(cycle.botId);
@@ -3590,20 +3623,23 @@ export class WebSocketService {
           console.log(`[MARTINGALE STRATEGY] ⏹️ Cancelled existing pending cycle for bot ${cycle.botId}`);
         }
 
-        // Schedule new cycle start with proper queue management
+        // Schedule base order placement for the pre-created next cycle
         const timeoutHandle = setTimeout(async () => {
           this.pendingCycleStarts.delete(cycle.botId);
           try {
-            await this.startNewMartingaleCycleOptimized(cycle.botId, (cycle.cycleNumber || 1) + 1);
+            console.log(`[MARTINGALE STRATEGY] 🚀 Starting base order placement for pre-created cycle ${nextCycleId}`);
+            await this.placeInitialBaseOrder(cycle.botId, nextCycleId);
           } catch (error) {
-            console.error(`[MARTINGALE STRATEGY] ❌ Error starting new cycle after cooldown:`, error);
+            console.error(`[MARTINGALE STRATEGY] ❌ Error placing base order for pre-created cycle:`, error);
           }
         }, cooldown);
         
         this.pendingCycleStarts.set(cycle.botId, timeoutHandle);
 
-      } else {
+      } else if (!bot.isActive) {
         console.log(`[MARTINGALE STRATEGY] ⏸️ Bot is inactive - No new cycle will be started`);
+      } else {
+        console.log(`[MARTINGALE STRATEGY] ⚠️ Next cycle creation failed - Bot may need manual intervention`);
       }
 
       console.log(`[MARTINGALE STRATEGY] ✅ CYCLE COMPLETED SUCCESSFULLY!`);
@@ -4718,6 +4754,49 @@ export class WebSocketService {
       console.error(`[CANCEL ORDER] ❌ Error cancelling order ${exchangeOrderId}:`, error);
       return false;
     }
+  }
+
+  // Recovery system for stuck cycles (cycles without base orders)
+  private async startStuckCycleRecovery() {
+    console.log('[RECOVERY] Starting stuck cycle recovery monitoring');
+    
+    const checkStuckCycles = async () => {
+      try {
+        // Get all active cycles
+        const activeCycles = await storage.getActiveCycles();
+        
+        for (const cycle of activeCycles) {
+          // Check if cycle has been active for more than 2 minutes without any orders
+          const cycleAge = new Date().getTime() - new Date(cycle.createdAt).getTime();
+          const maxAge = 2 * 60 * 1000; // 2 minutes
+          
+          if (cycleAge > maxAge && parseFloat(cycle.totalInvested || '0') === 0) {
+            console.log(`[RECOVERY] Found potentially stuck cycle: Bot ${cycle.botId}, Cycle ${cycle.cycleNumber} (ID: ${cycle.id})`);
+            
+            // Check if bot is still active
+            const bot = await storage.getTradingBot(cycle.botId);
+            if (bot && bot.isActive) {
+              console.log(`[RECOVERY] Recovering stuck cycle: placing base order for Bot ${cycle.botId}, Cycle ${cycle.cycleNumber}`);
+              
+              try {
+                await this.placeInitialBaseOrder(cycle.botId, cycle.id);
+                console.log(`[RECOVERY] Successfully recovered stuck cycle for Bot ${cycle.botId}`);
+              } catch (error) {
+                console.error(`[RECOVERY] Failed to recover stuck cycle for Bot ${cycle.botId}:`, error);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[RECOVERY] Error during stuck cycle check:', error);
+      }
+    };
+    
+    // Check for stuck cycles every 5 minutes
+    setInterval(checkStuckCycles, 5 * 60 * 1000);
+    
+    // Run initial check after 30 seconds
+    setTimeout(checkStuckCycles, 30000);
   }
 
   public close() {
