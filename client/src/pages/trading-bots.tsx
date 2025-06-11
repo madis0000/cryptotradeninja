@@ -165,8 +165,8 @@ export default function TradingBots() {
             </div>
 
             {/* Black Section - Bottom Tabs spanning market and chart sections */}
-            <div className="border-t border-gray-800 bg-crypto-dark">
-              <Tabs defaultValue="running" className="w-full">
+            <div className="h-64 border-t border-gray-800 bg-crypto-dark">
+              <Tabs defaultValue="running" className="w-full h-full">
                 <TabsList className="bg-transparent border-b border-gray-800 rounded-none h-auto p-0">
                   <TabsTrigger 
                     value="running" 
@@ -212,9 +212,9 @@ export default function TradingBots() {
             </div>
           </div>
 
-          {/* Gray Section - Strategy Configuration Panel */}
-          <div className="w-80 bg-crypto-dark border-l border-gray-800 flex flex-col overflow-hidden">
-            <div className="p-4 flex-1 overflow-y-auto">
+          {/* Gray Section - Strategy Configuration Panel - Full Height */}
+          <div className="w-80 bg-crypto-dark border-l border-gray-800 flex flex-col">
+            <div className="p-4 flex-1 overflow-y-auto min-h-0">
               
               {/* Strategy Configuration Content */}
               {selectedStrategy === "grid" && (
