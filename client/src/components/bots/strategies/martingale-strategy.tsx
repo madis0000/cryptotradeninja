@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import { ChevronUp, ChevronDown, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -586,11 +587,45 @@ export function MartingaleStrategy({
                 )}
               </div>
 
-              <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-                <Label className="text-sm text-gray-400">Multipliers</Label>
-                <div className="text-xs text-gray-500">
-                  <div>Deviation: {config.priceDeviationMultiplier[0]}x</div>
-                  <div>Size: {config.safetyOrderSizeMultiplier[0]}x</div>
+              <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+                <Label className="text-sm text-gray-400 mb-3 block">Multipliers</Label>
+                
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-sm text-gray-400">Price Deviation</Label>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-gray-500 w-8">{config.priceDeviationMultiplier[0]}x</span>
+                    </div>
+                  </div>
+                  <Slider
+                    value={[config.priceDeviationMultiplier[0]]}
+                    onValueChange={(value) => setConfig(prev => ({
+                      ...prev,
+                      priceDeviationMultiplier: [value[0]]
+                    }))}
+                    max={10}
+                    min={1}
+                    step={0.1}
+                    className="w-full"
+                  />
+                  
+                  <div className="flex justify-between items-center">
+                    <Label className="text-sm text-gray-400">Safety Order Size</Label>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-gray-500 w-8">{config.safetyOrderSizeMultiplier[0]}x</span>
+                    </div>
+                  </div>
+                  <Slider
+                    value={[config.safetyOrderSizeMultiplier[0]]}
+                    onValueChange={(value) => setConfig(prev => ({
+                      ...prev,
+                      safetyOrderSizeMultiplier: [value[0]]
+                    }))}
+                    max={10}
+                    min={1}
+                    step={0.1}
+                    className="w-full"
+                  />
                 </div>
               </div>
 
