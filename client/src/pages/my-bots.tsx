@@ -80,6 +80,28 @@ export function MyBotsPage() {
     queryKey: ['/api/cycle-profits']
   });
 
+  // Fetch bot cycles for active bots to get current average prices
+  const activeBotIds = bots.filter(bot => bot.status === 'active').map(bot => bot.id);
+  const { data: botCycles = [] } = useQuery({
+    queryKey: ['/api/bot-cycles', activeBotIds],
+    queryFn: async () => {
+      if (activeBotIds.length === 0) return [];
+      // Use authenticated fetch for each bot's cycles
+      const results = await Promise.all(
+        activeBotIds.map(botId => 
+          fetch(`/api/bot-cycles/${botId}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Content-Type': 'application/json'
+            }
+          }).then(res => res.json())
+        )
+      );
+      return results.flat();
+    },
+    enabled: activeBotIds.length > 0
+  });
+
   // Utility functions for calculations
   const getBotData = (botId: number) => {
     return bots.find(b => b.id === botId) || {};
@@ -116,21 +138,29 @@ export function MyBotsPage() {
     const currentPrice = parseFloat(marketData[bot.tradingPair]?.price || '0');
     if (!currentPrice || currentPrice <= 0) return 0;
     
-    // Get bot stats which includes cycle data
-    const stats = getBotStats(bot.id);
-    const totalInvested = stats.totalInvested || 0;
+    // Find the active cycle for this bot
+    const activeCycle = botCycles.find(cycle => cycle.botId === bot.id && cycle.status === 'active');
+    if (!activeCycle) return 0;
     
-    if (totalInvested <= 0) return 0;
+    // Get current average price and total quantity from the cycle
+    const averageEntryPrice = parseFloat(activeCycle.currentAveragePrice || '0');
+    const totalQuantity = parseFloat(activeCycle.totalQuantity || '0');
     
-    // Use bot's current average price from cycle data, or fallback to current market price
-    const averageEntryPrice = parseFloat(bot.currentAveragePrice || bot.averageEntryPrice || currentPrice.toString());
-    
-    if (averageEntryPrice <= 0) return 0;
+    if (averageEntryPrice <= 0 || totalQuantity <= 0) return 0;
     
     // Calculate unrealized P&L: (current_price - average_entry_price) * total_quantity
-    // For simplicity, estimate total_quantity as totalInvested / averageEntryPrice
-    const estimatedQuantity = totalInvested / averageEntryPrice;
-    const unrealizedPnL = (currentPrice - averageEntryPrice) * estimatedQuantity;
+    const unrealizedPnL = (currentPrice - averageEntryPrice) * totalQuantity;
+    
+    // Debug logging for bot 73
+    if (bot.id === 73) {
+      console.log(`[P&L DEBUG] Bot ${bot.id}:`, {
+        currentPrice,
+        averageEntryPrice,
+        totalQuantity,
+        unrealizedPnL,
+        activeCycle: activeCycle ? 'found' : 'not found'
+      });
+    }
     
     return unrealizedPnL;
   };
