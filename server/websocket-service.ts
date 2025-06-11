@@ -2469,15 +2469,38 @@ export class WebSocketService {
       // Fetch dynamic symbol filters from Binance exchange
       const filters = await getBinanceSymbolFilters(bot.tradingPair, activeExchange.restApiEndpoint);
       
+      // Calculate total quantity from all filled buy orders in this cycle
+      const allCycleOrders = await storage.getCycleOrders(cycleId);
+      const filledBuyOrders = allCycleOrders.filter(order => 
+        (order.orderType === 'base_order' || order.orderType === 'safety_order') &&
+        order.status === 'filled' && 
+        order.side === 'BUY'
+      );
+      
+      const totalQuantity = filledBuyOrders.reduce((total: number, order: any) => {
+        return total + parseFloat(order.quantity || '0');
+      }, 0);
+
+      console.log(`[MARTINGALE STRATEGY] 📊 TOTAL QUANTITY CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Filled Buy Orders: ${filledBuyOrders.length}`);
+      console.log(`[MARTINGALE STRATEGY]    Total Accumulated Quantity: ${totalQuantity.toFixed(8)}`);
+      filledBuyOrders.forEach((order: any, index: number) => {
+        console.log(`[MARTINGALE STRATEGY]    Order ${index + 1} (${order.orderType}): ${order.quantity}`);
+      });
+
+      if (totalQuantity === 0) {
+        console.error(`[MARTINGALE STRATEGY] ❌ No filled buy orders found - cannot place take profit`);
+        return;
+      }
+
       // Apply Binance price and quantity filters
       const adjustedPrice = adjustPrice(takeProfitPrice, filters.tickSize, filters.priceDecimals);
-      const baseQuantity = parseFloat(baseOrder.quantity);
-      const adjustedQuantity = adjustQuantity(baseQuantity, filters.stepSize, filters.minQty, filters.qtyDecimals);
+      const adjustedQuantity = adjustQuantity(totalQuantity, filters.stepSize, filters.minQty, filters.qtyDecimals);
 
       console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT ORDER ADJUSTMENTS:`);
       console.log(`[MARTINGALE STRATEGY]    Raw Price: $${takeProfitPrice.toFixed(8)}`);
       console.log(`[MARTINGALE STRATEGY]    Adjusted Price: $${adjustedPrice.toFixed(filters.priceDecimals)} (PRICE_FILTER compliant)`);
-      console.log(`[MARTINGALE STRATEGY]    Raw Quantity: ${baseQuantity.toFixed(8)}`);
+      console.log(`[MARTINGALE STRATEGY]    Raw Quantity: ${totalQuantity.toFixed(8)}`);
       console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${adjustedQuantity.toFixed(filters.qtyDecimals)} (LOT_SIZE compliant)`);
 
       // Create take profit order record
