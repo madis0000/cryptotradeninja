@@ -812,42 +812,43 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
             </div>
           </div>
         )}
+      </div>
 
-        {/* Risk Management */}
+      {/* Risk Management */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-medium text-white">4. Risk Management</h4>
+        
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-white">4. Risk Management</h4>
-          
-          <div className="space-y-3">
-            <div className="bg-crypto-dark rounded border border-gray-700 p-3">
-              <Label className="text-sm text-gray-400 mb-3 block">Price Range</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <Input
-                  value={config.lowerPrice}
-                  onChange={(e) => handleInputChange('lowerPrice', e.target.value)}
-                  placeholder="Lower"
-                  className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
-                />
-                <Input
-                  value={config.upperPrice}
-                  onChange={(e) => handleInputChange('upperPrice', e.target.value)}
-                  placeholder="Upper"
-                  className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
-                />
-              </div>
+          <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+            <Label className="text-sm text-gray-400 mb-3 block">Price Range</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                value={config.lowerPrice}
+                onChange={(e) => handleInputChange('lowerPrice', e.target.value)}
+                placeholder="Lower"
+                className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
+              />
+              <Input
+                value={config.upperPrice}
+                onChange={(e) => handleInputChange('upperPrice', e.target.value)}
+                placeholder="Upper"
+                className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
+              />
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Create Bot Button */}
-        <div className="mt-6 pt-4 border-t border-gray-700">
-          <Button 
-            onClick={handleCreateBot}
-            disabled={isCreatingBot || !selectedExchangeId}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white"
-          >
-            {isCreatingBot ? "Creating..." : "Create Martingale Bot"}
-          </Button>
-        </div>
+      {/* Create Bot Button */}
+      <div className="mt-6 pt-4 border-t border-gray-700">
+        <Button 
+          onClick={handleCreateBot}
+          disabled={isCreatingBot || !selectedExchangeId}
+          className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+        >
+          {isCreatingBot ? "Creating..." : "Create Martingale Bot"}
+        </Button>
+      </div>
 
         {/* Real-time order notifications are now handled by useOrderNotifications hook */}
       </div>
