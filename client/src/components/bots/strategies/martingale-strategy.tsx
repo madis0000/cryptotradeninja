@@ -33,7 +33,10 @@ export function MartingaleStrategy({
   const { user } = useAuth();
 
   const [localDirection, setLocalDirection] = useState<"long" | "short">("long");
+  const [priceSettingsOpen, setPriceSettingsOpen] = useState(true);
+  const [orderSettingsOpen, setOrderSettingsOpen] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [riskManagementOpen, setRiskManagementOpen] = useState(false);
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
 
   const [config, setConfig] = useState({
@@ -71,13 +74,13 @@ export function MartingaleStrategy({
 
   // Fetch available balance from exchange
   const { data: balanceData } = useQuery({
-    queryKey: ['balance', selectedExchangeId, selectedSymbol],
+    queryKey: ['balance', selectedExchangeId, 'USDT'],
     queryFn: async () => {
-      if (!selectedExchangeId || !selectedSymbol) return null;
-      const response = await apiRequest(`/api/exchanges/${selectedExchangeId}/balance/${selectedSymbol}`);
+      if (!selectedExchangeId) return null;
+      const response = await apiRequest(`/api/exchanges/${selectedExchangeId}/balance/USDT`);
       return response.json();
     },
-    enabled: !!selectedExchangeId && !!selectedSymbol,
+    enabled: !!selectedExchangeId,
     refetchInterval: 30000,
   });
 
@@ -235,7 +238,7 @@ export function MartingaleStrategy({
 
   return (
     <div className={`${className}`}>
-      <div className="space-y-4 max-h-screen overflow-y-auto pr-2">
+      <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
         {/* Exchange Selector */}
         <div className="space-y-2">
           <Label className="text-sm text-gray-400">Exchange Account</Label>
@@ -290,267 +293,251 @@ export function MartingaleStrategy({
 
         {/* Price Settings */}
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-white">1. Price Settings</h4>
+          <button
+            onClick={() => setPriceSettingsOpen(!priceSettingsOpen)}
+            className="flex items-center justify-between w-full text-sm text-gray-400 hover:text-white"
+          >
+            <div className="flex items-center space-x-1">
+              <span>1. Price Settings</span>
+            </div>
+            {priceSettingsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
           
-          <div className="space-y-3">
-            <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-              <Label className="text-sm text-gray-400">Price Deviation</Label>
-              <div className="flex items-center space-x-2">
-                <div className="flex flex-col">
-                  <button
-                    onClick={() => adjustPercentageValue('priceDeviation', 0.1)}
-                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                  >
-                    <ChevronUp className="h-2 w-2 text-gray-400" />
-                  </button>
-                  <button
-                    onClick={() => adjustPercentageValue('priceDeviation', -0.1)}
-                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                  >
-                    <ChevronDown className="h-2 w-2 text-gray-400" />
-                  </button>
+          {priceSettingsOpen && (
+            <div className="space-y-3 pl-4 border-l-2 border-gray-700">
+              <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
+                <Label className="text-sm text-gray-400">Price Deviation</Label>
+                <div className="flex items-center space-x-2">
+                  <div className="flex flex-col">
+                    <button
+                      onClick={() => adjustPercentageValue('priceDeviation', 0.1)}
+                      className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                    >
+                      <ChevronUp className="h-2 w-2 text-gray-400" />
+                    </button>
+                    <button
+                      onClick={() => adjustPercentageValue('priceDeviation', -0.1)}
+                      className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                    >
+                      <ChevronDown className="h-2 w-2 text-gray-400" />
+                    </button>
+                  </div>
+                  <Input
+                    value={config.priceDeviation}
+                    onChange={(e) => handleInputChange('priceDeviation', e.target.value)}
+                    className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+                  />
+                  <span className="text-sm text-gray-400">%</span>
                 </div>
-                <Input
-                  value={config.priceDeviation}
-                  onChange={(e) => handleInputChange('priceDeviation', e.target.value)}
-                  className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
-                />
-                <span className="text-sm text-gray-400">%</span>
               </div>
-            </div>
 
-            <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-              <Label className="text-sm text-gray-400">Take Profit</Label>
-              <div className="flex items-center space-x-2">
-                <div className="flex flex-col">
-                  <button
-                    onClick={() => adjustPercentageValue('takeProfit', 0.1)}
-                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+              <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
+                <Label className="text-sm text-gray-400">Take Profit</Label>
+                <div className="flex items-center space-x-2">
+                  <div className="flex flex-col">
+                    <button
+                      onClick={() => adjustPercentageValue('takeProfit', 0.1)}
+                      className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                    >
+                      <ChevronUp className="h-2 w-2 text-gray-400" />
+                    </button>
+                    <button
+                      onClick={() => adjustPercentageValue('takeProfit', -0.1)}
+                      className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                    >
+                      <ChevronDown className="h-2 w-2 text-gray-400" />
+                    </button>
+                  </div>
+                  <Input
+                    value={config.takeProfit}
+                    onChange={(e) => handleInputChange('takeProfit', e.target.value)}
+                    className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+                  />
+                  <span className="text-sm text-gray-400">%</span>
+                  <Select 
+                    value={config.takeProfitType}
+                    onValueChange={(value) => handleInputChange('takeProfitType', value)}
                   >
-                    <ChevronUp className="h-2 w-2 text-gray-400" />
-                  </button>
-                  <button
-                    onClick={() => adjustPercentageValue('takeProfit', -0.1)}
-                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                  >
-                    <ChevronDown className="h-2 w-2 text-gray-400" />
-                  </button>
+                    <SelectTrigger className="w-20 h-7 bg-crypto-darker border-gray-600 text-white text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-crypto-darker border-gray-600">
+                      <SelectItem value="fix" className="text-white hover:bg-gray-700">Fix</SelectItem>
+                      <SelectItem value="trailing" className="text-white hover:bg-gray-700">Trailing</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Input
-                  value={config.takeProfit}
-                  onChange={(e) => handleInputChange('takeProfit', e.target.value)}
-                  className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
-                />
-                <span className="text-sm text-gray-400">%</span>
-                <Select 
-                  value={config.takeProfitType}
-                  onValueChange={(value) => handleInputChange('takeProfitType', value)}
-                >
-                  <SelectTrigger className="w-20 h-7 bg-crypto-darker border-gray-600 text-white text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-crypto-darker border-gray-600">
-                    <SelectItem value="fix" className="text-white hover:bg-gray-700">Fix</SelectItem>
-                    <SelectItem value="trailing" className="text-white hover:bg-gray-700">Trailing</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Order Settings */}
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-white">2. Order Settings</h4>
+          <button
+            onClick={() => setOrderSettingsOpen(!orderSettingsOpen)}
+            className="flex items-center justify-between w-full text-sm text-gray-400 hover:text-white"
+          >
+            <div className="flex items-center space-x-1">
+              <span>2. Order Settings</span>
+            </div>
+            {orderSettingsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
           
-          <div className="space-y-3">
-            <div className="bg-crypto-dark rounded border border-gray-700 p-3">
-              <div className="flex justify-between items-center mb-3">
-                <Label className="text-sm text-gray-400">Base Order</Label>
-                <div className="flex items-center space-x-2">
-                  <Input
-                    value={config.baseOrderSize}
-                    onChange={(e) => handleInputChange('baseOrderSize', e.target.value)}
-                    className="w-20 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
-                  />
-                  <span className="text-sm text-gray-400">USDT</span>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center mb-3">
-                <Label className="text-sm text-gray-400">Safety Order Size</Label>
-                <div className="flex items-center space-x-2">
-                  <Input
-                    value={config.safetyOrderSize}
-                    onChange={(e) => handleInputChange('safetyOrderSize', e.target.value)}
-                    className="w-20 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
-                  />
-                  <span className="text-sm text-gray-400">USDT</span>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center mb-3">
-                <Label className="text-sm text-gray-400">Max Safety Orders</Label>
-                <div className="flex items-center space-x-2">
-                  <div className="flex items-center space-x-1">
-                    <div className="flex flex-col">
-                      <button
-                        onClick={() => adjustIntegerValue('maxSafetyOrders', 1, 1, 10)}
-                        className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                      >
-                        <ChevronUp className="h-2 w-2 text-gray-400" />
-                      </button>
-                      <button
-                        onClick={() => adjustIntegerValue('maxSafetyOrders', -1, 1, 10)}
-                        className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                      >
-                        <ChevronDown className="h-2 w-2 text-gray-400" />
-                      </button>
-                    </div>
+          {orderSettingsOpen && (
+            <div className="space-y-3 pl-4 border-l-2 border-gray-700">
+              <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+                <div className="flex justify-between items-center mb-3">
+                  <Label className="text-sm text-gray-400">Base Order</Label>
+                  <div className="flex items-center space-x-2">
                     <Input
-                      value={config.maxSafetyOrders}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        const numValue = parseInt(value) || 1;
-                        if (numValue >= 1 && numValue <= 10) {
-                          handleInputChange('maxSafetyOrders', value);
-                        }
-                      }}
-                      className="w-12 h-6 bg-crypto-darker border-gray-600 text-white text-xs text-center"
-                      min="1"
-                      max="10"
-                      type="number"
+                      value={config.baseOrderSize}
+                      onChange={(e) => handleInputChange('baseOrderSize', e.target.value)}
+                      className="w-20 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
                     />
+                    <span className="text-sm text-gray-400">USDT</span>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    checked={config.activeSafetyOrdersEnabled}
-                    onCheckedChange={(checked) => setConfig(prev => ({...prev, activeSafetyOrdersEnabled: checked}))}
-                  />
-                  <Label className="text-sm text-gray-500">Active Safety Orders</Label>
+                <div className="flex justify-between items-center mb-3">
+                  <Label className="text-sm text-gray-400">Safety Order Size</Label>
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      value={config.safetyOrderSize}
+                      onChange={(e) => handleInputChange('safetyOrderSize', e.target.value)}
+                      className="w-20 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+                    />
+                    <span className="text-sm text-gray-400">USDT</span>
+                  </div>
                 </div>
-                
-                {config.activeSafetyOrdersEnabled && (
+
+                <div className="flex justify-between items-center mb-3">
+                  <Label className="text-sm text-gray-400">Max Safety Orders</Label>
                   <div className="flex items-center space-x-2">
                     <div className="flex items-center space-x-1">
                       <div className="flex flex-col">
                         <button
-                          onClick={() => adjustIntegerValue('activeSafetyOrders', 1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
+                          onClick={() => adjustIntegerValue('maxSafetyOrders', 1, 1, 10)}
                           className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
                         >
                           <ChevronUp className="h-2 w-2 text-gray-400" />
                         </button>
                         <button
-                          onClick={() => adjustIntegerValue('activeSafetyOrders', -1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
+                          onClick={() => adjustIntegerValue('maxSafetyOrders', -1, 1, 10)}
                           className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
                         >
                           <ChevronDown className="h-2 w-2 text-gray-400" />
                         </button>
                       </div>
                       <Input
-                        value={config.activeSafetyOrders}
+                        value={config.maxSafetyOrders}
                         onChange={(e) => {
                           const value = e.target.value;
-                          const maxValue = Math.max(1, parseInt(config.maxSafetyOrders) - 1) || 1;
                           const numValue = parseInt(value) || 1;
-                          if (numValue >= 1 && numValue <= maxValue) {
-                            handleInputChange('activeSafetyOrders', value);
+                          if (numValue >= 1 && numValue <= 10) {
+                            handleInputChange('maxSafetyOrders', value);
                           }
                         }}
                         className="w-12 h-6 bg-crypto-darker border-gray-600 text-white text-xs text-center"
                         min="1"
-                        max={Math.max(1, parseInt(config.maxSafetyOrders) - 1)}
+                        max="10"
                         type="number"
                       />
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <span className="text-xs text-gray-500">/ {Math.max(1, parseInt(config.maxSafetyOrders) - 1)}</span>
-                    </div>
                   </div>
-                )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={config.activeSafetyOrdersEnabled}
+                      onCheckedChange={(checked) => setConfig(prev => ({...prev, activeSafetyOrdersEnabled: checked}))}
+                    />
+                    <Label className="text-sm text-gray-500">Active Safety Orders</Label>
+                  </div>
+                  
+                  {config.activeSafetyOrdersEnabled && (
+                    <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-1">
+                        <div className="flex flex-col">
+                          <button
+                            onClick={() => adjustIntegerValue('activeSafetyOrders', 1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
+                            className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                          >
+                            <ChevronUp className="h-2 w-2 text-gray-400" />
+                          </button>
+                          <button
+                            onClick={() => adjustIntegerValue('activeSafetyOrders', -1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
+                            className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                          >
+                            <ChevronDown className="h-2 w-2 text-gray-400" />
+                          </button>
+                        </div>
+                        <Input
+                          value={config.activeSafetyOrders}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const maxValue = Math.max(1, parseInt(config.maxSafetyOrders) - 1) || 1;
+                            const numValue = parseInt(value) || 1;
+                            if (numValue >= 1 && numValue <= maxValue) {
+                              handleInputChange('activeSafetyOrders', value);
+                            }
+                          }}
+                          className="w-12 h-6 bg-crypto-darker border-gray-600 text-white text-xs text-center"
+                          min="1"
+                          max={Math.max(1, parseInt(config.maxSafetyOrders) - 1)}
+                          type="number"
+                        />
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <span className="text-xs text-gray-500">/ {Math.max(1, parseInt(config.maxSafetyOrders) - 1)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Balance and Required Information */}
+              <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Available</span>
+                    <span className="text-orange-500 font-medium">
+                      {balanceData ? parseFloat(balanceData.free).toFixed(3) : '0.000'} USDT
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Required</span>
+                    <span className="text-white font-medium">
+                      {(() => {
+                        const baseOrder = parseFloat(config.baseOrderSize) || 0;
+                        const safetyOrderBase = parseFloat(config.safetyOrderSize) || 0;
+                        const multiplier = config.safetyOrderSizeMultiplier[0] || 1.5;
+                        const maxSafetyOrders = parseInt(config.maxSafetyOrders) || 5;
+                        const activeSafetyOrders = parseInt(config.activeSafetyOrders) || maxSafetyOrders;
+                        
+                        const safetyOrdersToCalculate = config.activeSafetyOrdersEnabled 
+                          ? Math.min(activeSafetyOrders, maxSafetyOrders)
+                          : maxSafetyOrders;
+                        
+                        // Calculate total safety orders with multiplier
+                        let totalSafetyOrderAmount = 0;
+                        for (let i = 0; i < safetyOrdersToCalculate; i++) {
+                          totalSafetyOrderAmount += safetyOrderBase * Math.pow(multiplier, i);
+                        }
+                        
+                        const total = baseOrder + totalSafetyOrderAmount;
+                        return total.toFixed(2);
+                      })()} USDT
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
-        <div className="flex justify-between text-sm">
-          <div className="flex items-center space-x-1">
-            <span className="text-gray-400">Available</span>
-            <span className="text-orange-500 font-medium">
-              {balanceData ? parseFloat(balanceData.free).toFixed(3) : '0.000'} USDT
-            </span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <span className="text-gray-400">Required</span>
-            <span className="text-white font-medium">
-              {(() => {
-                const baseOrder = parseFloat(config.baseOrderSize) || 0;
-                const safetyOrderBase = parseFloat(config.safetyOrderSize) || 0;
-                const multiplier = config.safetyOrderSizeMultiplier[0] || 1.5;
-                const maxSafetyOrders = parseInt(config.maxSafetyOrders) || 5;
-                const activeSafetyOrders = parseInt(config.activeSafetyOrders) || maxSafetyOrders;
-                
-                const safetyOrdersToCalculate = config.activeSafetyOrdersEnabled 
-                  ? Math.min(activeSafetyOrders, maxSafetyOrders)
-                  : maxSafetyOrders;
-                
-                // Calculate total safety orders with multiplier
-                let totalSafetyOrderAmount = 0;
-                for (let i = 0; i < safetyOrdersToCalculate; i++) {
-                  totalSafetyOrderAmount += safetyOrderBase * Math.pow(multiplier, i);
-                }
-                
-                const total = baseOrder + totalSafetyOrderAmount;
-                return total.toFixed(2);
-              })()} USDT
-            </span>
-          </div>
-        </div>
 
-        {/* Safety Order Preview */}
-        <div className="bg-crypto-dark rounded border border-gray-700 p-3 mt-3">
-          <Label className="text-sm text-gray-400 mb-3 block">Safety Order Levels</Label>
-          <div className="space-y-1 max-h-32 overflow-y-auto">
-            {Array.from({ length: parseInt(config.maxSafetyOrders) || 5 }, (_, i) => {
-              const deviation = parseFloat(config.priceDeviation) * Math.pow(config.priceDeviationMultiplier[0], i);
-              const isActive = i < (config.activeSafetyOrdersEnabled ? parseInt(config.activeSafetyOrders) : parseInt(config.maxSafetyOrders));
-              const isExceeding = deviation > 99.99;
-              
-              let bgColor = 'bg-gray-700/20 text-gray-500';
-              if (isExceeding) {
-                bgColor = 'bg-red-500/20 text-red-400 border border-red-500/30';
-              } else if (isActive) {
-                bgColor = 'bg-yellow-500/10 text-yellow-400';
-              }
-              
-              return (
-                <div key={i} className={`flex justify-between items-center text-xs p-1 rounded ${bgColor}`}>
-                  <span className="font-mono">SO{i + 1}</span>
-                  <span className="font-mono">
-                    {isExceeding ? '⚠️ ' : ''}{deviation.toFixed(2)}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          
-          {/* Warning if any safety order exceeds 99.99% */}
-          {(() => {
-            const lastDeviation = parseFloat(config.priceDeviation) * Math.pow(config.priceDeviationMultiplier[0], parseInt(config.maxSafetyOrders) - 1);
-            if (lastDeviation > 99.99) {
-              return (
-                <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
-                  ⚠️ Configuration exceeds 99.99% limit
-                </div>
-              );
-            }
-            return null;
-          })()}
-        </div>
 
         {/* Advanced Settings */}
         <div className="space-y-3">
@@ -624,27 +611,37 @@ export function MartingaleStrategy({
 
         {/* Risk Management */}
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-white">4. Risk Management</h4>
+          <button
+            onClick={() => setRiskManagementOpen(!riskManagementOpen)}
+            className="flex items-center justify-between w-full text-sm text-gray-400 hover:text-white"
+          >
+            <div className="flex items-center space-x-1">
+              <span>4. Risk Management</span>
+            </div>
+            {riskManagementOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
           
-          <div className="space-y-3">
-            <div className="bg-crypto-dark rounded border border-gray-700 p-3">
-              <Label className="text-sm text-gray-400 mb-3 block">Price Range</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <Input
-                  value={config.lowerPrice}
-                  onChange={(e) => handleInputChange('lowerPrice', e.target.value)}
-                  placeholder="Lower"
-                  className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
-                />
-                <Input
-                  value={config.upperPrice}
-                  onChange={(e) => handleInputChange('upperPrice', e.target.value)}
-                  placeholder="Upper"
-                  className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
-                />
+          {riskManagementOpen && (
+            <div className="space-y-3 pl-4 border-l-2 border-gray-700">
+              <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+                <Label className="text-sm text-gray-400 mb-3 block">Price Range</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    value={config.lowerPrice}
+                    onChange={(e) => handleInputChange('lowerPrice', e.target.value)}
+                    placeholder="Lower"
+                    className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
+                  />
+                  <Input
+                    value={config.upperPrice}
+                    onChange={(e) => handleInputChange('upperPrice', e.target.value)}
+                    placeholder="Upper"
+                    className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Create Bot Button */}
