@@ -113,15 +113,26 @@ export function MyBotsPage() {
   const calculateUnrealizedPnL = (bot: any) => {
     if (!bot.id || bot.status !== 'active') return 0;
     
-    const currentPrice = marketData[bot.tradingPair]?.price || 0;
-    if (!currentPrice) return 0;
+    const currentPrice = parseFloat(marketData[bot.tradingPair]?.price || '0');
+    if (!currentPrice || currentPrice <= 0) return 0;
     
-    const totalInvested = getTotalInvested(bot);
+    // Get bot stats which includes cycle data
+    const stats = getBotStats(bot.id);
+    const totalInvested = stats.totalInvested || 0;
+    
     if (totalInvested <= 0) return 0;
     
-    // Simple unrealized calculation (this would be more complex in real implementation)
-    const estimatedValue = totalInvested * (currentPrice / (bot.averageEntryPrice || currentPrice));
-    return estimatedValue - totalInvested;
+    // Use bot's current average price from cycle data, or fallback to current market price
+    const averageEntryPrice = parseFloat(bot.currentAveragePrice || bot.averageEntryPrice || currentPrice.toString());
+    
+    if (averageEntryPrice <= 0) return 0;
+    
+    // Calculate unrealized P&L: (current_price - average_entry_price) * total_quantity
+    // For simplicity, estimate total_quantity as totalInvested / averageEntryPrice
+    const estimatedQuantity = totalInvested / averageEntryPrice;
+    const unrealizedPnL = (currentPrice - averageEntryPrice) * estimatedQuantity;
+    
+    return unrealizedPnL;
   };
 
   const calculateUnrealizedDailyPnL = (bot: any) => {
@@ -336,6 +347,18 @@ export function MyBotsPage() {
                   : isActive ? 'text-red-400' : 'text-red-400/80'
               }`}>
                 {dailyPnL >= 0 ? '+' : ''}${formatCurrency(dailyPnL)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className={isActive ? 'text-gray-400' : 'text-gray-500'}>
+                Unrealized P&L:
+              </span>
+              <span className={`font-mono ${
+                unrealizedPnL >= 0 
+                  ? isActive ? 'text-green-400' : 'text-green-400/80'
+                  : isActive ? 'text-red-400' : 'text-red-400/80'
+              }`}>
+                {unrealizedPnL >= 0 ? '+' : ''}${formatCurrency(unrealizedPnL)}
               </span>
             </div>
             <div className="flex justify-between">
