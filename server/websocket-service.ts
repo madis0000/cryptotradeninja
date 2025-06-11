@@ -92,11 +92,10 @@ export class WebSocketService {
   private pendingCycleStarts = new Map<number, NodeJS.Timeout>(); // botId -> timeout handle
 
   constructor(server: Server) {
-    // WebSocket server on dedicated port with proper Replit binding
-    const wsPort = parseInt(process.env.WS_PORT || '8080');
+    // WebSocket server attached to the same HTTP server (port 5000)
     this.wss = new WebSocketServer({ 
-      port: wsPort,
-      host: '0.0.0.0'
+      server: server,
+      path: '/ws'
     });
 
     this.setupWebSocket();

@@ -37,15 +37,16 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     setStatus('connecting');
     
-    // Connect to backend WebSocket server (not external exchanges)
+    // Connect to backend WebSocket server (same port as HTTP server)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const ws = new WebSocket(`${protocol}//${hostname}:8080`);
+    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+    const ws = new WebSocket(`${protocol}//${hostname}:${port}/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('[CLIENT WS] ===== CONNECTED TO BACKEND SERVER =====');
-      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:8080`);
+      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:${port}/ws`);
       setStatus('connected');
       options.onConnect?.();
       
@@ -130,10 +131,11 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
 
     setStatus('connecting');
     
-    // Connect to our unified WebSocket service on dedicated port
+    // Connect to our unified WebSocket service on same port as HTTP server
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const ws = new WebSocket(`${protocol}//${hostname}:8080`);
+    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+    const ws = new WebSocket(`${protocol}//${hostname}:${port}/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {

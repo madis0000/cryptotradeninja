@@ -20,10 +20,11 @@ export function useMarketData() {
 
   const connect = () => {
     try {
-      // Connect to the existing WebSocket service on port 8080
+      // Connect to the existing WebSocket service on same port as HTTP server
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.hostname;
-      const wsUrl = `${protocol}//${host}:8080`;
+      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+      const wsUrl = `${protocol}//${host}:${port}/ws`;
       
       wsRef.current = new WebSocket(wsUrl);
 
