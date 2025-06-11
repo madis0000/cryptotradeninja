@@ -82,7 +82,7 @@ export function MyBotsPage() {
 
   // Fetch bot cycles for active bots to get current average prices
   const activeBotIds = bots.filter(bot => bot.status === 'active').map(bot => bot.id);
-  const { data: botCycles = [] } = useQuery({
+  const { data: botCycles = [], isLoading: cyclesLoading, refetch: refetchCycles } = useQuery({
     queryKey: ['/api/bot-cycles', activeBotIds],
     queryFn: async () => {
       if (activeBotIds.length === 0) return [];
@@ -97,9 +97,12 @@ export function MyBotsPage() {
           }).then(res => res.json())
         )
       );
+      console.log('[BOT CYCLES] Fetched cycles:', results.flat());
       return results.flat();
     },
-    enabled: activeBotIds.length > 0
+    enabled: activeBotIds.length > 0,
+    refetchInterval: 5000, // Refresh every 5 seconds for real-time updates
+    refetchIntervalInBackground: true
   });
 
   // Utility functions for calculations
@@ -133,34 +136,48 @@ export function MyBotsPage() {
   };
 
   const calculateUnrealizedPnL = (bot: any) => {
-    if (!bot.id || bot.status !== 'active') return 0;
+    if (!bot.id || bot.status !== 'active') {
+      console.log(`[P&L DEBUG] Bot ${bot.id} not active or missing ID`);
+      return 0;
+    }
     
     const currentPrice = parseFloat(marketData[bot.tradingPair]?.price || '0');
-    if (!currentPrice || currentPrice <= 0) return 0;
+    if (!currentPrice || currentPrice <= 0) {
+      console.log(`[P&L DEBUG] Bot ${bot.id} no current price:`, currentPrice);
+      return 0;
+    }
     
     // Find the active cycle for this bot
     const activeCycle = botCycles.find(cycle => cycle.botId === bot.id && cycle.status === 'active');
-    if (!activeCycle) return 0;
+    if (!activeCycle) {
+      console.log(`[P&L DEBUG] Bot ${bot.id} no active cycle found. Available cycles:`, botCycles.length);
+      return 0;
+    }
     
     // Get current average price and total quantity from the cycle
     const averageEntryPrice = parseFloat(activeCycle.currentAveragePrice || '0');
     const totalQuantity = parseFloat(activeCycle.totalQuantity || '0');
     
-    if (averageEntryPrice <= 0 || totalQuantity <= 0) return 0;
+    if (averageEntryPrice <= 0 || totalQuantity <= 0) {
+      console.log(`[P&L DEBUG] Bot ${bot.id} invalid cycle data:`, {
+        averageEntryPrice,
+        totalQuantity,
+        rawAveragePrice: activeCycle.currentAveragePrice,
+        rawQuantity: activeCycle.totalQuantity
+      });
+      return 0;
+    }
     
     // Calculate unrealized P&L: (current_price - average_entry_price) * total_quantity
     const unrealizedPnL = (currentPrice - averageEntryPrice) * totalQuantity;
     
-    // Debug logging for bot 73
-    if (bot.id === 73) {
-      console.log(`[P&L DEBUG] Bot ${bot.id}:`, {
-        currentPrice,
-        averageEntryPrice,
-        totalQuantity,
-        unrealizedPnL,
-        activeCycle: activeCycle ? 'found' : 'not found'
-      });
-    }
+    console.log(`[P&L DEBUG] Bot ${bot.id} calculation:`, {
+      currentPrice,
+      averageEntryPrice,
+      totalQuantity,
+      unrealizedPnL,
+      priceDiff: currentPrice - averageEntryPrice
+    });
     
     return unrealizedPnL;
   };
