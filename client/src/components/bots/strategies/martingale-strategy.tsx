@@ -548,37 +548,37 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
                     >
                       <ChevronUp className="h-2 w-2 text-gray-400" />
                     </button>
-                  <button
-                    onClick={() => adjustIntegerValue('maxSafetyOrders', -1, 1, 20)}
-                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                  >
-                    <ChevronDown className="h-2 w-2 text-gray-400" />
-                  </button>
+                    <button
+                      onClick={() => adjustIntegerValue('maxSafetyOrders', -1, 1, 20)}
+                      className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                    >
+                      <ChevronDown className="h-2 w-2 text-gray-400" />
+                    </button>
+                  </div>
+                  <Input
+                    value={config.maxSafetyOrders}
+                    onChange={(e) => handleInputChange('maxSafetyOrders', e.target.value)}
+                    className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+                    type="number"
+                    min="1"
+                    max="20"
+                  />
                 </div>
-                <Input
-                  value={config.maxSafetyOrders}
-                  onChange={(e) => handleInputChange('maxSafetyOrders', e.target.value)}
-                  className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
-                  type="number"
-                  min="1"
-                  max="20"
-                />
-              </div>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={config.activeSafetyOrdersEnabled}
-                  onCheckedChange={(checked) => setConfig(prev => ({...prev, activeSafetyOrdersEnabled: checked}))}
-                />
-                <Label className="text-sm text-gray-500">Active Safety Orders</Label>
               </div>
               
-              {config.activeSafetyOrdersEnabled && (
+              <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <div className="flex items-center space-x-1">
-                    <div className="flex flex-col">
+                  <Switch
+                    checked={config.activeSafetyOrdersEnabled}
+                    onCheckedChange={(checked) => setConfig(prev => ({...prev, activeSafetyOrdersEnabled: checked}))}
+                  />
+                  <Label className="text-sm text-gray-500">Active Safety Orders</Label>
+                </div>
+                
+                {config.activeSafetyOrdersEnabled && (
+                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
+                      <div className="flex flex-col">
                       <button
                         onClick={() => adjustIntegerValue('activeSafetyOrders', 1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
                         className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
