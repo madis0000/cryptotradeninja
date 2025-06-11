@@ -579,40 +579,41 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
                   <div className="flex items-center space-x-2">
                     <div className="flex items-center space-x-1">
                       <div className="flex flex-col">
-                      <button
-                        onClick={() => adjustIntegerValue('activeSafetyOrders', 1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
-                        className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                      >
-                        <ChevronUp className="h-2 w-2 text-gray-400" />
-                      </button>
-                      <button
-                        onClick={() => adjustIntegerValue('activeSafetyOrders', -1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
-                        className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
-                      >
-                        <ChevronDown className="h-2 w-2 text-gray-400" />
-                      </button>
+                        <button
+                          onClick={() => adjustIntegerValue('activeSafetyOrders', 1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
+                          className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                        >
+                          <ChevronUp className="h-2 w-2 text-gray-400" />
+                        </button>
+                        <button
+                          onClick={() => adjustIntegerValue('activeSafetyOrders', -1, 1, Math.max(1, parseInt(config.maxSafetyOrders) - 1))}
+                          className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                        >
+                          <ChevronDown className="h-2 w-2 text-gray-400" />
+                        </button>
+                      </div>
+                      <Input
+                        value={config.activeSafetyOrders}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const maxValue = Math.max(1, parseInt(config.maxSafetyOrders) - 1) || 1;
+                          const numValue = parseInt(value) || 1;
+                          if (numValue >= 1 && numValue <= maxValue) {
+                            handleInputChange('activeSafetyOrders', value);
+                          }
+                        }}
+                        className="w-12 h-6 bg-crypto-darker border-gray-600 text-white text-xs text-center"
+                        min="1"
+                        max={Math.max(1, parseInt(config.maxSafetyOrders) - 1)}
+                        type="number"
+                      />
                     </div>
-                    <Input
-                      value={config.activeSafetyOrders}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        const maxValue = Math.max(1, parseInt(config.maxSafetyOrders) - 1) || 1;
-                        const numValue = parseInt(value) || 1;
-                        if (numValue >= 1 && numValue <= maxValue) {
-                          handleInputChange('activeSafetyOrders', value);
-                        }
-                      }}
-                      className="w-12 h-6 bg-crypto-darker border-gray-600 text-white text-xs text-center"
-                      min="1"
-                      max={Math.max(1, parseInt(config.maxSafetyOrders) - 1)}
-                      type="number"
-                    />
+                    <div className="flex items-center space-x-1">
+                      <span className="text-xs text-gray-500">/ {Math.max(1, parseInt(config.maxSafetyOrders) - 1)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-1">
-                    <span className="text-xs text-gray-500">/ {Math.max(1, parseInt(config.maxSafetyOrders) - 1)}</span>
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -811,32 +812,31 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
             </div>
           </div>
         )}
-      </div>
 
-      {/* Risk Management */}
-      <div className="space-y-3">
-        <h4 className="text-sm font-medium text-white">4. Risk Management</h4>
-        
+        {/* Risk Management */}
         <div className="space-y-3">
-          <div className="bg-crypto-dark rounded border border-gray-700 p-3">
-            <Label className="text-sm text-gray-400 mb-3 block">Price Range</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                value={config.lowerPrice}
-                onChange={(e) => handleInputChange('lowerPrice', e.target.value)}
-                placeholder="Lower"
-                className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
-              />
-              <Input
-                value={config.upperPrice}
-                onChange={(e) => handleInputChange('upperPrice', e.target.value)}
-                placeholder="Upper"
-                className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
-              />
+          <h4 className="text-sm font-medium text-white">4. Risk Management</h4>
+          
+          <div className="space-y-3">
+            <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+              <Label className="text-sm text-gray-400 mb-3 block">Price Range</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  value={config.lowerPrice}
+                  onChange={(e) => handleInputChange('lowerPrice', e.target.value)}
+                  placeholder="Lower"
+                  className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
+                />
+                <Input
+                  value={config.upperPrice}
+                  onChange={(e) => handleInputChange('upperPrice', e.target.value)}
+                  placeholder="Upper"
+                  className="h-8 text-sm bg-crypto-darker border-gray-600 text-white"
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
         {/* Create Bot Button */}
         <div className="mt-6 pt-4 border-t border-gray-700">
