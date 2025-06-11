@@ -889,6 +889,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Manual cycle trigger for debugging (temporary endpoint)
+  app.post("/api/bots/:id/trigger-cycle", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      // Get the bot and verify ownership
+      const bot = await storage.getTradingBot(botId);
+      if (!bot || bot.userId !== userId) {
+        return res.status(404).json({ error: "Bot not found" });
+      }
+      
+      // Get the latest active cycle
+      const activeCycle = await storage.getActiveBotCycle(botId);
+      if (!activeCycle) {
+        return res.status(400).json({ error: "No active cycle found" });
+      }
+      
+      // Trigger base order placement
+      await wsService.placeInitialBaseOrder(botId, activeCycle.id);
+      
+      res.json({ 
+        message: "Cycle triggered successfully",
+        cycleId: activeCycle.id,
+        cycleNumber: activeCycle.cycleNumber
+      });
+      
+    } catch (error: any) {
+      console.error("Error triggering cycle:", error);
+      res.status(500).json({ error: error.message || "Failed to trigger cycle" });
+    }
+  });
+
   // Get available balance for trading pair
   // Order placement endpoint
   app.post("/api/orders", requireAuth, async (req: AuthenticatedRequest, res: Response) => {

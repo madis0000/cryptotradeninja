@@ -3576,8 +3576,12 @@ export class WebSocketService {
       if (bot.isActive) {
         console.log(`[MARTINGALE STRATEGY] 🔄 Bot is active - Starting new cycle...`);
         
-        // Create next cycle immediately to prevent display gaps
-        const nextCycleNumber = (cycle.cycleNumber || 1) + 1;
+        // Wait a moment before starting new cycle (cooldown)
+        const cooldownSeconds = typeof bot.cooldownBetweenRounds === 'string' 
+          ? parseInt(bot.cooldownBetweenRounds) 
+          : (bot.cooldownBetweenRounds || 60);
+        const cooldown = cooldownSeconds * 1000; // Convert to milliseconds
+        console.log(`[MARTINGALE STRATEGY] ⏱️ Applying cooldown: ${cooldownSeconds}s`);
         
         // Cancel any existing pending cycle start for this bot
         const existingTimeout = this.pendingCycleStarts.get(cycle.botId);
@@ -3586,46 +3590,17 @@ export class WebSocketService {
           console.log(`[MARTINGALE STRATEGY] ⏹️ Cancelled existing pending cycle for bot ${cycle.botId}`);
         }
 
-        // Create next cycle immediately but delay order placement
-        try {
-          const newCycle = await storage.createBotCycle({
-            botId: cycle.botId,
-            userId: bot.userId,
-            cycleNumber: nextCycleNumber,
-            maxSafetyOrders: bot.maxSafetyOrders,
-            baseOrderPrice: '0',
-            currentAveragePrice: '0',
-            totalInvested: '0',
-            totalQuantity: '0'
-          });
-
-          console.log(`[MARTINGALE STRATEGY] ✓ Created next cycle ${nextCycleNumber} (ID: ${newCycle.id})`);
-          
-          // Apply cooldown before placing orders
-          const cooldownSeconds = typeof bot.cooldownBetweenRounds === 'string' 
-            ? parseInt(bot.cooldownBetweenRounds) 
-            : (bot.cooldownBetweenRounds || 60);
-          const cooldown = cooldownSeconds * 1000;
-          console.log(`[MARTINGALE STRATEGY] ⏱️ Applying cooldown: ${cooldownSeconds}s before placing orders`);
-          
-          // Schedule order placement after cooldown
-          const timeoutHandle = setTimeout(async () => {
-            this.pendingCycleStarts.delete(cycle.botId);
-            try {
-              await this.placeInitialBaseOrder(cycle.botId, newCycle.id);
-              console.log(`[MARTINGALE STRATEGY] ✅ Cycle ${nextCycleNumber} orders placed after cooldown`);
-            } catch (error) {
-              console.error(`[MARTINGALE STRATEGY] ❌ Error placing orders for new cycle:`, error);
-              // Mark cycle as failed if order placement fails
-              await storage.updateBotCycle(newCycle.id, { status: 'failed' });
-            }
-          }, cooldown);
-          
-          this.pendingCycleStarts.set(cycle.botId, timeoutHandle);
-          
-        } catch (error) {
-          console.error(`[MARTINGALE STRATEGY] ❌ Error creating next cycle:`, error);
-        }
+        // Schedule new cycle start with proper queue management
+        const timeoutHandle = setTimeout(async () => {
+          this.pendingCycleStarts.delete(cycle.botId);
+          try {
+            await this.startNewMartingaleCycleOptimized(cycle.botId, (cycle.cycleNumber || 1) + 1);
+          } catch (error) {
+            console.error(`[MARTINGALE STRATEGY] ❌ Error starting new cycle after cooldown:`, error);
+          }
+        }, cooldown);
+        
+        this.pendingCycleStarts.set(cycle.botId, timeoutHandle);
 
       } else {
         console.log(`[MARTINGALE STRATEGY] ⏸️ Bot is inactive - No new cycle will be started`);
