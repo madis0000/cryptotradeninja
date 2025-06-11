@@ -9,7 +9,6 @@ import { GridStrategy } from "@/components/bots/strategies/grid-strategy";
 import { MartingaleStrategy } from "@/components/bots/strategies/martingale-strategy";
 import { usePublicWebSocket } from "@/hooks/useWebSocketService";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, RefreshCw, Target, TrendingUp, TrendingDown } from "lucide-react";
 
 interface TickerData {
   symbol: string;
@@ -52,70 +51,6 @@ export default function TradingBots() {
   const { data: bots = [] } = useQuery({
     queryKey: ['/api/bots']
   });
-
-  // Fetch cycle profits for P&L calculations
-  const { data: cycleProfits } = useQuery({
-    queryKey: ['/api/cycle-profits']
-  });
-
-  // Helper functions for bot metrics
-  const formatAge = (createdAt: string) => {
-    try {
-      const created = new Date(createdAt);
-      const now = new Date();
-      const diffInMs = now.getTime() - created.getTime();
-      const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-      const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
-      
-      if (diffInDays > 0) {
-        return `${diffInDays}d`;
-      } else if (diffInHours > 0) {
-        return `${diffInHours}h`;
-      } else {
-        return '<1h';
-      }
-    } catch {
-      return '0d';
-    }
-  };
-
-  const getCompletedCycles = (botId: number) => {
-    if (!cycleProfits) return 0;
-    return (cycleProfits as any[]).filter((cycle: any) => 
-      cycle.botId === botId && cycle.status === 'completed'
-    ).length;
-  };
-
-  const getTotalPnL = (botId: number) => {
-    if (!cycleProfits) return 0;
-    return (cycleProfits as any[])
-      .filter((cycle: any) => cycle.botId === botId && cycle.status === 'completed')
-      .reduce((total: number, cycle: any) => total + parseFloat(cycle.profit || '0'), 0);
-  };
-
-  const calculateUnrealizedPnL = (bot: any) => {
-    // Get current market price from ticker data
-    const currentPrice = parseFloat(tickerData?.price || '0');
-    if (currentPrice === 0) return 0;
-
-    // Calculate average entry price and total quantity from active orders
-    // This would need to be fetched from the bot's current cycle data
-    // For now, return 0 as placeholder - would need API endpoint for current positions
-    return 0;
-  };
-
-  const calculateAverageDailyPnL = (bot: any) => {
-    const totalPnL = getTotalPnL(bot.id);
-    const ageInMs = new Date().getTime() - new Date(bot.createdAt).getTime();
-    const ageInDays = Math.max(1, ageInMs / (1000 * 60 * 60 * 24));
-    return totalPnL / ageInDays;
-  };
-
-  const formatCurrency = (amount: number) => {
-    return Math.abs(amount) < 0.01 
-      ? amount.toFixed(6)
-      : amount.toFixed(2);
-  };
 
   // Auto-select first exchange if available
   useEffect(() => {
@@ -274,98 +209,21 @@ export default function TradingBots() {
                       <p>No running bots</p>
                     </div>
                   ) : (
-                    <div className="max-h-48 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
-                      <div className="space-y-3">
-                        {bots.filter((bot: any) => bot.status === 'active').map((bot: any) => {
-                          const completedCycles = getCompletedCycles(bot.id);
-                          const totalPnL = getTotalPnL(bot.id);
-                          const unrealizedPnL = calculateUnrealizedPnL(bot);
-                          const avgDailyPnL = calculateAverageDailyPnL(bot);
-                          
-                          return (
-                            <div key={bot.id} className="bg-crypto-darker border border-gray-700 rounded-lg p-4">
-                              {/* Header */}
-                              <div className="flex justify-between items-start mb-3">
-                                <div>
-                                  <div className="text-sm font-medium text-white">{bot.name}</div>
-                                  <div className="text-xs text-gray-400">{bot.tradingPair} • {bot.direction.toUpperCase()}</div>
-                                </div>
-                                <div className="text-right">
-                                  <div className="text-xs text-gray-400">Status</div>
-                                  <div className="text-sm text-green-400">Active</div>
-                                </div>
-                              </div>
-
-                              {/* P&L Summary */}
-                              <div className="grid grid-cols-2 gap-4 mb-3">
-                                <div className="text-center">
-                                  <div className={`text-lg font-bold font-mono ${
-                                    totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                                  }`}>
-                                    {totalPnL >= 0 ? '+' : ''}${formatCurrency(totalPnL)}
-                                  </div>
-                                  <div className="text-xs flex items-center justify-center text-gray-400">
-                                    {totalPnL >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                                    Total P&L
-                                  </div>
-                                </div>
-                                <div className="text-center">
-                                  <div className={`text-lg font-bold font-mono ${
-                                    unrealizedPnL > 0 
-                                      ? 'text-green-400'
-                                      : unrealizedPnL < 0 
-                                        ? 'text-red-400'
-                                        : 'text-gray-400'
-                                  }`}>
-                                    {unrealizedPnL > 0 ? '+' : ''}${formatCurrency(unrealizedPnL)}
-                                  </div>
-                                  <div className="text-xs flex items-center justify-center text-gray-400">
-                                    <Target className="w-3 h-3 mr-1" />
-                                    Unrealized
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Key Metrics */}
-                              <div className="grid grid-cols-3 gap-2 text-xs">
-                                <div className="text-center p-2 rounded border bg-gray-800/20 border-gray-700/30">
-                                  <div className="font-mono font-semibold text-crypto-primary">
-                                    {formatAge(bot.createdAt)}
-                                  </div>
-                                  <div className="flex items-center justify-center mt-1 text-gray-400">
-                                    <Clock className="w-3 h-3 mr-1" />
-                                    Age
-                                  </div>
-                                </div>
-                                <div className="text-center p-2 rounded border bg-gray-800/20 border-gray-700/30">
-                                  <div className="font-mono font-semibold text-crypto-primary">
-                                    {completedCycles}
-                                  </div>
-                                  <div className="flex items-center justify-center mt-1 text-gray-400">
-                                    <RefreshCw className="w-3 h-3 mr-1" />
-                                    Cycles
-                                  </div>
-                                </div>
-                                <div className="text-center p-2 rounded border bg-gray-800/20 border-gray-700/30">
-                                  <div className={`font-mono font-semibold ${
-                                    avgDailyPnL > 0 
-                                      ? 'text-green-400'
-                                      : avgDailyPnL < 0 
-                                        ? 'text-red-400'
-                                        : 'text-gray-400'
-                                  }`}>
-                                    {avgDailyPnL > 0 ? '+' : ''}${formatCurrency(avgDailyPnL)}
-                                  </div>
-                                  <div className="flex items-center justify-center mt-1 text-gray-400">
-                                    <TrendingUp className="w-3 h-3 mr-1" />
-                                    Daily Avg
-                                  </div>
-                                </div>
-                              </div>
+                    <div className="space-y-3">
+                      {bots.filter((bot: any) => bot.status === 'active').map((bot: any) => (
+                        <div key={bot.id} className="bg-crypto-dark border border-gray-700 rounded p-3">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <div className="text-sm font-medium text-white">{bot.name}</div>
+                              <div className="text-xs text-gray-400">{bot.tradingPair} • {bot.direction.toUpperCase()}</div>
                             </div>
-                          );
-                        })}
-                      </div>
+                            <div className="text-right">
+                              <div className="text-xs text-gray-400">Status</div>
+                              <div className="text-sm text-green-400">Active</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </TabsContent>
