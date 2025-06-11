@@ -862,7 +862,7 @@ export class WebSocketService {
     // Creating new subscription-based WebSocket connection
     
     // Close existing connection if any
-    if (this.binancePublicWs) {
+    if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
       // Closing existing connection
       this.binancePublicWs.close();
     }
