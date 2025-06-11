@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { useMarketData } from "@/hooks/useMarketData";
 
 interface MartingaleStrategyProps {
   className?: string;
@@ -31,6 +32,7 @@ export function MartingaleStrategy({
 }: MartingaleStrategyProps) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { marketData, isConnected } = useMarketData();
 
   const [localDirection, setLocalDirection] = useState<"long" | "short">("long");
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -62,6 +64,9 @@ export function MartingaleStrategy({
     upperPrice: ""
   });
 
+  // Get real-time balance for selected symbol (simplified for now)
+  const realtimeBalance = null;
+
   // Notify parent component when configuration changes for real-time chart updates
   useEffect(() => {
     if (onConfigChange) {
@@ -70,7 +75,7 @@ export function MartingaleStrategy({
   }, [config, onConfigChange]);
 
   // Fetch available balance from exchange
-  const { data: balanceData } = useQuery({
+  const { data: balanceData, isLoading: balanceLoading } = useQuery({
     queryKey: ['balance', selectedExchangeId, selectedSymbol],
     queryFn: async () => {
       if (!selectedExchangeId || !selectedSymbol) return null;
@@ -168,6 +173,7 @@ export function MartingaleStrategy({
       return response.json();
     },
     onSuccess: (botData) => {
+      console.log('Bot created successfully:', botData);
       setCreatedBotId(botData.id.toString());
       toast({
         title: "Bot Created Successfully",
@@ -177,6 +183,7 @@ export function MartingaleStrategy({
       onBotCreated?.();
     },
     onError: (error: any) => {
+      console.error('Error creating bot:', error);
       toast({
         title: "Error Creating Bot",
         description: error.message || "Failed to create bot. Please try again.",
@@ -232,6 +239,8 @@ export function MartingaleStrategy({
 
     createBotMutation.mutate(botData);
   };
+
+  const baseCurrency = selectedSymbol.replace('USDT', '');
 
   return (
     <div className={`${className}`}>
@@ -481,7 +490,12 @@ export function MartingaleStrategy({
           <div className="flex items-center space-x-1">
             <span className="text-gray-400">Available</span>
             <span className="text-orange-500 font-medium">
-              {balanceData ? parseFloat(balanceData.free).toFixed(3) : '0.000'} USDT
+              {(() => {
+                // Use real-time balance if available, otherwise fall back to API data
+                const displayBalance = realtimeBalance || (balanceData ? balanceData.free : '0.000000');
+                const balanceValue = parseFloat(displayBalance);
+                return `${balanceValue.toFixed(3)} USDT`;
+              })()}
             </span>
           </div>
           <div className="flex items-center space-x-1">
@@ -657,6 +671,8 @@ export function MartingaleStrategy({
             {isCreatingBot ? "Creating..." : "Create Martingale Bot"}
           </Button>
         </div>
+
+        {/* Real-time order notifications are now handled by useOrderNotifications hook */}
       </div>
     </div>
   );
