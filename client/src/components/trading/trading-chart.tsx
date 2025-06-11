@@ -142,7 +142,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
     takeProfitLine.setData(takeProfitData);
     takeProfitLineRef.current = takeProfitLine;
 
-    // Calculate and draw Safety Order lines
+    // Calculate and draw Safety Order lines with running deviation
     const safetyLines: any[] = [];
     const activeCount = activeSafetyOrders || maxSafetyOrders; // Default to all if not specified
     
@@ -157,7 +157,7 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
         color: isActive ? '#eab308' : '#6b7280', // Yellow for active, gray for inactive
         lineWidth: 1,
         lineStyle: 1, // Dashed line
-        title: `Safety Order ${i + 1}`,
+        title: `SO${i + 1} (${deviation.toFixed(2)}%)`,
       });
 
       const safetyData = [

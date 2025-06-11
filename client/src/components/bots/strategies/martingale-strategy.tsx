@@ -632,6 +632,26 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
             })()} USDT
           </span>
         </div>
+
+        {/* Safety Order Preview */}
+        <div className="bg-crypto-dark rounded border border-gray-700 p-3 mt-3">
+          <Label className="text-sm text-gray-400 mb-3 block">Safety Order Levels</Label>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {Array.from({ length: parseInt(config.maxSafetyOrders) || 5 }, (_, i) => {
+              const deviation = parseFloat(config.priceDeviation) * Math.pow(config.priceDeviationMultiplier[0], i);
+              const isActive = i < (config.activeSafetyOrdersEnabled ? parseInt(config.activeSafetyOrders) : parseInt(config.maxSafetyOrders));
+              
+              return (
+                <div key={i} className={`flex justify-between items-center text-xs p-1 rounded ${
+                  isActive ? 'bg-yellow-500/10 text-yellow-400' : 'bg-gray-700/20 text-gray-500'
+                }`}>
+                  <span className="font-mono">SO{i + 1}</span>
+                  <span className="font-mono">{deviation.toFixed(2)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Advanced Settings */}
