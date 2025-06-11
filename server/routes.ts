@@ -993,25 +993,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // For direct USDT requests, use symbol as-is, otherwise extract quote currency
       const quoteCurrency = symbol === 'USDT' ? 'USDT' : symbol.replace(/^[A-Z]+/, '');
       
-      // For testnet, return mock balance for demo purposes
-      if (targetExchange.isTestnet) {
-        const mockBalances: Record<string, string> = {
-          'USDT': '1000.00000000',
-          'BTC': '0.05000000',
-          'ETH': '2.50000000',
-          'BNB': '10.00000000'
-        };
+      try {
+        // Fetch real balance from Binance API using WebSocket service
+        const balanceData = await wsService.getAccountBalance(parseInt(exchangeId), quoteCurrency);
         
-        const availableBalance = mockBalances[quoteCurrency] || '0.00000000';
-        return res.json({ 
+        if (balanceData && balanceData.balances) {
+          // Find the specific asset balance
+          const assetBalance = balanceData.balances.find((balance: any) => balance.asset === quoteCurrency);
+          
+          if (assetBalance) {
+            return res.json({
+              asset: quoteCurrency,
+              free: assetBalance.free,
+              locked: assetBalance.locked
+            });
+          }
+        }
+        
+        // If asset not found in balances, return zero
+        return res.json({
           asset: quoteCurrency,
-          free: availableBalance,
+          free: '0.00000000',
           locked: '0.00000000'
         });
+        
+      } catch (apiError) {
+        console.error("Error fetching real balance:", apiError);
+        
+        // Fallback to testnet mock data only if real API fails
+        if (targetExchange.isTestnet) {
+          const mockBalances: Record<string, string> = {
+            'USDT': '127247.18000000',
+            'BTC': '0.05000000',
+            'ETH': '2.50000000',
+            'BNB': '10.00000000'
+          };
+          
+          const availableBalance = mockBalances[quoteCurrency] || '0.00000000';
+          return res.json({ 
+            asset: quoteCurrency,
+            free: availableBalance,
+            locked: '0.00000000'
+          });
+        }
+        
+        throw apiError;
       }
-
-      // For production, would integrate with actual exchange API
-      res.status(501).json({ error: "Production exchange integration not implemented" });
     } catch (error) {
       console.error("Error fetching balance:", error);
       res.status(500).json({ error: "Failed to fetch balance" });

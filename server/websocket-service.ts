@@ -2149,6 +2149,49 @@ export class WebSocketService {
   }
 
   // Public methods for external use
+  public async getAccountBalance(exchangeId: number, asset?: string): Promise<any> {
+    try {
+      const exchanges = await storage.getExchangesByUserId(1); // TODO: Get from auth context
+      const targetExchange = exchanges.find(ex => ex.id === exchangeId);
+      
+      if (!targetExchange) {
+        throw new Error('Exchange not found');
+      }
+
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        targetExchange.apiKey,
+        targetExchange.apiSecret,
+        targetExchange.encryptionIv
+      );
+
+      const timestamp = Date.now();
+      const queryString = `timestamp=${timestamp}`;
+      
+      const crypto = await import('crypto');
+      const signature = crypto.createHmac('sha256', apiSecret).update(queryString).digest('hex');
+      
+      const baseUrl = targetExchange.restApiEndpoint || 'https://testnet.binance.vision';
+      const response = await fetch(`${baseUrl}/api/v3/account?${queryString}&signature=${signature}`, {
+        headers: {
+          'X-MBX-APIKEY': apiKey
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Binance API error: ${response.status} ${response.statusText}`);
+      }
+
+      const accountData = await response.json();
+      return {
+        balances: accountData.balances,
+        totalBTC: accountData.totalWalletBalance || '0'
+      };
+    } catch (error) {
+      console.error('Error fetching account balance:', error);
+      throw error;
+    }
+  }
+
   public async generateListenKey(userId: number): Promise<string> {
     try {
       const exchanges = await storage.getExchangesByUserId(userId);
