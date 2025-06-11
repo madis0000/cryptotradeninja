@@ -213,8 +213,8 @@ export default function TradingBots() {
           </div>
 
           {/* Gray Section - Strategy Configuration Panel */}
-          <div className="w-80 bg-crypto-dark border-l border-gray-800 flex flex-col">
-            <div className="p-4 flex-1">
+          <div className="w-80 bg-crypto-dark border-l border-gray-800 flex flex-col overflow-hidden">
+            <div className="p-4 flex-1 overflow-y-auto">
               
               {/* Strategy Configuration Content */}
               {selectedStrategy === "grid" && (

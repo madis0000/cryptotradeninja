@@ -136,10 +136,10 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
       const maxSafetyOrders = field === 'maxSafetyOrders' ? parseInt(value) : parseInt(config.maxSafetyOrders);
       const priceDeviationMultiplier = config.priceDeviationMultiplier[0];
       
-      if (!validatePriceDeviation(priceDeviation, priceDeviationMultiplier, maxSafetyOrders)) {
+      if (priceDeviation > 0 && maxSafetyOrders > 0 && !validatePriceDeviation(priceDeviation, priceDeviationMultiplier, maxSafetyOrders)) {
         toast({
           title: "Invalid Configuration",
-          description: "Price deviation settings would result in negative prices. Please reduce price deviation or safety orders.",
+          description: "One or more safety orders exceed 99.99% deviation. Please reduce price deviation, multiplier, or number of safety orders.",
           variant: "destructive"
         });
         return;
@@ -165,11 +165,8 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
 
   // Validation function for safety order price deviation
   const validatePriceDeviation = (priceDeviation: number, priceDeviationMultiplier: number, maxSafetyOrders: number): boolean => {
-    let totalDeviation = 0;
-    
     for (let i = 0; i < maxSafetyOrders; i++) {
       const adjustedDeviation = priceDeviation * Math.pow(priceDeviationMultiplier, i);
-      totalDeviation += adjustedDeviation;
       
       // Check if any individual safety order would exceed 99.99%
       if (adjustedDeviation > 99.99) {
@@ -177,8 +174,7 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
       }
     }
     
-    // Check if cumulative deviation would exceed 99.99%
-    return totalDeviation <= 99.99;
+    return true;
   };
 
   const adjustIntegerValue = (field: string, increment: number, min: number = 1, max?: number) => {
@@ -708,7 +704,22 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
               </div>
               <Slider
                 value={config.priceDeviationMultiplier}
-                onValueChange={(value) => setConfig(prev => ({...prev, priceDeviationMultiplier: value}))}
+                onValueChange={(value) => {
+                  // Validate when multiplier changes
+                  const priceDeviation = parseFloat(config.priceDeviation);
+                  const maxSafetyOrders = parseInt(config.maxSafetyOrders);
+                  
+                  if (priceDeviation > 0 && maxSafetyOrders > 0 && !validatePriceDeviation(priceDeviation, value[0], maxSafetyOrders)) {
+                    toast({
+                      title: "Invalid Configuration",
+                      description: "One or more safety orders exceed 99.99% deviation. Please reduce price deviation, multiplier, or number of safety orders.",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                  
+                  setConfig(prev => ({...prev, priceDeviationMultiplier: value}));
+                }}
                 max={10}
                 min={1}
                 step={0.1}
