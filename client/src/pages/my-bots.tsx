@@ -70,6 +70,16 @@ export function MyBotsPage() {
     queryKey: ['/api/bots']
   });
 
+  // Fetch bot statistics
+  const { data: botStats = [] } = useQuery({
+    queryKey: ['/api/bot-stats']
+  });
+
+  // Fetch cycle profits for display
+  const { data: cycleProfits = [] } = useQuery({
+    queryKey: ['/api/cycle-profits']
+  });
+
   // Utility functions for calculations
   const getBotData = (botId: number) => {
     return bots.find(b => b.id === botId) || {};
@@ -100,90 +110,18 @@ export function MyBotsPage() {
     return totalPnL / ageInDays;
   };
 
-  // Fetch bot orders for accurate position calculation
-  const { data: allBotOrders = {} } = useQuery({
-    queryKey: ['/api/all-bot-orders'],
-    queryFn: async () => {
-      const ordersData: Record<number, any[]> = {};
-      for (const bot of bots) {
-        try {
-          const response = await fetch(`/api/bot-orders/${bot.id}`, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-          });
-          if (response.ok) {
-            ordersData[bot.id] = await response.json();
-          }
-        } catch (error) {
-          console.error(`Failed to fetch orders for bot ${bot.id}:`, error);
-        }
-      }
-      return ordersData;
-    },
-    enabled: bots.length > 0,
-    refetchInterval: 30000 // Refetch every 30 seconds for fresh data
-  });
-
-  // Fetch completed cycle profits for total realized P&L
-  const { data: cycleProfits = [] } = useQuery<Array<{ botId: number; cycleProfit: number }>>({
-    queryKey: ['/api/cycle-profits'],
-    refetchInterval: 30000 // Refetch every 30 seconds for fresh data
-  });
-
-  // Fetch bot statistics (cycles completed, total P&L, total invested)
-  const { data: botStats = [] } = useQuery<Array<{ botId: number; completedCycles: number; totalPnL: number; totalInvested: number }>>({
-    queryKey: ['/api/bot-stats'],
-    refetchInterval: 30000 // Refetch every 30 seconds for fresh data
-  });
-
-  // Dynamic Unrealized P&L calculation using database cycle data + live prices
   const calculateUnrealizedPnL = (bot: any) => {
-    // Get current market price for the bot's trading pair
-    const currentMarketData = marketData.getSymbolData(bot.tradingPair);
-    if (!currentMarketData) return 0;
+    if (!bot.id || bot.status !== 'active') return 0;
     
-    const currentPrice = parseFloat(currentMarketData.price || '0');
-    if (currentPrice === 0) return 0;
-
-    // Get bot orders from database to calculate actual position
-    const botOrders = allBotOrders[bot.id] || [];
-    // Filter filled buy orders from CURRENT ACTIVE CYCLE only (not completed cycles)
-    const activeCycleOrders = botOrders.filter((order: any) => 
-      order.side === 'BUY' && 
-      order.status === 'filled' && 
-      !order.completedAt // Only orders from current active cycle
-    );
+    const currentPrice = marketData[bot.tradingPair]?.price || 0;
+    if (!currentPrice) return 0;
     
-    if (activeCycleOrders.length === 0) {
-      return 0;
-    }
+    const totalInvested = getTotalInvested(bot);
+    if (totalInvested <= 0) return 0;
     
-    // Calculate actual position from current active cycle filled orders only
-    const totalPositionSize = activeCycleOrders.reduce((total: number, order: any) => {
-      return total + parseFloat(order.filledQuantity || order.quantity || '0');
-    }, 0);
-    
-    const totalInvested = activeCycleOrders.reduce((total: number, order: any) => {
-      const price = parseFloat(order.filledPrice || order.price || '0');
-      const qty = parseFloat(order.filledQuantity || order.quantity || '0');
-      return total + (price * qty);
-    }, 0);
-    
-    if (totalPositionSize === 0 || totalInvested === 0) return 0;
-    
-    // Calculate average entry price from actual filled orders
-    const averageEntryPrice = totalInvested / totalPositionSize;
-    
-    // Real-time unrealized P&L: (current_price - avg_entry_price) × position_size
-    const unrealizedPnL = (currentPrice - averageEntryPrice) * totalPositionSize;
-    
-    // Log P&L updates for active positions only
-    if (unrealizedPnL !== 0) {
-      console.log(`[P&L] ${bot.tradingPair}: $${unrealizedPnL.toFixed(4)}`);
-    }
-    
-    return unrealizedPnL;
+    // Simple unrealized calculation (this would be more complex in real implementation)
+    const estimatedValue = totalInvested * (currentPrice / (bot.averageEntryPrice || currentPrice));
+    return estimatedValue - totalInvested;
   };
 
   const calculateUnrealizedDailyPnL = (bot: any) => {
@@ -237,6 +175,226 @@ export function MyBotsPage() {
   // Filter bots by status
   const activeBots = bots.filter(bot => bot.status === 'active');
   const inactiveBots = bots.filter(bot => bot.status !== 'active');
+
+  const renderBotCard = (bot: any, isActive: boolean = true) => {
+    const detailedBot = getBotData(bot.id);
+    const unrealizedPnL = calculateUnrealizedPnL(detailedBot);
+    const completedCycles = getCompletedCycles(detailedBot);
+    const totalPnL = getTotalPnL(detailedBot);
+    const totalInvested = getTotalInvested(detailedBot);
+    const dailyPnL = calculateDailyPnL(detailedBot);
+    const unrealizedDailyPnL = calculateUnrealizedDailyPnL(detailedBot);
+
+    return (
+      <Card 
+        key={bot.id} 
+        className={`bg-gradient-to-br ${
+          isActive 
+            ? 'from-crypto-darker to-gray-900/50 border-gray-800/50 hover:border-green-500/30 hover:shadow-green-500/10' 
+            : 'from-gray-900/80 to-gray-800/30 border-gray-700/50 hover:border-gray-600/50 hover:shadow-gray-500/5 opacity-90'
+        } border transition-all duration-300 hover:shadow-lg group`}
+      >
+        <CardHeader className="pb-4">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <CardTitle className={`text-lg font-semibold mb-1 transition-colors ${
+                isActive ? 'text-white group-hover:text-green-400' : 'text-gray-300 group-hover:text-white'
+              }`}>
+                {bot.name}
+              </CardTitle>
+              <div className="flex items-center space-x-2 text-sm">
+                <span className={`font-mono font-medium ${isActive ? 'text-crypto-primary' : 'text-gray-400'}`}>
+                  {bot.tradingPair}
+                </span>
+                <span className={isActive ? 'text-gray-500' : 'text-gray-600'}>•</span>
+                <Badge variant="outline" className={`text-xs ${
+                  isActive 
+                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' 
+                    : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                }`}>
+                  {bot.strategy}
+                </Badge>
+                <Badge variant="outline" className={`text-xs ${
+                  bot.direction === 'long' 
+                    ? isActive 
+                      ? 'bg-green-500/10 text-green-400 border-green-500/20' 
+                      : 'bg-green-500/5 text-green-500/70 border-green-500/10'
+                    : isActive 
+                      ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                      : 'bg-red-500/5 text-red-500/70 border-red-500/10'
+                }`}>
+                  {bot.direction.toUpperCase()}
+                </Badge>
+              </div>
+            </div>
+            <Badge className={`${
+              isActive 
+                ? 'bg-green-500/15 text-green-400 border-green-500/30 shadow-lg' 
+                : 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+            }`}>
+              <div className={`w-2 h-2 rounded-full mr-2 ${
+                isActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
+              }`}></div>
+              {isActive ? 'Active' : 'Inactive'}
+            </Badge>
+          </div>
+          
+          {/* Performance Metrics */}
+          <div className={`grid grid-cols-2 gap-4 mt-4 p-3 rounded-lg border ${
+            isActive ? 'bg-gray-800/30 border-gray-700/50' : 'bg-gray-700/20 border-gray-600/30'
+          }`}>
+            <div className="text-center">
+              <div className={`text-lg font-bold font-mono ${
+                totalPnL >= 0 
+                  ? isActive ? 'text-green-400' : 'text-green-400/80' 
+                  : isActive ? 'text-red-400' : 'text-red-400/80'
+              }`}>
+                {totalPnL >= 0 ? '+' : ''}${formatCurrency(totalPnL)}
+              </div>
+              <div className={`text-xs flex items-center justify-center ${
+                isActive ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                {totalPnL >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+                Total P&L
+              </div>
+            </div>
+            <div className="text-center">
+              <div className={`text-lg font-bold font-mono ${
+                unrealizedPnL > 0 
+                  ? isActive ? 'text-green-400' : 'text-green-400/60'
+                  : unrealizedPnL < 0 
+                    ? isActive ? 'text-red-400' : 'text-red-400/60'
+                    : isActive ? 'text-gray-400' : 'text-gray-400/60'
+              }`}>
+                {unrealizedPnL > 0 ? '+' : ''}${formatCurrency(unrealizedPnL)}
+              </div>
+              <div className={`text-xs flex items-center justify-center ${
+                isActive ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                <Target className="w-3 h-3 mr-1" />
+                Unrealized P&L
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        
+        <CardContent className="space-y-4">
+          {/* Key Metrics */}
+          <div className="grid grid-cols-3 gap-3 text-xs">
+            <div className={`text-center p-2 rounded border ${
+              isActive ? 'bg-gray-800/20 border-gray-700/30' : 'bg-gray-700/15 border-gray-600/20'
+            }`}>
+              <div className={`font-mono font-semibold ${
+                isActive ? 'text-crypto-primary' : 'text-gray-400'
+              }`}>
+                {completedCycles}
+              </div>
+              <div className={`flex items-center justify-center mt-1 ${
+                isActive ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                <RefreshCw className="w-3 h-3 mr-1" />
+                Cycles Completed
+              </div>
+            </div>
+            <div className={`text-center p-2 rounded border ${
+              isActive ? 'bg-gray-800/20 border-gray-700/30' : 'bg-gray-700/15 border-gray-600/20'
+            }`}>
+              <div className={`font-mono font-semibold ${
+                isActive ? 'text-white' : 'text-gray-300'
+              }`}>
+                ${formatCurrency(totalInvested)}
+              </div>
+              <div className={isActive ? 'text-gray-400' : 'text-gray-500'}>
+                Invested
+              </div>
+            </div>
+            <div className={`text-center p-2 rounded border ${
+              isActive ? 'bg-gray-800/20 border-gray-700/30' : 'bg-gray-700/15 border-gray-600/20'
+            }`}>
+              <div className={`font-mono font-semibold ${
+                isActive ? 'text-white' : 'text-gray-300'
+              }`}>
+                ${formatCurrency(detailedBot.baseOrderAmount)}
+              </div>
+              <div className={isActive ? 'text-gray-400' : 'text-gray-500'}>
+                Base
+              </div>
+            </div>
+          </div>
+
+          {/* Bot Details */}
+          <div className={`space-y-2 text-xs border-t pt-3 ${
+            isActive ? 'border-gray-700/50' : 'border-gray-600/30'
+          }`}>
+            <div className="flex justify-between">
+              <span className={isActive ? 'text-gray-400' : 'text-gray-500'}>
+                Daily P&L:
+              </span>
+              <span className={`font-mono ${
+                dailyPnL >= 0 
+                  ? isActive ? 'text-green-400' : 'text-green-400/80'
+                  : isActive ? 'text-red-400' : 'text-red-400/80'
+              }`}>
+                {dailyPnL >= 0 ? '+' : ''}${formatCurrency(dailyPnL)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className={isActive ? 'text-gray-400' : 'text-gray-500'}>
+                Age:
+              </span>
+              <span className={`font-mono ${isActive ? 'text-gray-300' : 'text-gray-400'}`}>
+                {formatBotAge(bot.createdAt)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className={isActive ? 'text-gray-400' : 'text-gray-500'}>
+                Current Price:
+              </span>
+              <span className={`font-mono ${isActive ? 'text-crypto-primary' : 'text-gray-400'}`}>
+                ${marketData[bot.tradingPair]?.price || '0.00'}
+              </span>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex space-x-2 pt-2">
+            <Button
+              onClick={() => setSelectedBot(bot)}
+              variant="outline"
+              size="sm"
+              className={`flex-1 ${
+                isActive 
+                  ? 'border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white' 
+                  : 'border-gray-600/50 text-gray-400 hover:bg-gray-700/50 hover:text-gray-300'
+              }`}
+            >
+              View Details
+            </Button>
+            {isActive && (
+              <Button
+                onClick={() => stopBotMutation.mutate(bot.id)}
+                variant="outline"
+                size="sm"
+                disabled={stopBotMutation.isPending}
+                className="border-yellow-600 text-yellow-400 hover:bg-yellow-600 hover:text-white"
+              >
+                <Square className="h-4 w-4" />
+              </Button>
+            )}
+            <Button
+              onClick={() => deleteBotMutation.mutate(bot.id)}
+              variant="outline"
+              size="sm"
+              disabled={deleteBotMutation.isPending}
+              className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-crypto-dark text-white">
@@ -299,9 +457,11 @@ export function MyBotsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs text-gray-400 uppercase tracking-wider">Active Bots</p>
-                      <p className="text-lg font-bold text-white">{activeBots.length}</p>
+                      <p className="text-lg font-bold font-mono text-crypto-primary">
+                        {activeBots.length}
+                      </p>
                     </div>
-                    <RefreshCw className="w-8 h-8 text-blue-400" />
+                    <Activity className="w-8 h-8 text-blue-400" />
                   </div>
                 </CardContent>
               </Card>
@@ -310,12 +470,12 @@ export function MyBotsPage() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">Total Invested</p>
-                      <p className="text-lg font-bold text-purple-400">
-                        ${formatCurrency(botStats.reduce((sum, stats) => sum + stats.totalInvested, 0))}
+                      <p className="text-xs text-gray-400 uppercase tracking-wider">Completed Cycles</p>
+                      <p className="text-lg font-bold font-mono text-purple-400">
+                        {cycleProfits.length}
                       </p>
                     </div>
-                    <Target className="w-8 h-8 text-purple-400" />
+                    <RefreshCw className="w-8 h-8 text-purple-400" />
                   </div>
                 </CardContent>
               </Card>
@@ -353,153 +513,7 @@ export function MyBotsPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {activeBots.map((bot: any) => {
-                      const detailedBot = getBotData(bot.id);
-                      const unrealizedPnL = calculateUnrealizedPnL(detailedBot);
-                      const completedCycles = getCompletedCycles(detailedBot);
-                      const totalPnL = getTotalPnL(detailedBot);
-                      const totalInvested = getTotalInvested(detailedBot);
-                      const dailyPnL = calculateDailyPnL(detailedBot);
-                      const unrealizedDailyPnL = calculateUnrealizedDailyPnL(detailedBot);
-                      
-                      return (
-                        <Card key={bot.id} className="bg-gradient-to-br from-crypto-darker to-gray-900/50 border border-gray-800/50 hover:border-green-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-green-500/10 group">
-                          <CardHeader className="pb-4">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <CardTitle className="text-white text-lg font-semibold mb-1 group-hover:text-green-400 transition-colors">
-                                  {bot.name}
-                                </CardTitle>
-                                <div className="flex items-center space-x-2 text-sm">
-                                  <span className="text-crypto-primary font-mono font-medium">{bot.tradingPair}</span>
-                                  <span className="text-gray-500">•</span>
-                                  <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/20">
-                                    {bot.strategy}
-                                  </Badge>
-                                  <Badge variant="outline" className={`text-xs ${
-                                    bot.direction === 'long' 
-                                      ? 'bg-green-500/10 text-green-400 border-green-500/20' 
-                                      : 'bg-red-500/10 text-red-400 border-red-500/20'
-                                  }`}>
-                                    {bot.direction.toUpperCase()}
-                                  </Badge>
-                                </div>
-                              </div>
-                              <Badge className="bg-green-500/15 text-green-400 border-green-500/30 shadow-lg">
-                                <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
-                                Active
-                              </Badge>
-                            </div>
-                            
-                            {/* Performance Metrics */}
-                            <div className="grid grid-cols-2 gap-4 mt-4 p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
-                              <div className="text-center">
-                                <div className={`text-lg font-bold font-mono ${totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                  {totalPnL >= 0 ? '+' : ''}${formatCurrency(totalPnL)}
-                                </div>
-                                <div className="text-xs text-gray-400 flex items-center justify-center">
-                                  {totalPnL >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                                  Total P&L
-                                </div>
-                              </div>
-                              <div className="text-center">
-                                <div className={`text-lg font-bold font-mono ${unrealizedPnL > 0 ? 'text-green-400' : unrealizedPnL < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                                  {unrealizedPnL > 0 ? '+' : ''}${formatCurrency(unrealizedPnL)}
-                                </div>
-                                <div className="text-xs text-gray-400 flex items-center justify-center">
-                                  <Target className="w-3 h-3 mr-1" />
-                                  Unrealized P&L
-                                </div>
-                              </div>
-                            </div>
-                          </CardHeader>
-                          
-                          <CardContent className="space-y-4">
-                            {/* Key Metrics */}
-                            <div className="grid grid-cols-3 gap-3 text-xs">
-                              <div className="text-center p-2 bg-gray-800/20 rounded border border-gray-700/30">
-                                <div className="text-crypto-primary font-mono font-semibold">{completedCycles}</div>
-                                <div className="text-gray-400 flex items-center justify-center mt-1">
-                                  <RefreshCw className="w-3 h-3 mr-1" />
-                                  Cycles Completed
-                                </div>
-                              </div>
-                              <div className="text-center p-2 bg-gray-800/20 rounded border border-gray-700/30">
-                                <div className="text-white font-mono font-semibold">${formatCurrency(totalInvested)}</div>
-                                <div className="text-gray-400">Invested</div>
-                              </div>
-                              <div className="text-center p-2 bg-gray-800/20 rounded border border-gray-700/30">
-                                <div className="text-white font-mono font-semibold">${formatCurrency(detailedBot.baseOrderAmount || '0')}</div>
-                                <div className="text-gray-400">Base</div>
-                              </div>
-                            </div>
-                            
-                            {/* Bot Configuration */}
-                            <div className="grid grid-cols-2 gap-3 text-xs">
-                              <div>
-                                <span className="text-gray-400">Safety Amount:</span>
-                                <div className="text-white font-mono">${formatCurrency(detailedBot.safetyOrderAmount)}</div>
-                              </div>
-                              <div>
-                                <span className="text-gray-400">Max Safety Orders:</span>
-                                <div className="text-white font-medium">{detailedBot.maxSafetyOrders}</div>
-                              </div>
-                              <div>
-                                <span className="text-gray-400">Price Deviation:</span>
-                                <div className="text-white font-medium">{formatCurrency(detailedBot.priceDeviation)}%</div>
-                              </div>
-                              <div>
-                                <span className="text-gray-400">Daily P&L:</span>
-                                <div className={`font-mono font-medium ${dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                  {dailyPnL >= 0 ? '+' : ''}${formatCurrency(dailyPnL)}
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Created Date and Bot Age */}
-                            <div className="border-t border-gray-700/50 pt-3 space-y-1">
-                              <div className="flex items-center text-xs text-gray-500">
-                                <Calendar className="w-3 h-3 mr-2" />
-                                Created: {formatDateTime(detailedBot.createdAt)}
-                              </div>
-                              <div className="text-xs text-green-400 font-mono">
-                                Age: {formatBotAge(detailedBot.createdAt)}
-                              </div>
-                            </div>
-                            
-                            {/* Action Buttons */}
-                            <div className="flex items-center space-x-2 pt-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSelectedBot(bot)}
-                                className="flex-1 text-crypto-light border-gray-600 hover:bg-crypto-primary/10 hover:border-crypto-primary hover:text-crypto-primary transition-all"
-                              >
-                                View Details
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => stopBotMutation.mutate(bot.id)}
-                                disabled={stopBotMutation.isPending}
-                                className="text-yellow-400 border-yellow-600/50 hover:bg-yellow-600/10 hover:border-yellow-500"
-                              >
-                                Stop
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => deleteBotMutation.mutate(bot.id)}
-                                disabled={deleteBotMutation.isPending}
-                                className="text-red-400 border-red-600/50 hover:bg-red-600/10 hover:border-red-500"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
+                    {activeBots.map((bot: any) => renderBotCard(bot, true))}
                   </div>
                 )}
               </TabsContent>
@@ -517,144 +531,7 @@ export function MyBotsPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {inactiveBots.map((bot: any) => {
-                      const detailedBot = getBotData(bot.id);
-                      const unrealizedPnL = calculateUnrealizedPnL(detailedBot);
-                      const completedCycles = getCompletedCycles(detailedBot);
-                      const totalPnL = getTotalPnL(detailedBot);
-                      const totalInvested = getTotalInvested(detailedBot);
-                      const dailyPnL = calculateDailyPnL(detailedBot);
-                      const unrealizedDailyPnL = calculateUnrealizedDailyPnL(detailedBot);
-                      
-                      return (
-                        <Card key={bot.id} className="bg-gradient-to-br from-gray-900/80 to-gray-800/30 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-300 hover:shadow-lg hover:shadow-gray-500/5 group opacity-90">
-                          <CardHeader className="pb-4">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <CardTitle className="text-gray-300 text-lg font-semibold mb-1 group-hover:text-white transition-colors">
-                                  {bot.name}
-                                </CardTitle>
-                                <div className="flex items-center space-x-2 text-sm">
-                                  <span className="text-gray-400 font-mono font-medium">{bot.tradingPair}</span>
-                                  <span className="text-gray-600">•</span>
-                                  <Badge variant="outline" className="text-xs bg-gray-500/10 text-gray-400 border-gray-500/20">
-                                    {bot.strategy}
-                                  </Badge>
-                                  <Badge variant="outline" className={`text-xs ${
-                                    bot.direction === 'long' 
-                                      ? 'bg-green-500/5 text-green-500/70 border-green-500/10' 
-                                      : 'bg-red-500/5 text-red-500/70 border-red-500/10'
-                                  }`}>
-                                    {bot.direction.toUpperCase()}
-                                  </Badge>
-                                </div>
-                              </div>
-                              <Badge className="bg-gray-500/15 text-gray-400 border-gray-500/30">
-                                <div className="w-2 h-2 bg-gray-500 rounded-full mr-2"></div>
-                                Inactive
-                              </Badge>
-                            </div>
-                            
-                            {/* Performance Metrics */}
-                            <div className="grid grid-cols-2 gap-4 mt-4 p-3 bg-gray-700/20 rounded-lg border border-gray-600/30">
-                              <div className="text-center">
-                                <div className={`text-lg font-bold font-mono ${totalPnL >= 0 ? 'text-green-400/80' : 'text-red-400/80'}`}>
-                                  {totalPnL >= 0 ? '+' : ''}${formatCurrency(totalPnL)}
-                                </div>
-                                <div className="text-xs text-gray-500 flex items-center justify-center">
-                                  {totalPnL >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                                  Total P&L
-                                </div>
-                              </div>
-                              <div className="text-center">
-                                <div className={`text-lg font-bold font-mono ${unrealizedPnL > 0 ? 'text-green-400/60' : unrealizedPnL < 0 ? 'text-red-400/60' : 'text-gray-400/60'}`}>
-                                  {unrealizedPnL > 0 ? '+' : ''}${formatCurrency(unrealizedPnL)}
-                                </div>
-                                <div className="text-xs text-gray-500 flex items-center justify-center">
-                                  <Target className="w-3 h-3 mr-1" />
-                                  Unrealized P&L
-                                </div>
-                              </div>
-                            </div>
-                          </CardHeader>
-                          
-                          <CardContent className="space-y-4">
-                            {/* Key Metrics */}
-                            <div className="grid grid-cols-3 gap-3 text-xs">
-                              <div className="text-center p-2 bg-gray-700/15 rounded border border-gray-600/20">
-                                <div className="text-gray-400 font-mono font-semibold">{completedCycles}</div>
-                                <div className="text-gray-500 flex items-center justify-center mt-1">
-                                  <RefreshCw className="w-3 h-3 mr-1" />
-                                  Cycles Completed
-                                </div>
-                              </div>
-                              <div className="text-center p-2 bg-gray-700/15 rounded border border-gray-600/20">
-                                <div className="text-gray-300 font-mono font-semibold">${formatCurrency(totalInvested)}</div>
-                                <div className="text-gray-500">Invested</div>
-                              </div>
-                              <div className="text-center p-2 bg-gray-700/15 rounded border border-gray-600/20">
-                                <div className="text-gray-300 font-mono font-semibold">${formatCurrency(detailedBot.baseOrderAmount)}</div>
-                                <div className="text-gray-500">Base</div>
-                              </div>
-                            </div>
-                            
-                            {/* Bot Configuration */}
-                            <div className="grid grid-cols-2 gap-3 text-xs">
-                              <div>
-                                <span className="text-gray-500">Safety Amount:</span>
-                                <div className="text-gray-300 font-mono">${formatCurrency(detailedBot.safetyOrderAmount)}</div>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Max Safety Orders:</span>
-                                <div className="text-gray-300 font-medium">{detailedBot.maxSafetyOrders}</div>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Price Deviation:</span>
-                                <div className="text-gray-300 font-medium">{formatCurrency(detailedBot.priceDeviation)}%</div>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Daily P&L:</span>
-                                <div className={`font-mono font-medium ${dailyPnL >= 0 ? 'text-green-400/80' : 'text-red-400/80'}`}>
-                                  {dailyPnL >= 0 ? '+' : ''}${formatCurrency(dailyPnL)}
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Created Date and Bot Age */}
-                            <div className="border-t border-gray-600/30 pt-3 space-y-1">
-                              <div className="flex items-center text-xs text-gray-600">
-                                <Calendar className="w-3 h-3 mr-2" />
-                                Created: {formatDateTime(detailedBot.createdAt)}
-                              </div>
-                              <div className="text-xs text-gray-400 font-mono">
-                                Age: {formatBotAge(detailedBot.createdAt)}
-                              </div>
-                            </div>
-                            
-                            {/* Action Buttons */}
-                            <div className="flex items-center space-x-2 pt-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSelectedBot(bot)}
-                                className="flex-1 text-gray-400 border-gray-600/50 hover:bg-gray-700/20 hover:border-gray-500 hover:text-gray-300 transition-all"
-                              >
-                                View Details
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => deleteBotMutation.mutate(bot.id)}
-                                disabled={deleteBotMutation.isPending}
-                                className="text-red-400/80 border-red-600/30 hover:bg-red-600/10 hover:border-red-500/50"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
+                    {inactiveBots.map((bot: any) => renderBotCard(bot, false))}
                   </div>
                 )}
               </TabsContent>
