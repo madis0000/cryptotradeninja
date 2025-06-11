@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, TrendingUp, TrendingDown, Calendar, Target, RefreshCw, Activity, DollarSign, Play, Square, History } from "lucide-react";
+import { Trash2, TrendingUp, TrendingDown, Calendar, Target, RefreshCw, Activity, DollarSign, Play, Square, History, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
@@ -47,6 +47,8 @@ export function MyBotsPage() {
       return 1;
     }
   };
+
+
 
   const formatBotAge = (createdAt: string) => {
     try {
@@ -641,8 +643,10 @@ export function MyBotsPage() {
                     <div className="text-crypto-light">No running bots found</div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {activeBots.map((bot: any) => renderBotCard(bot, true))}
+                  <div className="max-h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                      {activeBots.map((bot: any) => renderBotCard(bot, true))}
+                    </div>
                   </div>
                 )}
               </TabsContent>
@@ -659,8 +663,10 @@ export function MyBotsPage() {
                     <div className="text-crypto-light">No inactive bots found</div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {inactiveBots.map((bot: any) => renderBotCard(bot, false))}
+                  <div className="max-h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                      {inactiveBots.map((bot: any) => renderBotCard(bot, false))}
+                    </div>
                   </div>
                 )}
               </TabsContent>
