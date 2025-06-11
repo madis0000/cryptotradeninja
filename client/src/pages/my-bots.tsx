@@ -128,6 +128,8 @@ export function MyBotsPage() {
     return stats.totalInvested;
   };
 
+
+
   const calculateDailyPnL = (bot: any) => {
     const totalPnL = getTotalPnL(bot);
     const ageInDays = getBotAge(bot.createdAt);
@@ -169,6 +171,31 @@ export function MyBotsPage() {
     const unrealizedPnL = calculateUnrealizedPnL(bot);
     const ageInDays = getBotAge(bot.createdAt);
     return unrealizedPnL / ageInDays;
+  };
+
+  // Helper function to calculate average daily P&L from completed cycles only
+  const calculateAverageDailyPnL = (bot: any) => {
+    const completedCycles = getCompletedCycles(bot);
+    if (completedCycles === 0) return 0;
+    
+    const totalPnL = getTotalPnL(bot);
+    const ageInDays = getBotAge(bot.createdAt);
+    return totalPnL / ageInDays;
+  };
+
+  // Format age display
+  const formatAge = (createdAt: string) => {
+    const created = new Date(createdAt);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - created.getTime());
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffDays > 0) {
+      return `${diffDays}d ${diffHours % 24}h`;
+    } else {
+      return `${diffHours}h`;
+    }
   };
 
   // Stop bot mutation
@@ -321,7 +348,22 @@ export function MyBotsPage() {
         
         <CardContent className="space-y-4">
           {/* Key Metrics */}
-          <div className="grid grid-cols-3 gap-3 text-xs">
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className={`text-center p-2 rounded border ${
+              isActive ? 'bg-gray-800/20 border-gray-700/30' : 'bg-gray-700/15 border-gray-600/20'
+            }`}>
+              <div className={`font-mono font-semibold ${
+                isActive ? 'text-crypto-primary' : 'text-gray-400'
+              }`}>
+                {formatAge(bot.createdAt)}
+              </div>
+              <div className={`flex items-center justify-center mt-1 ${
+                isActive ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                <Clock className="w-3 h-3 mr-1" />
+                Age
+              </div>
+            </div>
             <div className={`text-center p-2 rounded border ${
               isActive ? 'bg-gray-800/20 border-gray-700/30' : 'bg-gray-700/15 border-gray-600/20'
             }`}>
@@ -334,21 +376,55 @@ export function MyBotsPage() {
                 isActive ? 'text-gray-400' : 'text-gray-500'
               }`}>
                 <RefreshCw className="w-3 h-3 mr-1" />
-                Cycles Completed
+                Cycles
+              </div>
+            </div>
+          </div>
+
+          {/* P&L Metrics */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className={`text-center p-2 rounded border ${
+              isActive ? 'bg-gray-800/20 border-gray-700/30' : 'bg-gray-700/15 border-gray-600/20'
+            }`}>
+              <div className={`font-mono font-semibold ${
+                unrealizedPnL > 0 
+                  ? isActive ? 'text-green-400' : 'text-green-400/60'
+                  : unrealizedPnL < 0 
+                    ? isActive ? 'text-red-400' : 'text-red-400/60'
+                    : isActive ? 'text-gray-400' : 'text-gray-400/60'
+              }`}>
+                {unrealizedPnL > 0 ? '+' : ''}${formatCurrency(unrealizedPnL)}
+              </div>
+              <div className={`flex items-center justify-center mt-1 ${
+                isActive ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                <Target className="w-3 h-3 mr-1" />
+                Unrealized
               </div>
             </div>
             <div className={`text-center p-2 rounded border ${
               isActive ? 'bg-gray-800/20 border-gray-700/30' : 'bg-gray-700/15 border-gray-600/20'
             }`}>
               <div className={`font-mono font-semibold ${
-                isActive ? 'text-white' : 'text-gray-300'
+                calculateAverageDailyPnL(bot) > 0 
+                  ? isActive ? 'text-green-400' : 'text-green-400/60'
+                  : calculateAverageDailyPnL(bot) < 0 
+                    ? isActive ? 'text-red-400' : 'text-red-400/60'
+                    : isActive ? 'text-gray-400' : 'text-gray-400/60'
               }`}>
-                ${formatCurrency(totalInvested)}
+                {calculateAverageDailyPnL(bot) > 0 ? '+' : ''}${formatCurrency(calculateAverageDailyPnL(bot))}
               </div>
-              <div className={isActive ? 'text-gray-400' : 'text-gray-500'}>
-                Invested
+              <div className={`flex items-center justify-center mt-1 ${
+                isActive ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                <TrendingUp className="w-3 h-3 mr-1" />
+                Daily Avg
               </div>
             </div>
+          </div>
+
+          {/* Trading Info */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
             <div className={`text-center p-2 rounded border ${
               isActive ? 'bg-gray-800/20 border-gray-700/30' : 'bg-gray-700/15 border-gray-600/20'
             }`}>
