@@ -153,6 +153,19 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
   const adjustPercentageValue = (field: string, increment: number) => {
     const currentValue = parseFloat(config[field as keyof typeof config] as string) || 0;
     const newValue = Math.max(0, currentValue + increment);
+    
+    // Check if increasing priceDeviation would exceed 99.99%
+    if (field === 'priceDeviation' && increment > 0) {
+      if (!canIncrease('priceDeviation', currentValue, increment)) {
+        toast({
+          title: "Maximum Price Deviation Reached",
+          description: "Increasing price deviation would exceed 99.99% limit for safety orders.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+    
     setConfig(prev => ({ ...prev, [field]: newValue.toFixed(1) }));
   };
 
@@ -165,16 +178,22 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
 
   // Validation function for safety order price deviation
   const validatePriceDeviation = (priceDeviation: number, priceDeviationMultiplier: number, maxSafetyOrders: number): boolean => {
-    for (let i = 0; i < maxSafetyOrders; i++) {
-      const adjustedDeviation = priceDeviation * Math.pow(priceDeviationMultiplier, i);
-      
-      // Check if any individual safety order would exceed 99.99%
-      if (adjustedDeviation > 99.99) {
-        return false;
-      }
-    }
+    if (maxSafetyOrders <= 0 || priceDeviation <= 0) return true;
     
-    return true;
+    // Calculate the last safety order deviation (SO at index maxSafetyOrders - 1)
+    const lastSafetyOrderDeviation = priceDeviation * Math.pow(priceDeviationMultiplier, maxSafetyOrders - 1);
+    
+    // Check if the last safety order would exceed 99.99%
+    return lastSafetyOrderDeviation <= 99.99;
+  };
+
+  // Check if we can safely increase any parameter without exceeding 99.99%
+  const canIncrease = (field: 'priceDeviation' | 'maxSafetyOrders' | 'priceDeviationMultiplier', currentValue: number, increment: number): boolean => {
+    const priceDeviation = field === 'priceDeviation' ? currentValue + increment : parseFloat(config.priceDeviation);
+    const maxSafetyOrders = field === 'maxSafetyOrders' ? currentValue + increment : parseInt(config.maxSafetyOrders);
+    const multiplier = field === 'priceDeviationMultiplier' ? currentValue + increment : config.priceDeviationMultiplier[0];
+    
+    return validatePriceDeviation(priceDeviation, multiplier, maxSafetyOrders);
   };
 
   const adjustIntegerValue = (field: string, increment: number, min: number = 1, max?: number) => {
@@ -184,6 +203,19 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     if (max !== undefined) {
       newValue = Math.min(max, newValue);
     }
+    
+    // Check if increasing maxSafetyOrders would exceed 99.99%
+    if (field === 'maxSafetyOrders' && increment > 0) {
+      if (!canIncrease('maxSafetyOrders', currentValue, increment)) {
+        toast({
+          title: "Maximum Safety Orders Reached",
+          description: "Adding more safety orders would exceed 99.99% deviation limit.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+    
     setConfig(prev => ({ ...prev, [field]: newValue.toString() }));
   };
 
@@ -636,17 +668,38 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
             {Array.from({ length: parseInt(config.maxSafetyOrders) || 5 }, (_, i) => {
               const deviation = parseFloat(config.priceDeviation) * Math.pow(config.priceDeviationMultiplier[0], i);
               const isActive = i < (config.activeSafetyOrdersEnabled ? parseInt(config.activeSafetyOrders) : parseInt(config.maxSafetyOrders));
+              const isExceeding = deviation > 99.99;
+              
+              let bgColor = 'bg-gray-700/20 text-gray-500';
+              if (isExceeding) {
+                bgColor = 'bg-red-500/20 text-red-400 border border-red-500/30';
+              } else if (isActive) {
+                bgColor = 'bg-yellow-500/10 text-yellow-400';
+              }
               
               return (
-                <div key={i} className={`flex justify-between items-center text-xs p-1 rounded ${
-                  isActive ? 'bg-yellow-500/10 text-yellow-400' : 'bg-gray-700/20 text-gray-500'
-                }`}>
+                <div key={i} className={`flex justify-between items-center text-xs p-1 rounded ${bgColor}`}>
                   <span className="font-mono">SO{i + 1}</span>
-                  <span className="font-mono">{deviation.toFixed(2)}%</span>
+                  <span className="font-mono">
+                    {isExceeding ? '⚠️ ' : ''}{deviation.toFixed(2)}%
+                  </span>
                 </div>
               );
             })}
           </div>
+          
+          {/* Warning if any safety order exceeds 99.99% */}
+          {(() => {
+            const lastDeviation = parseFloat(config.priceDeviation) * Math.pow(config.priceDeviationMultiplier[0], parseInt(config.maxSafetyOrders) - 1);
+            if (lastDeviation > 99.99) {
+              return (
+                <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
+                  ⚠️ Configuration exceeds 99.99% limit
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
       </div>
 
@@ -705,17 +758,19 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
               <Slider
                 value={config.priceDeviationMultiplier}
                 onValueChange={(value) => {
-                  // Validate when multiplier changes
-                  const priceDeviation = parseFloat(config.priceDeviation);
-                  const maxSafetyOrders = parseInt(config.maxSafetyOrders);
+                  const currentMultiplier = config.priceDeviationMultiplier[0];
+                  const newMultiplier = value[0];
                   
-                  if (priceDeviation > 0 && maxSafetyOrders > 0 && !validatePriceDeviation(priceDeviation, value[0], maxSafetyOrders)) {
-                    toast({
-                      title: "Invalid Configuration",
-                      description: "One or more safety orders exceed 99.99% deviation. Please reduce price deviation, multiplier, or number of safety orders.",
-                      variant: "destructive"
-                    });
-                    return;
+                  // Only validate if increasing the multiplier
+                  if (newMultiplier > currentMultiplier) {
+                    if (!canIncrease('priceDeviationMultiplier', currentMultiplier, newMultiplier - currentMultiplier)) {
+                      toast({
+                        title: "Maximum Multiplier Reached",
+                        description: "Increasing multiplier would exceed 99.99% deviation limit for safety orders.",
+                        variant: "destructive"
+                      });
+                      return;
+                    }
                   }
                   
                   setConfig(prev => ({...prev, priceDeviationMultiplier: value}));
