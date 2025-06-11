@@ -3608,13 +3608,9 @@ export class WebSocketService {
       
       console.log(`[MARTINGALE STRATEGY] ✓ Cycle ${cycle.cycleNumber || 1} completed successfully with profit: $${profit.toFixed(2)}`);
 
-      // If next cycle was created, schedule its execution after cooldown
+      // If next cycle was created, start it immediately (no cooldown)
       if (nextCycleId && bot.isActive) {
-        const cooldownSeconds = typeof bot.cooldownBetweenRounds === 'string' 
-          ? parseInt(bot.cooldownBetweenRounds) 
-          : (bot.cooldownBetweenRounds || 60);
-        const cooldown = cooldownSeconds * 1000; // Convert to milliseconds
-        console.log(`[MARTINGALE STRATEGY] ⏱️ Scheduling next cycle start after cooldown: ${cooldownSeconds}s`);
+        console.log(`[MARTINGALE STRATEGY] 🚀 Starting next cycle immediately (no cooldown)`);
         
         // Cancel any existing pending cycle start for this bot
         const existingTimeout = this.pendingCycleStarts.get(cycle.botId);
@@ -3623,18 +3619,14 @@ export class WebSocketService {
           console.log(`[MARTINGALE STRATEGY] ⏹️ Cancelled existing pending cycle for bot ${cycle.botId}`);
         }
 
-        // Schedule base order placement for the pre-created next cycle
-        const timeoutHandle = setTimeout(async () => {
-          this.pendingCycleStarts.delete(cycle.botId);
-          try {
-            console.log(`[MARTINGALE STRATEGY] 🚀 Starting base order placement for pre-created cycle ${nextCycleId}`);
-            await this.placeInitialBaseOrder(cycle.botId, nextCycleId);
-          } catch (error) {
-            console.error(`[MARTINGALE STRATEGY] ❌ Error placing base order for pre-created cycle:`, error);
-          }
-        }, cooldown);
-        
-        this.pendingCycleStarts.set(cycle.botId, timeoutHandle);
+        // Start base order placement immediately for the pre-created next cycle
+        try {
+          console.log(`[MARTINGALE STRATEGY] 🚀 Starting base order placement for pre-created cycle ${nextCycleId}`);
+          await this.placeInitialBaseOrder(cycle.botId, nextCycleId);
+          console.log(`[MARTINGALE STRATEGY] ✅ Next cycle started immediately - continuous operation enabled`);
+        } catch (error) {
+          console.error(`[MARTINGALE STRATEGY] ❌ Error placing base order for pre-created cycle:`, error);
+        }
 
       } else if (!bot.isActive) {
         console.log(`[MARTINGALE STRATEGY] ⏸️ Bot is inactive - No new cycle will be started`);
@@ -4766,9 +4758,9 @@ export class WebSocketService {
         const activeCycles = await storage.getActiveCycles();
         
         for (const cycle of activeCycles) {
-          // Check if cycle has been active for more than 2 minutes without any orders
+          // Check if cycle has been active for more than 30 seconds without any orders (faster detection)
           const cycleAge = new Date().getTime() - new Date(cycle.createdAt).getTime();
-          const maxAge = 2 * 60 * 1000; // 2 minutes
+          const maxAge = 30 * 1000; // 30 seconds (since no cooldown, stuck cycles should be detected quickly)
           
           if (cycleAge > maxAge && parseFloat(cycle.totalInvested || '0') === 0) {
             console.log(`[RECOVERY] Found potentially stuck cycle: Bot ${cycle.botId}, Cycle ${cycle.cycleNumber} (ID: ${cycle.id})`);
