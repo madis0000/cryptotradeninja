@@ -13,7 +13,7 @@ import { BotDetailsPage } from "./bot-details";
 import { format } from 'date-fns';
 
 export function MyBotsPage() {
-  const [activeSection, setActiveSection] = useState('active-bots');
+  const [activeTab, setActiveTab] = useState('running');
   const [selectedBot, setSelectedBot] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -321,41 +321,35 @@ export function MyBotsPage() {
               </Card>
             </div>
 
-            {/* Bot Sections */}
-            <div className="flex space-x-4 border-b border-gray-800">
-              <button
-                onClick={() => setActiveSection('active-bots')}
-                className={`pb-4 px-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeSection === 'active-bots'
-                    ? 'border-crypto-primary text-crypto-primary'
-                    : 'border-transparent text-crypto-light hover:text-white'
-                }`}
-              >
-                Active Bots ({activeBots.length})
-              </button>
-              <button
-                onClick={() => setActiveSection('inactive-bots')}
-                className={`pb-4 px-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeSection === 'inactive-bots'
-                    ? 'border-crypto-primary text-crypto-primary'
-                    : 'border-transparent text-crypto-light hover:text-white'
-                }`}
-              >
-                Inactive Bots ({inactiveBots.length})
-              </button>
-            </div>
+            {/* Bot Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 bg-crypto-darker border border-gray-700">
+                <TabsTrigger 
+                  value="running" 
+                  className="data-[state=active]:bg-crypto-primary data-[state=active]:text-white text-gray-400 flex items-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  Running Bots ({activeBots.length})
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="history" 
+                  className="data-[state=active]:bg-crypto-primary data-[state=active]:text-white text-gray-400 flex items-center gap-2"
+                >
+                  <History className="w-4 h-4" />
+                  History ({inactiveBots.length})
+                </TabsTrigger>
+              </TabsList>
 
-            {/* Bot Cards */}
-            {activeSection === 'active-bots' && (
-              <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-white">Active Trading Bots</h2>
+              {/* Running Bots Tab */}
+              <TabsContent value="running" className="space-y-4 mt-6">
+                <h2 className="text-xl font-semibold text-white">Running Trading Bots</h2>
                 {botsLoading ? (
                   <div className="text-center py-8">
                     <div className="text-crypto-light">Loading bots...</div>
                   </div>
                 ) : activeBots.length === 0 ? (
                   <div className="text-center py-8">
-                    <div className="text-crypto-light">No active bots found</div>
+                    <div className="text-crypto-light">No running bots found</div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -508,12 +502,11 @@ export function MyBotsPage() {
                     })}
                   </div>
                 )}
-              </div>
-            )}
+              </TabsContent>
 
-            {activeSection === 'inactive-bots' && (
-              <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-white">Inactive Trading Bots</h2>
+              {/* History Bots Tab */}
+              <TabsContent value="history" className="space-y-4 mt-6">
+                <h2 className="text-xl font-semibold text-white">Bot History</h2>
                 {botsLoading ? (
                   <div className="text-center py-8">
                     <div className="text-crypto-light">Loading bots...</div>
@@ -664,8 +657,8 @@ export function MyBotsPage() {
                     })}
                   </div>
                 )}
-              </div>
-            )}
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </div>
