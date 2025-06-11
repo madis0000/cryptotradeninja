@@ -42,9 +42,9 @@ export function MyBotsPage() {
       const now = new Date();
       const diffInMs = now.getTime() - created.getTime();
       const diffInDays = diffInMs / (1000 * 60 * 60 * 24);
-      return Math.max(1, diffInDays); // Minimum 1 day to avoid division by zero
+      return Math.max(0.042, diffInDays); // Minimum 1 hour (1/24 day) to avoid division by zero
     } catch {
-      return 1;
+      return 0.042; // 1 hour in days
     }
   };
 
