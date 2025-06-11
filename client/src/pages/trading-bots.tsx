@@ -8,7 +8,7 @@ import { TradingChart } from "@/components/trading/trading-chart";
 import { GridStrategy } from "@/components/bots/strategies/grid-strategy";
 import { MartingaleStrategy } from "@/components/bots/strategies/martingale-strategy";
 import { usePublicWebSocket } from "@/hooks/useWebSocketService";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface TickerData {
   symbol: string;
@@ -26,6 +26,7 @@ export default function TradingBots() {
   const [selectedStrategy, setSelectedStrategy] = useState("grid");
   const [tickerData, setTickerData] = useState<TickerData | null>(null);
   const [selectedExchangeId, setSelectedExchangeId] = useState<number | undefined>();
+  const queryClient = useQueryClient();
   const [martingaleConfig, setMartingaleConfig] = useState<{
     baseOrderPrice: number;
     takeProfitDeviation: number;
@@ -55,6 +56,14 @@ export default function TradingBots() {
 
   const handleExchangeChange = (exchangeId: number) => {
     setSelectedExchangeId(exchangeId);
+  };
+
+  const handleBotCreated = () => {
+    // Invalidate bot-related queries to refresh the data
+    queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/bot-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/cycle-profits'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
   };
 
   const strategies = [
@@ -228,6 +237,7 @@ export default function TradingBots() {
                   selectedExchangeId={selectedExchangeId}
                   exchanges={Array.isArray(exchanges) ? exchanges : []}
                   onExchangeChange={handleExchangeChange}
+                  onBotCreated={handleBotCreated}
                   onConfigChange={(config) => {
                     setMartingaleConfig({
                       baseOrderPrice: martingaleConfig.baseOrderPrice, // Keep current market price
