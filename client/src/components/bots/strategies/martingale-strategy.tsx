@@ -49,7 +49,7 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     // Investment (set to exchange minimum)
     baseOrderSize: getMinimumOrderAmount(selectedExchangeId),
     safetyOrderSize: getMinimumOrderAmount(selectedExchangeId),
-    maxSafetyOrders: "8",
+    maxSafetyOrders: "5", // Default to 5 as requested
     activeSafetyOrdersEnabled: false,
     activeSafetyOrders: "1",
     
@@ -130,6 +130,22 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
+    // Validate price deviation changes
+    if (field === 'priceDeviation' || field === 'maxSafetyOrders') {
+      const priceDeviation = field === 'priceDeviation' ? parseFloat(value) : parseFloat(config.priceDeviation);
+      const maxSafetyOrders = field === 'maxSafetyOrders' ? parseInt(value) : parseInt(config.maxSafetyOrders);
+      const priceDeviationMultiplier = config.priceDeviationMultiplier[0];
+      
+      if (!validatePriceDeviation(priceDeviation, priceDeviationMultiplier, maxSafetyOrders)) {
+        toast({
+          title: "Invalid Configuration",
+          description: "Price deviation settings would result in negative prices. Please reduce price deviation or safety orders.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+    
     setConfig(prev => ({ ...prev, [field]: value }));
   };
 
@@ -145,6 +161,24 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
     const minAmount = parseFloat(getMinimumOrderAmount(selectedExchangeId));
     const newValue = Math.max(minAmount, currentValue + increment);
     setConfig(prev => ({ ...prev, [field]: newValue.toFixed(2) }));
+  };
+
+  // Validation function for safety order price deviation
+  const validatePriceDeviation = (priceDeviation: number, priceDeviationMultiplier: number, maxSafetyOrders: number): boolean => {
+    let totalDeviation = 0;
+    
+    for (let i = 0; i < maxSafetyOrders; i++) {
+      const adjustedDeviation = priceDeviation * Math.pow(priceDeviationMultiplier, i);
+      totalDeviation += adjustedDeviation;
+      
+      // Check if any individual safety order would exceed 99.99%
+      if (adjustedDeviation > 99.99) {
+        return false;
+      }
+    }
+    
+    // Check if cumulative deviation would exceed 99.99%
+    return totalDeviation <= 99.99;
   };
 
   const adjustIntegerValue = (field: string, increment: number, min: number = 1, max?: number) => {
@@ -477,11 +511,30 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
           <div className="bg-crypto-dark rounded border border-gray-700 p-3">
             <div className="flex justify-between items-center mb-3">
               <Label className="text-sm text-gray-400">Max Safety Orders</Label>
-              <Input
-                value={config.maxSafetyOrders}
-                onChange={(e) => handleInputChange('maxSafetyOrders', e.target.value)}
-                className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
-              />
+              <div className="flex items-center space-x-2">
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => adjustIntegerValue('maxSafetyOrders', 1, 1, 20)}
+                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                  >
+                    <ChevronUp className="h-2 w-2 text-gray-400" />
+                  </button>
+                  <button
+                    onClick={() => adjustIntegerValue('maxSafetyOrders', -1, 1, 20)}
+                    className="h-3 w-5 flex items-center justify-center hover:bg-gray-600 rounded-sm transition-colors"
+                  >
+                    <ChevronDown className="h-2 w-2 text-gray-400" />
+                  </button>
+                </div>
+                <Input
+                  value={config.maxSafetyOrders}
+                  onChange={(e) => handleInputChange('maxSafetyOrders', e.target.value)}
+                  className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+                  type="number"
+                  min="1"
+                  max="20"
+                />
+              </div>
             </div>
             
             <div className="flex items-center justify-between">

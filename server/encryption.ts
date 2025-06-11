@@ -28,13 +28,28 @@ export const encrypt = (text: string): EncryptedData => {
 };
 
 export const decrypt = (encryptedText: string, ivHex: string): string => {
-  const iv = Buffer.from(ivHex, 'hex');
-  const decipher = crypto.createDecipheriv(ALGORITHM, getEncryptionKey(), iv);
-  
-  let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  
-  return decrypted;
+  try {
+    // Try new method first (createDecipheriv)
+    const iv = Buffer.from(ivHex, 'hex');
+    const decipher = crypto.createDecipheriv(ALGORITHM, getEncryptionKey(), iv);
+    
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    
+    return decrypted;
+  } catch (error) {
+    // Fall back to old method for existing encrypted data
+    try {
+      const decipher = crypto.createDecipher(ALGORITHM, getEncryptionKey());
+      
+      let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      
+      return decrypted;
+    } catch (fallbackError) {
+      throw new Error(`Decryption failed: ${error}`);
+    }
+  }
 };
 
 export const encryptApiCredentials = (apiKey: string, apiSecret: string) => {
