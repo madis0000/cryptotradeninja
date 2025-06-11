@@ -329,7 +329,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`[MARTINGALE] Created initial cycle ${cycle.id} for bot ${bot.id}`);
           
           // Place the initial base order to start the cycle
+          console.log(`[BOT CREATION] Calling placeInitialBaseOrder for bot ${bot.id}, cycle ${cycle.id}`);
           await wsService.placeInitialBaseOrder(bot.id, cycle.id);
+          console.log(`[BOT CREATION] placeInitialBaseOrder completed for bot ${bot.id}`);
           
           // Update WebSocket market data subscription for the new trading pair
           await wsService.updateMarketSubscriptions([bot.tradingPair]);
