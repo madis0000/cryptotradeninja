@@ -47,6 +47,11 @@ export default function TradingBots() {
     queryKey: ['/api/exchanges']
   });
 
+  // Fetch bots data for Running tab
+  const { data: bots = [] } = useQuery({
+    queryKey: ['/api/bots']
+  });
+
   // Auto-select first exchange if available
   useEffect(() => {
     if (exchanges && Array.isArray(exchanges) && exchanges.length > 0 && !selectedExchangeId) {
@@ -198,10 +203,29 @@ export default function TradingBots() {
                 </TabsList>
 
                 <TabsContent value="running" className="p-4">
-                  <div className="text-center py-8 text-gray-400">
-                    <i className="fas fa-robot text-4xl mb-4"></i>
-                    <p>No running bots for this pair</p>
-                  </div>
+                  {bots.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400">
+                      <i className="fas fa-robot text-4xl mb-4"></i>
+                      <p>No running bots</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {bots.filter((bot: any) => bot.status === 'active').map((bot: any) => (
+                        <div key={bot.id} className="bg-crypto-dark border border-gray-700 rounded p-3">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <div className="text-sm font-medium text-white">{bot.name}</div>
+                              <div className="text-xs text-gray-400">{bot.tradingPair} • {bot.direction.toUpperCase()}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-gray-400">Status</div>
+                              <div className="text-sm text-green-400">Active</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="history" className="p-4">

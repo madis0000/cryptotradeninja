@@ -50,7 +50,7 @@ export function MartingaleStrategy({
     
     // Price Settings
     priceDeviation: "1.0",
-    takeProfit: "3.0",
+    takeProfit: "1.0",
     takeProfitType: "fix",
     trailingProfit: "0.5",
     
