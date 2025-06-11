@@ -97,7 +97,6 @@ export function MyBotsPage() {
           }).then(res => res.json())
         )
       );
-      console.log('[BOT CYCLES] Fetched cycles:', results.flat());
       return results.flat();
     },
     enabled: activeBotIds.length > 0,
@@ -137,20 +136,18 @@ export function MyBotsPage() {
 
   const calculateUnrealizedPnL = (bot: any) => {
     if (!bot.id || bot.status !== 'active') {
-      console.log(`[P&L DEBUG] Bot ${bot.id} not active or missing ID`);
       return 0;
     }
     
-    const currentPrice = parseFloat(marketData[bot.tradingPair]?.price || '0');
+    const symbolData = marketData.getSymbolData(bot.tradingPair);
+    const currentPrice = parseFloat(symbolData?.price || '0');
     if (!currentPrice || currentPrice <= 0) {
-      console.log(`[P&L DEBUG] Bot ${bot.id} no current price:`, currentPrice);
       return 0;
     }
     
     // Find the active cycle for this bot
     const activeCycle = botCycles.find(cycle => cycle.botId === bot.id && cycle.status === 'active');
     if (!activeCycle) {
-      console.log(`[P&L DEBUG] Bot ${bot.id} no active cycle found. Available cycles:`, botCycles.length);
       return 0;
     }
     
@@ -159,25 +156,11 @@ export function MyBotsPage() {
     const totalQuantity = parseFloat(activeCycle.totalQuantity || '0');
     
     if (averageEntryPrice <= 0 || totalQuantity <= 0) {
-      console.log(`[P&L DEBUG] Bot ${bot.id} invalid cycle data:`, {
-        averageEntryPrice,
-        totalQuantity,
-        rawAveragePrice: activeCycle.currentAveragePrice,
-        rawQuantity: activeCycle.totalQuantity
-      });
       return 0;
     }
     
     // Calculate unrealized P&L: (current_price - average_entry_price) * total_quantity
     const unrealizedPnL = (currentPrice - averageEntryPrice) * totalQuantity;
-    
-    console.log(`[P&L DEBUG] Bot ${bot.id} calculation:`, {
-      currentPrice,
-      averageEntryPrice,
-      totalQuantity,
-      unrealizedPnL,
-      priceDiff: currentPrice - averageEntryPrice
-    });
     
     return unrealizedPnL;
   };
@@ -421,7 +404,7 @@ export function MyBotsPage() {
                 Current Price:
               </span>
               <span className={`font-mono ${isActive ? 'text-crypto-primary' : 'text-gray-400'}`}>
-                ${marketData[bot.tradingPair]?.price || '0.00'}
+                ${marketData.getSymbolData(bot.tradingPair)?.price || '0.00'}
               </span>
             </div>
           </div>
