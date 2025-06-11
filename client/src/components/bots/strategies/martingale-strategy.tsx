@@ -838,18 +838,18 @@ export function MartingaleStrategy({ className, selectedSymbol, selectedExchange
         </div>
       </div>
 
-      {/* Create Bot Button */}
-      <div className="mt-6 pt-4 border-t border-gray-700">
-        <Button 
-          onClick={handleCreateBot}
-          disabled={isCreatingBot || !selectedExchangeId}
-          className="w-full bg-orange-500 hover:bg-orange-600 text-white"
-        >
-          {isCreatingBot ? "Creating..." : "Create Martingale Bot"}
-        </Button>
-      </div>
+        {/* Create Bot Button */}
+        <div className="mt-6 pt-4 border-t border-gray-700">
+          <Button 
+            onClick={handleCreateBot}
+            disabled={isCreatingBot || !selectedExchangeId}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+          >
+            {isCreatingBot ? "Creating..." : "Create Martingale Bot"}
+          </Button>
+        </div>
 
-      {/* Real-time order notifications are now handled by useOrderNotifications hook */}
+        {/* Real-time order notifications are now handled by useOrderNotifications hook */}
       </div>
     </div>
   );
