@@ -318,6 +318,14 @@ export class DatabaseStorage implements IStorage {
     return cycles;
   }
 
+  async getActiveCycles(): Promise<BotCycle[]> {
+    return await db
+      .select()
+      .from(botCycles)
+      .where(eq(botCycles.status, 'active'))
+      .orderBy(desc(botCycles.createdAt));
+  }
+
   // Cycle Order Management
   async createCycleOrder(order: InsertCycleOrder): Promise<CycleOrder> {
     const [newOrder] = await db
