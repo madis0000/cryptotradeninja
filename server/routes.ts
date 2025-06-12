@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insertUserSchema, insertUserSettingsSchema, updateUserSettingsSchema } from "@shared/schema";
+import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insertUserSchema } from "@shared/schema";
 import { z } from "zod";
 import WebSocket, { WebSocketServer } from "ws";
 import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";
@@ -140,33 +140,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({
       user: req.user,
     });
-  });
-
-  // User Settings API
-  app.get("/api/settings", requireAuth, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const settings = await storage.getUserSettings(userId);
-      res.json(settings);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch settings" });
-    }
-  });
-
-  app.put("/api/settings", requireAuth, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const validatedData = updateUserSettingsSchema.parse(req.body);
-      
-      const settings = await storage.updateUserSettings(userId, validatedData);
-      res.json(settings);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: "Validation error", details: error.errors });
-      } else {
-        res.status(500).json({ error: "Failed to update settings" });
-      }
-    }
   });
 
   // Exchanges API - Secured with authentication
@@ -809,22 +782,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error clearing bot logs:', error);
       res.status(500).json({ error: "Failed to clear bot logs" });
-    }
-  });
-
-  // Recent orders API for audio notifications - Secured
-  app.get("/api/recent-orders", requireAuth, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const thirtySecondsAgo = new Date(Date.now() - 30000);
-      
-      // Get recent orders from the last 30 seconds
-      const recentOrders = await storage.getRecentOrdersByUser(userId, thirtySecondsAgo);
-      
-      res.json(recentOrders);
-    } catch (error) {
-      console.error('Error fetching recent orders:', error);
-      res.status(500).json({ error: "Failed to fetch recent orders" });
     }
   });
 

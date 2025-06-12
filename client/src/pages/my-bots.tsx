@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,8 +9,6 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 import { useMarketData } from "@/hooks/useMarketData";
-import { useUserWebSocket } from "@/hooks/useWebSocketService";
-import { audioService } from "@/services/audioService";
 import { BotDetailsPage } from "./bot-details";
 import { format } from 'date-fns';
 
@@ -21,89 +19,8 @@ export function MyBotsPage() {
   const queryClient = useQueryClient();
 
   // Initialize order notifications and market data
-  const { playTestNotification } = useOrderNotifications();
+  useOrderNotifications();
   const marketData = useMarketData();
-
-  // Fetch user settings for audio notifications
-  const { data: settings } = useQuery({
-    queryKey: ['/api/settings'],
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-
-  // Audio notification system using polling
-  const lastOrderCheckRef = useRef(Date.now());
-  
-  useEffect(() => {
-    if (!settings) return;
-    
-    const checkForNewOrders = async () => {
-      try {
-        // Get recent orders from the last 30 seconds
-        const response = await fetch('/api/recent-orders', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (response.ok) {
-          const orders = await response.json();
-          const newOrders = orders.filter((order: any) => 
-            new Date(order.timestamp).getTime() > lastOrderCheckRef.current &&
-            order.status === 'filled'
-          );
-          
-          for (const order of newOrders) {
-            console.log('[AUDIO] New filled order detected:', order);
-            
-            // Determine order type
-            let orderType: 'take_profit' | 'safety_order' | 'base_order' = 'safety_order';
-            
-            if (order.side === 'SELL') {
-              orderType = 'take_profit';
-            } else if (order.orderType === 'base_order') {
-              orderType = 'base_order';
-            } else {
-              orderType = 'safety_order';
-            }
-
-            console.log(`[AUDIO] Playing ${orderType} notification for order ${order.orderId}`);
-            
-            try {
-              await audioService.playOrderFillNotification(orderType, settings);
-              console.log(`[AUDIO] Successfully played ${orderType} notification`);
-            } catch (error) {
-              console.error('[AUDIO] Failed to play notification:', error);
-            }
-          }
-          
-          if (newOrders.length > 0) {
-            lastOrderCheckRef.current = Date.now();
-          }
-        }
-      } catch (error) {
-        console.error('[AUDIO] Failed to check for new orders:', error);
-      }
-    };
-
-    // Check for new orders every 2 seconds
-    const interval = setInterval(checkForNewOrders, 2000);
-    
-    return () => clearInterval(interval);
-  }, [settings]);
-
-  // Add a test button for immediate audio testing
-  const testAudio = async () => {
-    if (settings) {
-      console.log('[AUDIO] Manual test triggered');
-      try {
-        await audioService.playOrderFillNotification('base_order', settings);
-        console.log('[AUDIO] Manual test successful');
-      } catch (error) {
-        console.error('[AUDIO] Manual test failed:', error);
-      }
-    }
-  };
 
   // Utility functions for bot data calculations
   const formatCurrency = (amount: string | number) => {
@@ -621,19 +538,9 @@ export function MyBotsPage() {
         ) : (
           <div className="space-y-6">
             {/* Header */}
-            <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-3xl font-bold text-white mb-2">My Trading Bots</h1>
-                <p className="text-crypto-light">Manage your automated trading strategies</p>
-              </div>
-              <Button 
-                onClick={testAudio}
-                variant="outline"
-                size="sm"
-                className="border-blue-600 text-blue-400 hover:bg-blue-600 hover:text-white"
-              >
-                Test Audio
-              </Button>
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">My Trading Bots</h1>
+              <p className="text-crypto-light">Manage your automated trading strategies</p>
             </div>
 
             {/* Portfolio Statistics */}

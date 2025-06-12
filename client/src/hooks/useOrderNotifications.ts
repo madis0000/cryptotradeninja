@@ -1,97 +1,120 @@
 import { useEffect, useRef } from 'react';
-import { audioService } from '../services/audioService';
-import { useQuery } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface OrderNotification {
-  type: 'order_fill';
-  orderType: 'take_profit' | 'safety_order' | 'base_order';
+  orderId: number;
+  exchangeOrderId?: string;
   botId: number;
-  orderId: string;
   symbol: string;
   side: string;
   quantity: string;
   price: string;
-  timestamp: number;
+  orderType: string;
+  status: 'placed' | 'filled' | 'cancelled' | 'failed';
+  timestamp: string;
+  notification: string;
 }
 
 export function useOrderNotifications() {
-  const lastNotificationRef = useRef<number>(0);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const wsRef = useRef<WebSocket | null>(null);
 
-  // Fetch user settings for audio notifications
-  const { data: settings } = useQuery({
-    queryKey: ['/api/settings'],
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-
-  // Listen for WebSocket messages using a global event listener
   useEffect(() => {
-    if (!settings) return;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    const connectWebSocket = () => {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    const handleCustomEvent = async (event: CustomEvent) => {
-      try {
-        const message = event.detail;
-        console.log('[AUDIO] Received WebSocket message:', message);
-        
-        // Handle order fill notifications - check for filled orders
-        if (message.type === 'order_notification') {
-          console.log('[AUDIO] Order notification received:', message.data);
+      ws.onopen = () => {
+        console.log('[ORDER NOTIFICATIONS] Connected to WebSocket for order updates');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
           
-          if (message.data?.status === 'filled') {
-            const data = message.data;
-            const timestamp = new Date(data.timestamp).getTime();
-            
-            console.log(`[AUDIO] Order filled! Timestamp: ${timestamp}, Last: ${lastNotificationRef.current}`);
-            
-            if (timestamp > lastNotificationRef.current) {
-              lastNotificationRef.current = timestamp;
-              
-              // Determine order type based on the order data
-              let orderType: 'take_profit' | 'safety_order' | 'base_order' = 'safety_order';
-              
-              if (data.side === 'SELL') {
-                orderType = 'take_profit';
-              } else if (data.orderType === 'base_order') {
-                orderType = 'base_order';
-              } else {
-                orderType = 'safety_order';
-              }
-
-              console.log(`[AUDIO] Playing ${orderType} notification sound for order ${data.orderId}`);
-              console.log('[AUDIO] Settings:', settings);
-              
-              // Play notification sound
-              await audioService.playOrderFillNotification(orderType, settings);
-            } else {
-              console.log('[AUDIO] Duplicate notification ignored');
-            }
-          } else {
-            console.log(`[AUDIO] Order status is ${message.data?.status}, not filled`);
+          if (message.type === 'order_notification') {
+            handleOrderNotification(message.data);
           }
-        } else {
-          console.log(`[AUDIO] Message type is ${message.type}, not order_notification`);
+        } catch (error) {
+          console.error('[ORDER NOTIFICATIONS] Error parsing WebSocket message:', error);
         }
-      } catch (error) {
-        console.error('[AUDIO] Failed to process custom event:', error);
-      }
+      };
+
+      ws.onclose = () => {
+        console.log('[ORDER NOTIFICATIONS] WebSocket connection closed, attempting to reconnect...');
+        setTimeout(connectWebSocket, 3000); // Reconnect after 3 seconds
+      };
+
+      ws.onerror = (error) => {
+        console.error('[ORDER NOTIFICATIONS] WebSocket error:', error);
+      };
     };
 
-    window.addEventListener('websocket-message', handleCustomEvent as any);
+    const handleOrderNotification = (data: OrderNotification) => {
+      const { status, notification, orderType, symbol, side, quantity, price } = data;
+      
+      let title = '';
+      let description = notification;
+      let variant: 'default' | 'destructive' = 'default';
+
+      switch (status) {
+        case 'placed':
+          title = 'Order Placed';
+          break;
+        case 'filled':
+          title = 'Order Filled';
+          variant = 'default';
+          break;
+        case 'cancelled':
+          title = 'Order Cancelled';
+          variant = 'destructive';
+          break;
+        case 'failed':
+          title = 'Order Failed';
+          variant = 'destructive';
+          break;
+      }
+
+      // Show toast notification
+      toast({
+        title,
+        description,
+        variant,
+        duration: status === 'filled' ? 5000 : 3000, // Keep fill notifications visible longer
+      });
+
+      // Invalidate relevant query cache to refresh UI data
+      queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bots', data.botId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bot-orders', data.botId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles', data.botId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
+      
+      // Force refetch of all bot-related data to ensure synchronization
+      queryClient.refetchQueries({ queryKey: ['/api/bots', data.botId] });
+      queryClient.refetchQueries({ queryKey: ['/api/bot-orders', data.botId] });
+      queryClient.refetchQueries({ queryKey: ['/api/bot-cycles', data.botId] });
+
+      // Log for debugging
+      console.log(`[ORDER NOTIFICATIONS] ${title}: ${description}`);
+    };
+
+    connectWebSocket();
 
     return () => {
-      window.removeEventListener('websocket-message', handleCustomEvent as any);
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
-  }, [settings]);
-
-  // Manual notification trigger for testing
-  const playTestNotification = async (orderType: 'take_profit' | 'safety_order' | 'base_order') => {
-    if (settings) {
-      console.log(`[AUDIO] Testing ${orderType} notification sound`);
-      await audioService.playOrderFillNotification(orderType, settings);
-    }
-  };
+  }, [toast]);
 
   return {
-    playTestNotification,
-    settings
+    // Return any methods if needed for manual control
+    isConnected: wsRef.current?.readyState === WebSocket.OPEN
   };
 }

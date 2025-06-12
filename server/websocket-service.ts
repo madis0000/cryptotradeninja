@@ -92,22 +92,10 @@ export class WebSocketService {
   private pendingCycleStarts = new Map<number, NodeJS.Timeout>(); // botId -> timeout handle
 
   constructor(server: Server) {
-    // Always attach to the HTTP server but use different path to avoid Vite conflicts
-    console.log(`[WEBSOCKET] Starting WebSocket server on /trading-ws path...`);
+    // WebSocket server attached to the same HTTP server (port 5000)
     this.wss = new WebSocketServer({ 
       server: server,
-      path: '/trading-ws'
-    });
-    
-    this.wss.on('listening', () => {
-      console.log(`[WEBSOCKET] ✅ WebSocket server listening on /trading-ws path`);
-      console.log(`[PORT MANAGER] WebSocket available on same server as HTTP`);
-      console.log(`[PORT MANAGER] WebSocket Path: /trading-ws`);
-      console.log(`[PORT MANAGER] Supports both HTTP and HTTPS connections`);
-    });
-
-    this.wss.on('error', (error) => {
-      console.error('[WEBSOCKET] ❌ WebSocket server error:', error);
+      path: '/ws'
     });
 
     this.setupWebSocket();
