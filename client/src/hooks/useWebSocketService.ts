@@ -46,7 +46,7 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     ws.onopen = () => {
       console.log('[CLIENT WS] ===== CONNECTED TO BACKEND SERVER =====');
-      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:${port}/api/ws`);
+      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:${wsPort}/api/ws`);
       setStatus('connected');
       options.onConnect?.();
       
