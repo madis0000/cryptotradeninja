@@ -18,9 +18,8 @@ import * as path from "path";
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Initialize unified WebSocket router instead of separate service
-  const wsRouter = new WebSocketRouter(httpServer);
-  const wsService = wsRouter.getWebSocketService();
+  // Initialize WebSocket service directly - no separate router needed
+  const wsService = new WebSocketService(httpServer);
   
   // Start all markets ticker stream for real-time data
   setTimeout(() => {

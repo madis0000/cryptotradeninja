@@ -43,8 +43,10 @@ export function useOrderNotifications() {
   });
 
   useEffect(() => {
+    // Use unified WebSocket URL for Replit compatibility
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/ws`;
     
     const connectWebSocket = () => {
       const ws = new WebSocket(wsUrl);
