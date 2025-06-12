@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -30,56 +30,67 @@ export function MyBotsPage() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // WebSocket connection for audio notifications
-  const { lastMessage } = useUserWebSocket({
-    onMessage: async (message) => {
-      console.log('[AUDIO] WebSocket message received:', message);
-      
-      // Handle order fill notifications
-      if (message.type === 'order_notification') {
-        console.log('[AUDIO] Order notification detected:', message.data);
+  // Audio notification system using polling
+  const lastOrderCheckRef = useRef(Date.now());
+  
+  useEffect(() => {
+    if (!settings) return;
+    
+    const checkForNewOrders = async () => {
+      try {
+        // Get recent orders from the last 30 seconds
+        const response = await fetch('/api/recent-orders', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          }
+        });
         
-        if (message.data?.status === 'filled') {
-          console.log('[AUDIO] Order filled detected:', message.data);
+        if (response.ok) {
+          const orders = await response.json();
+          const newOrders = orders.filter((order: any) => 
+            new Date(order.timestamp).getTime() > lastOrderCheckRef.current &&
+            order.status === 'filled'
+          );
           
-          if (!settings) {
-            console.log('[AUDIO] Settings not loaded yet, skipping notification');
-            return;
-          }
-          
-          const data = message.data;
-          
-          console.log('[AUDIO] Processing order fill notification:', data);
-          
-          // Determine order type based on the order data
-          let orderType: 'take_profit' | 'safety_order' | 'base_order' = 'safety_order';
-          
-          if (data.side === 'SELL') {
-            orderType = 'take_profit';
-          } else if (data.orderType === 'base_order') {
-            orderType = 'base_order';
-          } else {
-            orderType = 'safety_order';
-          }
+          for (const order of newOrders) {
+            console.log('[AUDIO] New filled order detected:', order);
+            
+            // Determine order type
+            let orderType: 'take_profit' | 'safety_order' | 'base_order' = 'safety_order';
+            
+            if (order.side === 'SELL') {
+              orderType = 'take_profit';
+            } else if (order.orderType === 'base_order') {
+              orderType = 'base_order';
+            } else {
+              orderType = 'safety_order';
+            }
 
-          console.log(`[AUDIO] Playing ${orderType} notification sound for order ${data.orderId}`);
-          console.log('[AUDIO] Using settings:', settings);
-          
-          try {
-            // Play notification sound
-            await audioService.playOrderFillNotification(orderType, settings);
-            console.log(`[AUDIO] Successfully played ${orderType} notification`);
-          } catch (error) {
-            console.error('[AUDIO] Failed to play notification:', error);
+            console.log(`[AUDIO] Playing ${orderType} notification for order ${order.orderId}`);
+            
+            try {
+              await audioService.playOrderFillNotification(orderType, settings);
+              console.log(`[AUDIO] Successfully played ${orderType} notification`);
+            } catch (error) {
+              console.error('[AUDIO] Failed to play notification:', error);
+            }
           }
-        } else {
-          console.log(`[AUDIO] Order status is ${message.data?.status}, not filled`);
+          
+          if (newOrders.length > 0) {
+            lastOrderCheckRef.current = Date.now();
+          }
         }
-      } else {
-        console.log(`[AUDIO] Message type is ${message.type}, not order_notification`);
+      } catch (error) {
+        console.error('[AUDIO] Failed to check for new orders:', error);
       }
-    }
-  });
+    };
+
+    // Check for new orders every 2 seconds
+    const interval = setInterval(checkForNewOrders, 2000);
+    
+    return () => clearInterval(interval);
+  }, [settings]);
 
   // Add a test button for immediate audio testing
   const testAudio = async () => {
