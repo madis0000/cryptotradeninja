@@ -10,7 +10,7 @@ import {
   type UserSettings, type InsertUserSettings, type UpdateUserSettings
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, sum, count, isNotNull, gte } from "drizzle-orm";
+import { eq, desc, and, sum, count, isNotNull } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -68,7 +68,6 @@ export interface IStorage {
   getCycleOrderByExchangeId(exchangeOrderId: string): Promise<CycleOrder | undefined>;
   getPendingCycleOrders(botId: number): Promise<CycleOrder[]>;
   getCycleOrdersByBotId(botId: number): Promise<any[]>;
-  getRecentOrdersByUser(userId: number, since: Date): Promise<CycleOrder[]>;
 
   // User Settings
   getUserSettings(userId: number): Promise<UserSettings>;
@@ -461,17 +460,6 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return updatedSettings;
-  }
-
-  async getRecentOrdersByUser(userId: number, since: Date): Promise<CycleOrder[]> {
-    return await db
-      .select()
-      .from(cycleOrders)
-      .where(and(
-        eq(cycleOrders.userId, userId),
-        gte(cycleOrders.filledAt, since)
-      ))
-      .orderBy(desc(cycleOrders.filledAt));
   }
 }
 

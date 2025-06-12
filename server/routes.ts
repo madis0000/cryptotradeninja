@@ -812,22 +812,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Recent orders API for audio notifications - Secured
-  app.get("/api/recent-orders", requireAuth, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const thirtySecondsAgo = new Date(Date.now() - 30000);
-      
-      // Get recent orders from the last 30 seconds
-      const recentOrders = await storage.getRecentOrdersByUser(userId, thirtySecondsAgo);
-      
-      res.json(recentOrders);
-    } catch (error) {
-      console.error('Error fetching recent orders:', error);
-      res.status(500).json({ error: "Failed to fetch recent orders" });
-    }
-  });
-
   // System logs API - Secured  
   app.get("/api/system-logs", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
