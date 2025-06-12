@@ -98,11 +98,7 @@ export class WebSocketService {
       server: server,
       path: '/api/ws',
       perMessageDeflate: false,
-      maxPayload: 16 * 1024 * 1024,
-      // Only handle connections specifically to our trading WebSocket path
-      verifyClient: (info) => {
-        return info.req.url === '/api/ws';
-      }
+      maxPayload: 16 * 1024 * 1024
     });
 
     this.setupWebSocket();

@@ -17,7 +17,7 @@ import * as path from "path";
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Initialize WebSocket service
+  // Initialize WebSocket service after Vite HMR has connected
   const wsService = new WebSocketService(httpServer);
   
   // Start all markets ticker stream for real-time data
