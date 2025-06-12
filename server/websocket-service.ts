@@ -611,7 +611,7 @@ export class WebSocketService {
     this.binanceKlineWs.on('open', () => {
       // Removed verbose kline stream logging
       
-      // Subscribe to kline streams
+      // Subscribe to kline streams immediately for faster response
       const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
       const subscribeMessage = {
         method: 'SUBSCRIBE',
@@ -623,6 +623,11 @@ export class WebSocketService {
       if (this.binanceKlineWs && this.binanceKlineWs.readyState === WebSocket.OPEN) {
         this.binanceKlineWs.send(JSON.stringify(subscribeMessage));
         this.currentKlineSubscriptions = klineStreamPaths;
+        
+        // Fetch historical data in parallel for better performance
+        setTimeout(() => {
+          this.fetchHistoricalKlinesWS(symbols, interval);
+        }, 50);
       }
     });
     

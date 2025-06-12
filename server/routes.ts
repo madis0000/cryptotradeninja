@@ -29,10 +29,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(`[WEBSOCKET] Trading WebSocket server listening on port ${wsPort}`);
   });
   
-  // Start all markets ticker stream for real-time data
+  // Start all markets ticker stream for real-time data with faster initialization
   setTimeout(() => {
     wsService.startAllMarketsTicker();
-  }, 2000);
+  }, 500);
   
   // Configure trust proxy for Replit environment
   app.set('trust proxy', true);
