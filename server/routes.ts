@@ -52,7 +52,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Security middleware
   app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
+    contentSecurityPolicy: config.isProduction ? {
       directives: {
         defaultSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
@@ -65,12 +65,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         frameSrc: ["'none'"],
       },
     } : false,
-    crossOriginEmbedderPolicy: process.env.NODE_ENV === 'production'
+    crossOriginEmbedderPolicy: config.isProduction
   }));
   
   app.use(cors({
-    origin: process.env.NODE_ENV === 'production' ? 
-      (process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : true) : 
+    origin: config.isProduction ? 
+      (config.allowedOrigins.length > 0 ? config.allowedOrigins : true) : 
       true,
     credentials: true
   }));
