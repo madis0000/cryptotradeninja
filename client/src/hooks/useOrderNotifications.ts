@@ -76,8 +76,8 @@ export function useOrderNotifications() {
       };
     };
 
-    const handleOrderNotification = (data: OrderNotification) => {
-      const { status, notification, orderType, symbol, side, quantity, price } = data;
+    const handleOrderNotification = async (data: OrderNotification) => {
+      const { status, notification, orderType, symbol, side, quantity, price, audioNotification } = data;
       
       let title = '';
       let description = notification;
@@ -99,6 +99,19 @@ export function useOrderNotifications() {
           title = 'Order Failed';
           variant = 'destructive';
           break;
+      }
+
+      // Play audio notification if available and enabled
+      if (audioNotification?.shouldPlay && userSettings) {
+        try {
+          await audioService.playOrderFillNotification(
+            audioNotification.orderType,
+            userSettings
+          );
+          console.log(`[Audio Notification] Played sound for ${audioNotification.orderType} order fill`);
+        } catch (error) {
+          console.warn('[Audio Notification] Failed to play sound:', error);
+        }
       }
 
       // Show toast notification

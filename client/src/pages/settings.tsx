@@ -38,16 +38,22 @@ export default function Settings() {
         },
       });
       if (!response.ok) throw new Error("Failed to fetch settings");
-      return response.json() as UserSettings;
+      return response.json();
     },
   });
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (newSettings: Partial<UserSettings>) => {
-      return apiRequest("/api/user/settings", {
+      const response = await fetch("/api/user/settings", {
         method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`,
+        },
         body: JSON.stringify(newSettings),
       });
+      if (!response.ok) throw new Error("Failed to update settings");
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/settings"] });
