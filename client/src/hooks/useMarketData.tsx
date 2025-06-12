@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { usePublicWebSocket } from './useWebSocketService';
 
 interface MarketData {
   symbol: string;
@@ -8,110 +9,62 @@ interface MarketData {
   highPrice: string;
   lowPrice: string;
   volume: string;
-  quoteVolume: string;
   timestamp: number;
 }
 
 export function useMarketData() {
   const [marketData, setMarketData] = useState<MarketData[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const connect = () => {
-    try {
-      // Connect to the existing WebSocket service on same port as HTTP server
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname;
-      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-      const wsUrl = `${protocol}//${host}:${port}/api/ws`;
-      
-      wsRef.current = new WebSocket(wsUrl);
-
-      wsRef.current.onopen = () => {
-        console.log('[MARKET WS] Connected to market data stream');
-        setIsConnected(true);
-        
-        // Clear any existing reconnect timeout
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = null;
-        }
-        
-        // Send subscription request for all available ticker data
-        wsRef.current?.send(JSON.stringify({
-          type: 'subscribe',
-          dataType: 'ticker',
-          symbols: ['DOGEUSDT', 'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'SOLUSDT', 'DOTUSDT', 'LINKUSDT', 'AVAXUSDT', 'ICPUSDT', '1INCHUSDT']
-        }));
-      };
-
-      wsRef.current.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
+  
+  // Use the centralized WebSocket service instead of creating a separate connection
+  const publicWs = usePublicWebSocket({
+    onMessage: (data) => {
+      try {
+        if (data.type === 'market_update' || data.type === 'ticker_update') {
+          const update = data.data || data;
           
-          if (message.type === 'market_update' || message.type === 'ticker_update') {
-            const update = message.data || message;
+          setMarketData(prev => {
+            const existingIndex = prev.findIndex(item => item.symbol === update.symbol);
             
-            setMarketData(prev => {
-              const existingIndex = prev.findIndex(item => item.symbol === update.symbol);
-              
-              if (existingIndex >= 0) {
-                // Update existing symbol
-                const updated = [...prev];
-                updated[existingIndex] = {
-                  ...updated[existingIndex],
-                  ...update,
-                  timestamp: Date.now()
-                };
-                return updated;
-              } else {
-                // Add new symbol
-                return [...prev, {
-                  ...update,
-                  timestamp: Date.now()
-                }];
-              }
-            });
-          }
-        } catch (error) {
-          console.error('[MARKET WS] Error parsing message:', error);
+            if (existingIndex >= 0) {
+              // Update existing symbol
+              const updated = [...prev];
+              updated[existingIndex] = {
+                ...updated[existingIndex],
+                ...update,
+                timestamp: Date.now()
+              };
+              return updated;
+            } else {
+              // Add new symbol
+              return [...prev, {
+                ...update,
+                timestamp: Date.now()
+              }];
+            }
+          });
         }
-      };
-
-      wsRef.current.onclose = () => {
-        console.log('[MARKET WS] Connection closed, attempting to reconnect...');
-        setIsConnected(false);
-        
-        // Attempt to reconnect after 10 seconds to avoid interfering with Vite HMR
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, 10000);
-      };
-
-      wsRef.current.onerror = (error) => {
-        console.error('[MARKET WS] WebSocket error:', error);
-        setIsConnected(false);
-      };
-
-    } catch (error) {
-      console.error('[MARKET WS] Failed to connect:', error);
-      setIsConnected(false);
+      } catch (error) {
+        console.error('[MARKET WS] Error processing market update:', error);
+      }
+    },
+    onConnect: () => {
+      console.log('[MARKET WS] Connected to centralized WebSocket service');
+    },
+    onDisconnect: () => {
+      console.log('[MARKET WS] Disconnected from centralized WebSocket service');
     }
-  };
+  });
 
   useEffect(() => {
-    // Disable automatic connection to avoid conflict with Vite HMR WebSocket
-    // Market data will be provided through the centralized WebSocket service
-    console.log('[MARKET WS] Skipping automatic connection to avoid Vite HMR conflicts');
+    // Subscribe to market data when component mounts
+    const symbols = ['DOGEUSDT', 'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'SOLUSDT', 'DOTUSDT', 'LINKUSDT', 'AVAXUSDT', 'ICPUSDT', '1INCHUSDT'];
+    
+    console.log('[MARKET WS] Subscribing to market data for symbols:', symbols);
+    publicWs.connect(symbols);
+    publicWs.subscribe(symbols);
 
     return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      publicWs.disconnect();
     };
   }, []);
 
@@ -121,7 +74,7 @@ export function useMarketData() {
 
   return {
     marketData,
-    isConnected,
+    isConnected: publicWs.status === 'connected',
     getSymbolData
   };
 }
