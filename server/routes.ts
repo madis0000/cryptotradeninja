@@ -20,19 +20,14 @@ let wsService: WebSocketService;
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Handle HTTP upgrade events for WebSocket connections
-  httpServer.on('upgrade', (request, socket, head) => {
-    if (request.url === '/api/ws') {
-      console.log('[SERVER] Handling WebSocket upgrade for /api/ws');
-      // The WebSocket server will handle this upgrade
-    } else {
-      console.log(`[SERVER] Rejecting upgrade for path: ${request.url}`);
-      socket.end('HTTP/1.1 404 Not Found\r\n\r\n');
-    }
-  });
+  // Initialize WebSocket service on different port to avoid Vite HMR conflicts
+  const wsPort = 8080;
+  const wsServer = createServer();
+  wsService = new WebSocketService(wsServer);
   
-  // Initialize WebSocket service after Vite HMR has connected
-  wsService = new WebSocketService(httpServer);
+  wsServer.listen(wsPort, () => {
+    console.log(`[WEBSOCKET] Trading WebSocket server listening on port ${wsPort}`);
+  });
   
   // Start all markets ticker stream for real-time data
   setTimeout(() => {

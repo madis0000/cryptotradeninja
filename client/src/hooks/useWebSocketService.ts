@@ -37,11 +37,11 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     setStatus('connecting');
     
-    // Connect to backend WebSocket server (same port as HTTP server)
+    // Connect to backend WebSocket server (dedicated port 8080)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-    const ws = new WebSocket(`${protocol}//${hostname}:${port}/api/ws`);
+    const wsPort = '8080';
+    const ws = new WebSocket(`${protocol}//${hostname}:${wsPort}/api/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
