@@ -19,9 +19,11 @@ import {
   Activity
 } from "lucide-react";
 import { Link } from "wouter";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Landing() {
   const [hoveredFeature, setHoveredFeature] = useState<number | null>(null);
+  const { isAuthenticated } = useAuth();
 
   const features = [
     {
@@ -119,16 +121,33 @@ export default function Landing() {
             </div>
             
             <div className="flex items-center space-x-4">
-              <Link href="/login">
-                <Button variant="ghost" className="text-crypto-light hover:text-white hover:bg-gray-800">
-                  Login
-                </Button>
-              </Link>
-              <Link href="/register">
-                <Button className="bg-gradient-to-r from-crypto-accent to-crypto-primary hover:from-crypto-accent/90 hover:to-crypto-primary/90 text-white">
-                  Get Started
-                </Button>
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <Link href="/">
+                    <Button variant="ghost" className="text-crypto-light hover:text-white hover:bg-gray-800">
+                      Access App
+                    </Button>
+                  </Link>
+                  <Link href="/dashboard">
+                    <Button className="bg-gradient-to-r from-crypto-accent to-crypto-primary hover:from-crypto-accent/90 hover:to-crypto-primary/90 text-white">
+                      Dashboard
+                    </Button>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/login">
+                    <Button variant="ghost" className="text-crypto-light hover:text-white hover:bg-gray-800">
+                      Login
+                    </Button>
+                  </Link>
+                  <Link href="/register">
+                    <Button className="bg-gradient-to-r from-crypto-accent to-crypto-primary hover:from-crypto-accent/90 hover:to-crypto-primary/90 text-white">
+                      Get Started
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -153,19 +172,39 @@ export default function Landing() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-              <Link href="/register">
-                <Button size="lg" className="bg-gradient-to-r from-crypto-accent to-crypto-primary hover:from-crypto-accent/90 hover:to-crypto-primary/90 text-white px-8 py-4 text-lg">
-                  Start Trading Bots
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              
-              <Link href="#demo">
-                <Button size="lg" variant="outline" className="border-gray-700 text-crypto-light hover:bg-gray-800 hover:text-white px-8 py-4 text-lg">
-                  Watch Demo
-                  <BarChart3 className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <Link href="/bots">
+                    <Button size="lg" className="bg-gradient-to-r from-crypto-accent to-crypto-primary hover:from-crypto-accent/90 hover:to-crypto-primary/90 text-white px-8 py-4 text-lg">
+                      Create Trading Bots
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                  </Link>
+                  
+                  <Link href="/dashboard">
+                    <Button size="lg" variant="outline" className="border-gray-700 text-crypto-light hover:bg-gray-800 hover:text-white px-8 py-4 text-lg">
+                      View Dashboard
+                      <BarChart3 className="ml-2 h-5 w-5" />
+                    </Button>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/register">
+                    <Button size="lg" className="bg-gradient-to-r from-crypto-accent to-crypto-primary hover:from-crypto-accent/90 hover:to-crypto-primary/90 text-white px-8 py-4 text-lg">
+                      Start Trading Bots
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                  </Link>
+                  
+                  <Link href="#demo">
+                    <Button size="lg" variant="outline" className="border-gray-700 text-crypto-light hover:bg-gray-800 hover:text-white px-8 py-4 text-lg">
+                      Watch Demo
+                      <BarChart3 className="ml-2 h-5 w-5" />
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
             
             {/* Stats */}
@@ -402,18 +441,37 @@ export default function Landing() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register">
-              <Button size="lg" className="bg-gradient-to-r from-crypto-accent to-crypto-primary hover:from-crypto-accent/90 hover:to-crypto-primary/90 text-white px-8 py-4 text-lg">
-                Get Started Free
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-            
-            <Link href="/contact">
-              <Button size="lg" variant="outline" className="border-gray-700 text-crypto-light hover:bg-gray-800 hover:text-white px-8 py-4 text-lg">
-                Contact Sales
-              </Button>
-            </Link>
+            {isAuthenticated ? (
+              <>
+                <Link href="/bots">
+                  <Button size="lg" className="bg-gradient-to-r from-crypto-accent to-crypto-primary hover:from-crypto-accent/90 hover:to-crypto-primary/90 text-white px-8 py-4 text-lg">
+                    Create Your First Bot
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
+                
+                <Link href="/settings">
+                  <Button size="lg" variant="outline" className="border-gray-700 text-crypto-light hover:bg-gray-800 hover:text-white px-8 py-4 text-lg">
+                    Account Settings
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href="/register">
+                  <Button size="lg" className="bg-gradient-to-r from-crypto-accent to-crypto-primary hover:from-crypto-accent/90 hover:to-crypto-primary/90 text-white px-8 py-4 text-lg">
+                    Get Started Free
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
+                
+                <Link href="/contact">
+                  <Button size="lg" variant="outline" className="border-gray-700 text-crypto-light hover:bg-gray-800 hover:text-white px-8 py-4 text-lg">
+                    Contact Sales
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </section>
