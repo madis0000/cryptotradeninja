@@ -74,13 +74,26 @@ export function useChartWebSocket(
     console.log(`[CHART] Connecting to unified WebSocket service for ${currentSymbol} ${currentInterval}`);
     webSocketSingleton.connect([currentSymbol]);
     
-    // Send kline subscription message through unified service
-    if (webSocketSingleton.isConnected()) {
-      webSocketSingleton.sendMessage({
+    // Schedule kline configuration to be sent after connection is established
+    const sendKlineConfig = () => {
+      const configMessage = {
         type: 'configure_stream',
         dataType: 'kline',
         symbols: [currentSymbol],
         interval: currentInterval
+      };
+      console.log('[CHART] Sending kline configuration:', configMessage);
+      webSocketSingleton.sendMessage(configMessage);
+    };
+    
+    // Send immediately if already connected, otherwise queue it
+    if (webSocketSingleton.isConnected()) {
+      sendKlineConfig();
+    } else {
+      // Set up a one-time connection listener to send config
+      const unsubscribe = webSocketSingleton.onConnect(() => {
+        setTimeout(sendKlineConfig, 100); // Small delay to ensure connection is fully ready
+        unsubscribe();
       });
     }
   }, [currentSymbol, currentInterval]);

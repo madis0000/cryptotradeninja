@@ -36,10 +36,10 @@ class WebSocketSingleton {
     
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const port = window.location.port;
     
-    // Use same port as main application for Replit compatibility
-    const wsUrl = port ? `${protocol}//${hostname}:${port}/api/ws` : `${protocol}//${hostname}/api/ws`;
+    // Use dedicated WebSocket port to avoid conflicts with Vite
+    const wsPort = '8080';
+    const wsUrl = `${protocol}//${hostname}:${wsPort}/api/ws`;
     console.log('[WS SINGLETON] Connecting to:', wsUrl);
     
     this.ws = new WebSocket(wsUrl);
