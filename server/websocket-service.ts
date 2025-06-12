@@ -389,9 +389,11 @@ export class WebSocketService {
               // Establish Binance connection if needed, then setup kline stream
               if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
                 console.log(`[UNIFIED WS SERVER] No Binance connection, establishing new connection for kline data`);
+                this.isStreamsActive = true;
                 await this.connectConfigurableStream('kline', symbols, newInterval);
               } else {
                 console.log(`[UNIFIED WS SERVER] Using existing Binance connection for kline stream`);
+                this.isStreamsActive = true;
                 await this.setupKlineStream(symbols, newInterval);
               }
               
@@ -838,7 +840,7 @@ export class WebSocketService {
     this.binancePublicWs = new WebSocket(wsUrl);
 
     this.binancePublicWs.on('open', () => {
-      // Connected to Binance subscription stream
+      console.log(`[UNIFIED WS SERVER] Connected to Binance stream: ${wsUrl}`);
       
       // First unsubscribe from any existing streams
       if (this.currentSubscriptions.length > 0) {
@@ -847,6 +849,7 @@ export class WebSocketService {
           params: this.currentSubscriptions,
           id: 1
         };
+        console.log(`[UNIFIED WS SERVER] Unsubscribing from old streams:`, this.currentSubscriptions);
         // Check connection state before sending
         if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
           this.binancePublicWs.send(JSON.stringify(unsubscribeMessage));
@@ -860,6 +863,7 @@ export class WebSocketService {
         id: 2
       };
       
+      console.log(`[UNIFIED WS SERVER] Subscribing to new streams:`, streamPaths);
       // Check connection state before sending
       if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
         this.binancePublicWs.send(JSON.stringify(subscriptionMessage));
