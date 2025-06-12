@@ -580,8 +580,8 @@ export class WebSocketService {
       return;
     }
     
-    // If no unified connection exists, use it instead of creating separate kline connection
-    console.log(`[WEBSOCKET] No unified connection available, creating one for kline data`);
+    // If no unified connection exists, create the main unified connection
+    console.log(`[WEBSOCKET] No unified connection available, creating main unified connection`);
     await this.createNewBinanceConnection(symbols);
   }
 
@@ -4944,46 +4944,7 @@ export class WebSocketService {
     }
   }
 
-  private createOrderWebSocketConnection(exchange: any) {
-    try {
-      // Determine WebSocket endpoint based on exchange type
-      // For testnet, use the correct WebSocket API endpoint
-      const wsEndpoint = exchange.exchangeType === 'binance' 
-        ? (exchange.name.includes('testnet') 
-            ? 'wss://testnet.binance.vision/ws-api/v3'
-            : 'wss://ws-api.binance.com/ws-api/v3')
-        : exchange.wsApiEndpoint;
-
-      console.log(`[WS ORDER] Creating order WebSocket connection to: ${wsEndpoint}`);
-
-      this.binanceOrderWs = new WebSocket(wsEndpoint);
-
-      this.binanceOrderWs.on('open', () => {
-        console.log(`[WS ORDER] ✓ Connected to ${exchange.name} order WebSocket`);
-      });
-
-      this.binanceOrderWs.on('message', (data) => {
-        try {
-          const message = JSON.parse(data.toString());
-          this.handleOrderResponse(message);
-        } catch (error) {
-          console.error(`[WS ORDER] Error parsing order response:`, error);
-        }
-      });
-
-      this.binanceOrderWs.on('error', (error) => {
-        console.error(`[WS ORDER] WebSocket error:`, error);
-      });
-
-      this.binanceOrderWs.on('close', () => {
-        console.log(`[WS ORDER] WebSocket connection closed`);
-        this.binanceOrderWs = null;
-      });
-
-    } catch (error) {
-      console.error(`[WS ORDER] Error creating WebSocket connection:`, error);
-    }
-  }
+  // Removed - using unified WebSocket connection for all operations
 
   private handleOrderResponse(message: any) {
     try {
