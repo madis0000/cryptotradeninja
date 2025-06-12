@@ -2296,17 +2296,17 @@ export class WebSocketService {
               // Broadcast to connected clients
               this.broadcastMarketUpdate(marketUpdate);
               
-              console.log(`[WEBSOCKET] Live price update: ${t.s} = $${t.c}`);
+              console.log(`[WS] Live price update: ${t.s} = $${t.c}`);
             }
           });
         } catch (error) {
-          console.error('[WEBSOCKET] Error processing live ticker data:', error);
+          console.error('[WS] Error processing live ticker data:', error);
         }
       });
       
       this.binanceTickerWs.on('close', (code, reason) => {
-        console.log(`[WEBSOCKET] Live ticker stream disconnected - Code: ${code}, Reason: ${reason}`);
-        console.log('[WEBSOCKET] Attempting to reconnect in 5 seconds...');
+        console.log(`[WS] Live ticker stream disconnected - Code: ${code}, Reason: ${reason}`);
+        console.log('[WS] Attempting to reconnect in 5 seconds...');
         setTimeout(() => {
           this.startBinanceTickerStreams(symbols);
         }, 5000);

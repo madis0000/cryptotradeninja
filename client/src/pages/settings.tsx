@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { usePublicWebSocket, useUserWebSocket } from "@/hooks/useWebSocketService";
+import { webSocketSingleton } from "@/services/WebSocketSingleton";
 import { useQuery } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -124,56 +124,36 @@ export default function Settings() {
   // Get selected exchange data
   const selectedExchange = exchanges.find(ex => ex.id.toString() === selectedExchangeId);
 
-  // Use the dedicated WebSocket service hooks
-  const publicWs = usePublicWebSocket({
-    onMessage: (data) => {
-      console.log('Public WebSocket data:', data);
-    },
-    onConnect: () => {
-      toast({
-        title: "Public WebSocket Connected",
-        description: "Successfully connected to market data stream",
-      });
-    },
-    onDisconnect: () => {
-      toast({
-        title: "Public WebSocket Disconnected",
-        description: "Market data stream connection closed",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Public WebSocket Error",
-        description: "Failed to connect to market data stream",
-        variant: "destructive",
-      });
-    }
-  });
+  // Use the unified WebSocket singleton to prevent multiple connections
+  const [wsConnected, setWsConnected] = useState(false);
 
-  const userWs = useUserWebSocket({
-    onMessage: (data) => {
-      console.log('User WebSocket data:', data);
-    },
-    onConnect: () => {
+  useEffect(() => {
+    const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
+      console.log('[SETTINGS WS] Received data:', data);
+    });
+
+    const unsubscribeConnect = webSocketSingleton.onConnect(() => {
+      setWsConnected(true);
       toast({
-        title: "User WebSocket Connected",
-        description: "Successfully connected to authenticated data stream",
+        title: "WebSocket Connected",
+        description: "Successfully connected to unified trading stream",
       });
-    },
-    onDisconnect: () => {
+    });
+
+    const unsubscribeDisconnect = webSocketSingleton.onDisconnect(() => {
+      setWsConnected(false);
       toast({
-        title: "User WebSocket Disconnected",
-        description: "Authenticated data stream connection closed",
+        title: "WebSocket Disconnected",
+        description: "Trading stream connection closed",
       });
-    },
-    onError: (error) => {
-      toast({
-        title: "User WebSocket Error",
-        description: "Failed to connect to authenticated stream",
-        variant: "destructive",
-      });
-    }
-  });
+    });
+
+    return () => {
+      unsubscribeData();
+      unsubscribeConnect();
+      unsubscribeDisconnect();
+    };
+  }, []);
 
   // WebSocket testing functions using WebSocket API approach
   const testUserWebSocket = () => {
@@ -195,9 +175,8 @@ export default function Settings() {
       return;
     }
     
-    // Connect using WebSocket API (no listen key required)
-    // API key will be retrieved from stored exchange credentials
-    userWs.connect(selectedExchange.apiKey);
+    // Test connection using unified WebSocket singleton
+    webSocketSingleton.connect(['BTCUSDT']);
   };
 
   const sidebarItems = [
@@ -444,8 +423,8 @@ export default function Settings() {
                           throw new Error('Configuration failed');
                         }
 
-                        // Then connect to the backend WebSocket
-                        publicWs.connect([streamConfig.symbol]);
+                        // Then connect using unified WebSocket singleton
+                        webSocketSingleton.connect([streamConfig.symbol]);
 
                         toast({
                           title: "Stream Connected",
@@ -466,17 +445,17 @@ export default function Settings() {
                       });
                     }
                   }}
-                  disabled={publicWs.status === 'connecting' || !streamConfig.symbol}
+                  disabled={!wsConnected || !streamConfig.symbol}
                 >
-                  <i className={`${publicWs.status === 'connecting' ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
-                  {publicWs.status === 'connecting' ? 'Connecting...' : 'Test Connection'}
+                  <i className={`${!wsConnected ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
+                  {!wsConnected ? 'Connecting...' : 'Test Connection'}
                 </Button>
                 <Button 
                   size="sm" 
                   variant="outline" 
                   className="border-gray-700 text-crypto-light hover:bg-gray-800"
-                  onClick={() => publicWs.disconnect()}
-                  disabled={publicWs.status === 'disconnected'}
+                  onClick={() => webSocketSingleton.disconnect()}
+                  disabled={!wsConnected}
                 >
                   <i className="fas fa-stop mr-2"></i>
                   Disconnect
