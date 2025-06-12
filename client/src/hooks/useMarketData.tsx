@@ -24,7 +24,7 @@ export function useMarketData() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.hostname;
       const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-      const wsUrl = `${protocol}//${host}:${port}/ws`;
+      const wsUrl = `${protocol}//${host}:${port}/api/ws`;
       
       wsRef.current = new WebSocket(wsUrl);
 
@@ -83,10 +83,10 @@ export function useMarketData() {
         console.log('[MARKET WS] Connection closed, attempting to reconnect...');
         setIsConnected(false);
         
-        // Attempt to reconnect after 3 seconds
+        // Attempt to reconnect after 10 seconds to avoid interfering with Vite HMR
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
-        }, 3000);
+        }, 10000);
       };
 
       wsRef.current.onerror = (error) => {
@@ -101,7 +101,9 @@ export function useMarketData() {
   };
 
   useEffect(() => {
-    connect();
+    // Disable automatic connection to avoid conflict with Vite HMR WebSocket
+    // Market data will be provided through the centralized WebSocket service
+    console.log('[MARKET WS] Skipping automatic connection to avoid Vite HMR conflicts');
 
     return () => {
       if (reconnectTimeoutRef.current) {
