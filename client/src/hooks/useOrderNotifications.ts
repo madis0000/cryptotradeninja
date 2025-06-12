@@ -1,120 +1,120 @@
-import { useEffect, useRef } from 'react';
-import { useToast } from '@/hooks/use-toast';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { audioService } from '@/services/audioService';
+import { usePublicWebSocket } from '@/hooks/useWebSocketService';
 
-interface OrderNotification {
-  orderId: number;
-  exchangeOrderId?: string;
-  botId: number;
-  symbol: string;
-  side: string;
-  quantity: string;
-  price: string;
-  orderType: string;
-  status: 'placed' | 'filled' | 'cancelled' | 'failed';
-  timestamp: string;
-  notification: string;
+interface OrderNotificationSettings {
+  soundNotificationsEnabled: boolean;
+  takeProfitSoundEnabled: boolean;
+  safetyOrderSoundEnabled: boolean;
+  baseOrderSoundEnabled: boolean;
+  takeProfitSound: string;
+  safetyOrderSound: string;
+  baseOrderSound: string;
+  notificationVolume: string;
 }
 
 export function useOrderNotifications() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const wsRef = useRef<WebSocket | null>(null);
+  const [settings, setSettings] = useState<OrderNotificationSettings | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // Subscribe to WebSocket order fill notifications
+  const { lastMessage } = usePublicWebSocket({
+    onMessage: async (data) => {
+      if (data.type === 'order_fill_notification' && settings) {
+        await handleOrderFillNotification(data.data);
+      }
+    }
+  });
+
+  // Load user notification settings
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
-    const connectWebSocket = () => {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    loadSettings();
+  }, []);
 
-      ws.onopen = () => {
-        console.log('[ORDER NOTIFICATIONS] Connected to WebSocket for order updates');
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          
-          if (message.type === 'order_notification') {
-            handleOrderNotification(message.data);
-          }
-        } catch (error) {
-          console.error('[ORDER NOTIFICATIONS] Error parsing WebSocket message:', error);
-        }
-      };
-
-      ws.onclose = () => {
-        console.log('[ORDER NOTIFICATIONS] WebSocket connection closed, attempting to reconnect...');
-        setTimeout(connectWebSocket, 3000); // Reconnect after 3 seconds
-      };
-
-      ws.onerror = (error) => {
-        console.error('[ORDER NOTIFICATIONS] WebSocket error:', error);
-      };
-    };
-
-    const handleOrderNotification = (data: OrderNotification) => {
-      const { status, notification, orderType, symbol, side, quantity, price } = data;
-      
-      let title = '';
-      let description = notification;
-      let variant: 'default' | 'destructive' = 'default';
-
-      switch (status) {
-        case 'placed':
-          title = 'Order Placed';
-          break;
-        case 'filled':
-          title = 'Order Filled';
-          variant = 'default';
-          break;
-        case 'cancelled':
-          title = 'Order Cancelled';
-          variant = 'destructive';
-          break;
-        case 'failed':
-          title = 'Order Failed';
-          variant = 'destructive';
-          break;
+  const loadSettings = async () => {
+    try {
+      const response = await fetch('/api/settings');
+      if (response.ok) {
+        const data = await response.json();
+        const notificationSettings = {
+          soundNotificationsEnabled: data?.soundNotificationsEnabled ?? true,
+          takeProfitSoundEnabled: data?.takeProfitSoundEnabled ?? true,
+          safetyOrderSoundEnabled: data?.safetyOrderSoundEnabled ?? true,
+          baseOrderSoundEnabled: data?.baseOrderSoundEnabled ?? true,
+          takeProfitSound: data?.takeProfitSound ?? 'chin-chin',
+          safetyOrderSound: data?.safetyOrderSound ?? 'beep',
+          baseOrderSound: data?.baseOrderSound ?? 'notification',
+          notificationVolume: data?.notificationVolume ?? '0.50'
+        };
+        
+        setSettings(notificationSettings);
+        
+        // Update audio service volume
+        audioService.setVolume(parseFloat(notificationSettings.notificationVolume));
       }
-
-      // Show toast notification
-      toast({
-        title,
-        description,
-        variant,
-        duration: status === 'filled' ? 5000 : 3000, // Keep fill notifications visible longer
+    } catch (error) {
+      console.error('Failed to load notification settings:', error);
+      // Use default settings if loading fails
+      setSettings({
+        soundNotificationsEnabled: true,
+        takeProfitSoundEnabled: true,
+        safetyOrderSoundEnabled: true,
+        baseOrderSoundEnabled: true,
+        takeProfitSound: 'chin-chin',
+        safetyOrderSound: 'beep',
+        baseOrderSound: 'notification',
+        notificationVolume: '0.50'
       });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      // Invalidate relevant query cache to refresh UI data
-      queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/bots', data.botId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/bot-orders', data.botId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles', data.botId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
+  const handleOrderFillNotification = async (orderData: any) => {
+    if (!settings?.soundNotificationsEnabled) return;
+
+    try {
+      // Determine order type from order data
+      let orderType: 'take_profit' | 'safety_order' | 'base_order' = 'base_order';
       
-      // Force refetch of all bot-related data to ensure synchronization
-      queryClient.refetchQueries({ queryKey: ['/api/bots', data.botId] });
-      queryClient.refetchQueries({ queryKey: ['/api/bot-orders', data.botId] });
-      queryClient.refetchQueries({ queryKey: ['/api/bot-cycles', data.botId] });
-
-      // Log for debugging
-      console.log(`[ORDER NOTIFICATIONS] ${title}: ${description}`);
-    };
-
-    connectWebSocket();
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+      if (orderData.orderType === 'TAKE_PROFIT' || orderData.side === 'SELL') {
+        orderType = 'take_profit';
+      } else if (orderData.orderSubType === 'SAFETY_ORDER') {
+        orderType = 'safety_order';
+      } else if (orderData.orderSubType === 'BASE_ORDER') {
+        orderType = 'base_order';
       }
-    };
-  }, [toast]);
+
+      // Play appropriate notification sound
+      await audioService.playOrderFillNotification(orderType, settings);
+      
+      console.log(`[ORDER NOTIFICATION] Played ${orderType} sound for order ${orderData.orderId}`);
+    } catch (error) {
+      console.error('Failed to play order notification:', error);
+    }
+  };
+
+  const updateSettings = (newSettings: OrderNotificationSettings) => {
+    setSettings(newSettings);
+    audioService.setVolume(parseFloat(newSettings.notificationVolume));
+  };
+
+  const testNotification = async (orderType: 'take_profit' | 'safety_order' | 'base_order') => {
+    if (!settings) return;
+    
+    try {
+      await audioService.playOrderFillNotification(orderType, settings);
+    } catch (error) {
+      console.error('Failed to test notification:', error);
+      throw error;
+    }
+  };
 
   return {
-    // Return any methods if needed for manual control
-    isConnected: wsRef.current?.readyState === WebSocket.OPEN
+    settings,
+    loading,
+    updateSettings,
+    testNotification,
+    refreshSettings: loadSettings
   };
 }

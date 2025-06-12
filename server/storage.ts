@@ -1,12 +1,13 @@
 import { 
-  users, exchanges, tradingBots, trades, portfolio, botCycles, cycleOrders,
+  users, exchanges, tradingBots, trades, portfolio, botCycles, cycleOrders, userSettings,
   type User, type InsertUser,
   type Exchange, type InsertExchange,
   type TradingBot, type InsertTradingBot,
   type Trade, type InsertTrade,
   type Portfolio, type InsertPortfolio,
   type BotCycle, type InsertBotCycle,
-  type CycleOrder, type InsertCycleOrder
+  type CycleOrder, type InsertCycleOrder,
+  type UserSettings, type InsertUserSettings, type UpdateUserSettings
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sum, count, isNotNull } from "drizzle-orm";
@@ -19,6 +20,10 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserLastLogin(id: number): Promise<void>;
+
+  // User Settings
+  getUserSettings(userId: number): Promise<UserSettings | undefined>;
+  updateUserSettings(userId: number, settings: UpdateUserSettings): Promise<UserSettings>;
 
   // Exchanges
   getExchangesByUserId(userId: number): Promise<Exchange[]>;
@@ -98,6 +103,38 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({ lastLogin: new Date() })
       .where(eq(users.id, id));
+  }
+
+  async getUserSettings(userId: number): Promise<UserSettings | undefined> {
+    const [settings] = await db
+      .select()
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId))
+      .limit(1);
+    
+    if (!settings) {
+      // Create default settings if none exist
+      const [defaultSettings] = await db
+        .insert(userSettings)
+        .values({ userId })
+        .returning();
+      return defaultSettings;
+    }
+    
+    return settings;
+  }
+
+  async updateUserSettings(userId: number, settings: UpdateUserSettings): Promise<UserSettings> {
+    // First ensure settings exist
+    await this.getUserSettings(userId);
+    
+    const [updatedSettings] = await db
+      .update(userSettings)
+      .set({ ...settings, updatedAt: new Date() })
+      .where(eq(userSettings.userId, userId))
+      .returning();
+    
+    return updatedSettings;
   }
 
   async getExchangesByUserId(userId: number): Promise<Exchange[]> {

@@ -142,6 +142,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // User settings API
+  app.get("/api/settings", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const settings = await storage.getUserSettings(userId);
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user settings" });
+    }
+  });
+
+  app.put("/api/settings", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const validatedSettings = updateUserSettingsSchema.parse(req.body);
+      const updatedSettings = await storage.updateUserSettings(userId, validatedSettings);
+      res.json(updatedSettings);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid settings data" });
+    }
+  });
+
   // Exchanges API - Secured with authentication
   app.get("/api/exchanges", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
