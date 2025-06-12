@@ -80,10 +80,15 @@ export function useMarketData() {
     webSocketSingleton.disconnect();
   };
 
+  const getSymbolData = (symbol: string) => {
+    return marketData.find(item => item.symbol === symbol);
+  };
+
   return {
     marketData,
     isConnected,
     connectToMarketData,
-    disconnectFromMarketData
+    disconnectFromMarketData,
+    getSymbolData
   };
 }
