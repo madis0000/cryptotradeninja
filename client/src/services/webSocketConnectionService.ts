@@ -75,19 +75,13 @@ export class WebSocketConnectionService {
   }
 
   private connect(connectionId: string) {
-    // Skip WebSocket connections in development to avoid Vite HMR conflicts
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[WS Connection] Skipping WebSocket connection in development mode (${connectionId})`);
-      return;
-    }
-
     const connection = this.connections.get(connectionId);
     if (!connection) return;
 
     try {
-      // Use optimized WebSocket URL for Replit environment
+      // Connect to dedicated WebSocket server on port 5001
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      const wsUrl = `${protocol}//${window.location.hostname}:5001`;
       
       console.log(`[WS Connection] Connecting to ${wsUrl} (${connectionId})`);
       

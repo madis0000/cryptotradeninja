@@ -13,17 +13,10 @@ export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChang
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const connect = useCallback(() => {
-    // Skip WebSocket connections in development to avoid Vite HMR conflicts
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[CLIENT WS] Skipping WebSocket connection in development mode');
-      return;
-    }
-
     if (ws.current?.readyState === WebSocket.OPEN) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-    const wsUrl = `${protocol}//${window.location.hostname}:${port}/ws`;
+    const wsUrl = `${protocol}//${window.location.hostname}:5001`;
 
     ws.current = new WebSocket(wsUrl);
 
