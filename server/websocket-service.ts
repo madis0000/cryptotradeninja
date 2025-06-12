@@ -290,9 +290,10 @@ export class WebSocketService {
 
       ws.on('message', async (data) => {
         try {
-          const message = JSON.parse(data.toString());
-          // Removed verbose WebSocket logging
-          // Removed verbose WebSocket logging
+          const rawMessage = data.toString();
+          console.log(`[UNIFIED WS SERVER] Received raw message: ${rawMessage}`);
+          const message = JSON.parse(rawMessage);
+          console.log(`[UNIFIED WS SERVER] Parsed message:`, message);
           
           if (message.type === 'subscribe') {
             // Frontend requests subscription to specific trading pairs
@@ -470,10 +471,11 @@ export class WebSocketService {
             // Removed verbose WebSocket logging
           }
         } catch (error) {
-          console.error('[WEBSOCKET] Error processing message:', error);
+          console.error('[UNIFIED WS SERVER] Error processing message:', error);
+          console.error('[UNIFIED WS SERVER] Raw message that caused error:', data.toString());
           ws.send(JSON.stringify({
             type: 'error',
-            message: 'Failed to process message'
+            message: 'Failed to process message: ' + (error as Error).message
           }));
         }
       });

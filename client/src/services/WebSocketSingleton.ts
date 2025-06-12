@@ -36,9 +36,13 @@ class WebSocketSingleton {
     
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const wsPort = import.meta.env.VITE_WS_PORT || '8080';
+    const port = window.location.port;
     
-    this.ws = new WebSocket(`${protocol}//${hostname}:${wsPort}/api/ws`);
+    // Use same port as main application for Replit compatibility
+    const wsUrl = port ? `${protocol}//${hostname}:${port}/api/ws` : `${protocol}//${hostname}/api/ws`;
+    console.log('[WS SINGLETON] Connecting to:', wsUrl);
+    
+    this.ws = new WebSocket(wsUrl);
     this.setupEventHandlers(symbols);
   }
 
@@ -59,6 +63,10 @@ class WebSocketSingleton {
       
       // Notify all connection callbacks
       this.connectionCallbacks.forEach(callback => callback());
+      
+      // Send test message to verify connection
+      console.log('[WS SINGLETON] Sending connection test message');
+      this.sendMessage({ type: 'test', message: 'connection_test' });
       
       // Send subscription command with symbols
       const symbolsToUse = symbols || ['BTCUSDT'];
