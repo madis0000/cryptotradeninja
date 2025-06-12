@@ -31,7 +31,10 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
   const handleKlineUpdate = (klineData: any) => {
     console.log('[CHART] Processing kline data:', klineData);
     
-    if (!seriesRef.current) return;
+    if (!seriesRef.current || !chartRef.current) {
+      console.warn('[CHART] Chart or series not initialized, skipping update');
+      return;
+    }
     
     // Ensure we have valid numeric values and proper time formatting
     const openTime = typeof klineData.openTime === 'number' ? klineData.openTime : parseInt(klineData.openTime);
@@ -69,29 +72,44 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
       const sortedData = updated.sort((a, b) => a.time - b.time);
       
       try {
-        seriesRef.current?.update(candlestick);
-        
-        // Auto-scale chart when first data arrives for new symbol
-        if (isFirstData && chartRef.current) {
-          console.log('[CHART] Auto-scaling chart for new symbol data');
-          chartRef.current.timeScale().fitContent();
-          chartRef.current.priceScale('right').applyOptions({
-            autoScale: true,
-          });
+        // Validate chart and series references before updating
+        if (seriesRef.current && chartRef.current && 
+            typeof seriesRef.current.update === 'function') {
+          seriesRef.current.update(candlestick);
+          
+          // Auto-scale chart when first data arrives for new symbol
+          if (isFirstData) {
+            console.log('[CHART] Auto-scaling chart for new symbol data');
+            setTimeout(() => {
+              if (chartRef.current && typeof chartRef.current.timeScale === 'function') {
+                try {
+                  chartRef.current.timeScale().fitContent();
+                  chartRef.current.priceScale('right').applyOptions({
+                    autoScale: true,
+                  });
+                } catch (scaleError) {
+                  console.warn('[CHART] Auto-scale failed:', scaleError);
+                }
+              }
+            }, 100);
+          }
         }
       } catch (error) {
-        console.error('[CHART] Error updating chart series:', error);
-        // If update fails, try setting the data fresh
-        if (sortedData.length > 0) {
-          seriesRef.current?.setData(sortedData);
-          
-          // Auto-scale after setting fresh data
-          if (chartRef.current) {
-            chartRef.current.timeScale().fitContent();
-            chartRef.current.priceScale('right').applyOptions({
-              autoScale: true,
-            });
-          }
+        // Silently handle update failures - chart may be disposed during hot reload
+        console.warn('[CHART] Series update failed - chart may be disposed:', error);
+        
+        // Only reinitialize if we have a valid container and data
+        if (chartContainerRef.current && sortedData.length > 0 && !isFirstData) {
+          setTimeout(() => {
+            try {
+              initializeChart();
+              if (seriesRef.current && typeof seriesRef.current.setData === 'function') {
+                seriesRef.current.setData(sortedData);
+              }
+            } catch (initError) {
+              console.warn('[CHART] Chart reinitialize failed:', initError);
+            }
+          }, 200);
         }
       }
       
@@ -101,17 +119,24 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
 
   // Function to clear strategy lines
   const clearStrategyLines = () => {
-    if (takeProfitLineRef.current) {
-      chartRef.current?.removeSeries(takeProfitLineRef.current);
-      takeProfitLineRef.current = null;
-    }
-
-    safetyOrderLinesRef.current.forEach(line => {
-      if (line) {
-        chartRef.current?.removeSeries(line);
+    try {
+      if (takeProfitLineRef.current && chartRef.current) {
+        chartRef.current.removeSeries(takeProfitLineRef.current);
+        takeProfitLineRef.current = null;
       }
-    });
-    safetyOrderLinesRef.current = [];
+
+      safetyOrderLinesRef.current.forEach(line => {
+        if (line && chartRef.current) {
+          chartRef.current.removeSeries(line);
+        }
+      });
+      safetyOrderLinesRef.current = [];
+    } catch (error) {
+      console.warn('[CHART] Error clearing strategy lines:', error);
+      // Reset refs even if removal fails
+      takeProfitLineRef.current = null;
+      safetyOrderLinesRef.current = [];
+    }
   };
 
   // Function to draw strategy lines
@@ -183,6 +208,9 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
   // Initialize chart
   const initializeChart = () => {
     if (!chartContainerRef.current) return;
+
+    // Clear strategy lines before disposing chart
+    clearStrategyLines();
 
     // Remove existing chart safely
     if (chartRef.current) {
