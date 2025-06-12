@@ -314,40 +314,18 @@ export default function BotLogsPage() {
                 )}
 
                 {/* Bot Logs */}
-                {viewMode === 'bot' && botLogs?.logs.map((log, index) => {
-                  const { timestamp, content, level } = formatLogEntry(log);
-                  return (
-                    <div 
-                      key={index} 
-                      className={`p-2 rounded text-xs font-mono border ${getLevelColor(level)}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="text-xs opacity-70 flex-shrink-0">
-                          {timestamp}
-                        </span>
-                        <span className="flex-1">{content}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                {viewMode === 'bot' && botLogs?.logs && (
+                  <pre className="text-xs font-mono whitespace-pre-wrap text-gray-900 dark:text-gray-100 leading-relaxed">
+                    {botLogs.logs.join('\n')}
+                  </pre>
+                )}
 
                 {/* System Logs */}
-                {viewMode === 'system' && systemLogs?.logs.map((log, index) => {
-                  const { timestamp, content, level } = formatLogEntry(log);
-                  return (
-                    <div 
-                      key={index} 
-                      className={`p-2 rounded text-xs font-mono border ${getLevelColor(level)}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="text-xs opacity-70 flex-shrink-0">
-                          {timestamp}
-                        </span>
-                        <span className="flex-1">{content}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                {viewMode === 'system' && systemLogs?.logs && (
+                  <pre className="text-xs font-mono whitespace-pre-wrap text-gray-800 dark:text-gray-200 leading-relaxed">
+                    {systemLogs.logs.join('\n')}
+                  </pre>
+                )}
               </div>
             </ScrollArea>
           </CardContent>
