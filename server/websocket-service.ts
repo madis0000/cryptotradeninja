@@ -93,9 +93,18 @@ export class WebSocketService {
 
   constructor(server: Server) {
     // Create separate WebSocket server on port 5001 to avoid Vite conflict
+    console.log('[WEBSOCKET] Starting WebSocket server on port 5001...');
     this.wss = new WebSocketServer({ 
       port: 5001,
       path: '/ws'
+    });
+
+    this.wss.on('listening', () => {
+      console.log('[WEBSOCKET] ✅ WebSocket server listening on port 5001');
+    });
+
+    this.wss.on('error', (error) => {
+      console.error('[WEBSOCKET] ❌ WebSocket server error:', error);
     });
 
     this.setupWebSocket();
