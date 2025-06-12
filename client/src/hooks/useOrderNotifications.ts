@@ -47,6 +47,12 @@ export function useOrderNotifications() {
     let connectionId: string | null = null;
 
     const connectWebSocket = async () => {
+      // Skip WebSocket connections in development to avoid Vite HMR conflicts
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[ORDER NOTIFICATIONS] Skipping WebSocket connection in development mode');
+        return;
+      }
+
       try {
         connectionId = 'order-notifications';
         

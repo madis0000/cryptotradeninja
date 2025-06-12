@@ -75,6 +75,12 @@ export class WebSocketConnectionService {
   }
 
   private connect(connectionId: string) {
+    // Skip WebSocket connections in development to avoid Vite HMR conflicts
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[WS Connection] Skipping WebSocket connection in development mode (${connectionId})`);
+      return;
+    }
+
     const connection = this.connections.get(connectionId);
     if (!connection) return;
 
