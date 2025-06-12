@@ -12,7 +12,7 @@ interface MarketData {
   timestamp: number;
 }
 
-export function useMarketData() {
+function useMarketData() {
   const [marketData, setMarketData] = useState<MarketData[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   
@@ -92,3 +92,5 @@ export function useMarketData() {
     getSymbolData
   };
 }
+
+export { useMarketData };

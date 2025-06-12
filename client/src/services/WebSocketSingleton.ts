@@ -21,41 +21,34 @@ class WebSocketSingleton {
   }
 
   public connect(symbols?: string[]): void {
-    // Prevent multiple connections more aggressively
+    // Comprehensive connection state checking to prevent duplicates
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('[WS SINGLETON] Already connected');
       return;
     }
 
     if (this.ws?.readyState === WebSocket.CONNECTING) {
-      console.log('[WS SINGLETON] Connection already in progress (WebSocket CONNECTING)');
       return;
     }
 
     if (this.status === 'connecting') {
-      console.log('[WS SINGLETON] Connection already in progress (status CONNECTING)');
       return;
     }
 
-    // Close any existing broken connection
+    // Clean up any existing connection
     if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
       try {
         this.ws.close();
       } catch (e) {
-        console.warn('[WS SINGLETON] Error closing existing connection:', e);
+        // Silent cleanup
       }
     }
 
     this.status = 'connecting';
-    console.log('[WS SINGLETON] Connecting to unified WebSocket service...');
     
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    
-    // Use dedicated WebSocket port to avoid conflicts with Vite
     const wsPort = '8080';
     const wsUrl = `${protocol}//${hostname}:${wsPort}/api/ws`;
-    console.log('[WS SINGLETON] Connecting to:', wsUrl);
     
     this.ws = new WebSocket(wsUrl);
     this.setupEventHandlers(symbols);
