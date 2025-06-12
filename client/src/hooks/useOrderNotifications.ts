@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { audioService } from '../services/audioService';
 import { useQuery } from '@tanstack/react-query';
-import { useUserWebSocket } from './useWebSocketService';
 
 interface OrderNotification {
   type: 'order_fill';
@@ -24,22 +23,15 @@ export function useOrderNotifications() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Connect to WebSocket for order notifications
-  const { lastMessage } = useUserWebSocket({
-    onMessage: async (message) => {
-      console.log('[AUDIO] Received WebSocket message:', message);
-      
-      if (!message) {
-        console.log('[AUDIO] No message received');
-        return;
-      }
+  // Listen for WebSocket messages using a global event listener
+  useEffect(() => {
+    if (!settings) return;
 
-      if (!settings) {
-        console.log('[AUDIO] No settings available yet');
-        return;
-      }
-
+    const handleCustomEvent = async (event: CustomEvent) => {
       try {
+        const message = event.detail;
+        console.log('[AUDIO] Received WebSocket message:', message);
+        
         // Handle order fill notifications - check for filled orders
         if (message.type === 'order_notification') {
           console.log('[AUDIO] Order notification received:', message.data);
@@ -79,10 +71,16 @@ export function useOrderNotifications() {
           console.log(`[AUDIO] Message type is ${message.type}, not order_notification`);
         }
       } catch (error) {
-        console.error('[AUDIO] Failed to process order notification:', error);
+        console.error('[AUDIO] Failed to process custom event:', error);
       }
-    }
-  });
+    };
+
+    window.addEventListener('websocket-message', handleCustomEvent as any);
+
+    return () => {
+      window.removeEventListener('websocket-message', handleCustomEvent as any);
+    };
+  }, [settings]);
 
   // Manual notification trigger for testing
   const playTestNotification = async (orderType: 'take_profit' | 'safety_order' | 'base_order') => {
