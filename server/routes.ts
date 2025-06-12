@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insertUserSchema } from "@shared/schema";
+import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insertUserSchema, insertUserSettingsSchema, updateUserSettingsSchema } from "@shared/schema";
 import { z } from "zod";
 import WebSocket, { WebSocketServer } from "ws";
 import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";
@@ -11,6 +11,8 @@ import { BotLoggerManager } from "./bot-logger";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import cors from "cors";
+import * as fs from "fs";
+import * as path from "path";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -138,6 +140,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({
       user: req.user,
     });
+  });
+
+  // User Settings API
+  app.get("/api/settings", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const settings = await storage.getUserSettings(userId);
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
+  app.put("/api/settings", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const validatedData = updateUserSettingsSchema.parse(req.body);
+      
+      const settings = await storage.updateUserSettings(userId, validatedData);
+      res.json(settings);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: "Validation error", details: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to update settings" });
+      }
+    }
   });
 
   // Exchanges API - Secured with authentication
@@ -688,18 +717,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Bot not found" });
       }
       
-      // Get bot logger and recent logs
-      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
       const lines = parseInt(req.query.lines as string) || 100;
-      const logs = logger.getRecentLogs(lines);
       
-      res.json({
-        botId,
-        tradingPair: bot.tradingPair,
-        logFilePath: logger.getLogFilePath(),
-        totalLines: logs.length,
-        logs
-      });
+      // Construct log file path directly
+      const logFilePath = path.join(process.cwd(), 'logs', `bot_${botId}_${bot.tradingPair}.log`);
+      
+      try {
+        // Read log file directly from filesystem
+        const content = fs.readFileSync(logFilePath, 'utf8');
+        const allLines = content.split('\n').filter(line => line.trim());
+        const logs = allLines.slice(-lines);
+        
+        res.json({
+          botId,
+          tradingPair: bot.tradingPair,
+          logFilePath,
+          totalLines: allLines.length,
+          logs
+        });
+      } catch (fileError) {
+        // If file doesn't exist, return empty logs
+        console.log(`No log file found for bot ${botId} at ${logFilePath}`);
+        res.json({
+          botId,
+          tradingPair: bot.tradingPair,
+          logFilePath,
+          totalLines: 0,
+          logs: []
+        });
+      }
     } catch (error) {
       console.error('Error fetching bot logs:', error);
       res.status(500).json({ error: "Failed to fetch bot logs" });
@@ -717,15 +763,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Bot not found" });
       }
       
-      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
-      const logFilePath = logger.getLogFilePath();
+      // Construct log file path directly
+      const logFilePath = path.join(process.cwd(), 'logs', `bot_${botId}_${bot.tradingPair}.log`);
+      
+      // Check if file exists
+      if (!fs.existsSync(logFilePath)) {
+        return res.status(404).json({ error: "Log file not found" });
+      }
       
       // Set headers for file download
       res.setHeader('Content-Disposition', `attachment; filename="bot_${botId}_${bot.tradingPair}.log"`);
       res.setHeader('Content-Type', 'text/plain');
       
       // Send file
-      res.sendFile(logFilePath);
+      res.sendFile(path.resolve(logFilePath));
     } catch (error) {
       console.error('Error downloading bot logs:', error);
       res.status(500).json({ error: "Failed to download bot logs" });
@@ -743,13 +794,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Bot not found" });
       }
       
-      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
-      logger.clearLogs();
+      // Construct log file path directly
+      const logFilePath = path.join(process.cwd(), 'logs', `bot_${botId}_${bot.tradingPair}.log`);
+      
+      try {
+        // Clear the log file by writing empty content
+        fs.writeFileSync(logFilePath, '');
+        console.log(`Cleared log file for bot ${botId}: ${logFilePath}`);
+      } catch (fileError) {
+        console.log(`No log file to clear for bot ${botId}: ${logFilePath}`);
+      }
       
       res.json({ success: true, message: "Bot logs cleared successfully" });
     } catch (error) {
       console.error('Error clearing bot logs:', error);
       res.status(500).json({ error: "Failed to clear bot logs" });
+    }
+  });
+
+  // Recent orders API for audio notifications - Secured
+  app.get("/api/recent-orders", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const thirtySecondsAgo = new Date(Date.now() - 30000);
+      
+      // Get recent orders from the last 30 seconds
+      const recentOrders = await storage.getRecentOrdersByUser(userId, thirtySecondsAgo);
+      
+      res.json(recentOrders);
+    } catch (error) {
+      console.error('Error fetching recent orders:', error);
+      res.status(500).json({ error: "Failed to fetch recent orders" });
     }
   });
 

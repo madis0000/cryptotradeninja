@@ -92,10 +92,22 @@ export class WebSocketService {
   private pendingCycleStarts = new Map<number, NodeJS.Timeout>(); // botId -> timeout handle
 
   constructor(server: Server) {
-    // WebSocket server attached to the same HTTP server (port 5000)
+    // Always attach to the HTTP server but use different path to avoid Vite conflicts
+    console.log(`[WEBSOCKET] Starting WebSocket server on /trading-ws path...`);
     this.wss = new WebSocketServer({ 
       server: server,
-      path: '/ws'
+      path: '/trading-ws'
+    });
+    
+    this.wss.on('listening', () => {
+      console.log(`[WEBSOCKET] ✅ WebSocket server listening on /trading-ws path`);
+      console.log(`[PORT MANAGER] WebSocket available on same server as HTTP`);
+      console.log(`[PORT MANAGER] WebSocket Path: /trading-ws`);
+      console.log(`[PORT MANAGER] Supports both HTTP and HTTPS connections`);
+    });
+
+    this.wss.on('error', (error) => {
+      console.error('[WEBSOCKET] ❌ WebSocket server error:', error);
     });
 
     this.setupWebSocket();
@@ -2476,15 +2488,24 @@ export class WebSocketService {
         order.side === 'BUY'
       );
       
+      // Use filledQuantity (actual received) instead of quantity (requested)
       const totalQuantity = filledBuyOrders.reduce((total: number, order: any) => {
-        return total + parseFloat(order.quantity || '0');
+        const actualQuantity = parseFloat(order.filledQuantity || order.quantity || '0');
+        return total + actualQuantity;
       }, 0);
 
-      console.log(`[MARTINGALE STRATEGY] 📊 TOTAL QUANTITY CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY] 📊 ROBUST QUANTITY CALCULATION:`);
       console.log(`[MARTINGALE STRATEGY]    Filled Buy Orders: ${filledBuyOrders.length}`);
       console.log(`[MARTINGALE STRATEGY]    Total Accumulated Quantity: ${totalQuantity.toFixed(8)}`);
       filledBuyOrders.forEach((order: any, index: number) => {
-        console.log(`[MARTINGALE STRATEGY]    Order ${index + 1} (${order.orderType}): ${order.quantity}`);
+        const requestedQty = parseFloat(order.quantity || '0');
+        const actualQty = parseFloat(order.filledQuantity || order.quantity || '0');
+        const fee = parseFloat(order.fee || '0');
+        const feeAsset = order.feeAsset || 'N/A';
+        console.log(`[MARTINGALE STRATEGY]    Order ${index + 1} (${order.orderType}):`);
+        console.log(`[MARTINGALE STRATEGY]      Requested: ${requestedQty.toFixed(8)}`);
+        console.log(`[MARTINGALE STRATEGY]      Actual: ${actualQty.toFixed(8)} (after fees)`);
+        console.log(`[MARTINGALE STRATEGY]      Fee: ${fee.toFixed(8)} ${feeAsset}`);
       });
 
       if (totalQuantity === 0) {
@@ -2501,6 +2522,24 @@ export class WebSocketService {
       console.log(`[MARTINGALE STRATEGY]    Adjusted Price: $${adjustedPrice.toFixed(filters.priceDecimals)} (PRICE_FILTER compliant)`);
       console.log(`[MARTINGALE STRATEGY]    Raw Quantity: ${totalQuantity.toFixed(8)}`);
       console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${adjustedQuantity.toFixed(filters.qtyDecimals)} (LOT_SIZE compliant)`);
+      
+      // Validate quantity calculation - sum all individual order quantities for verification
+      const manualQuantityCheck = filledBuyOrders.reduce((sum, order) => {
+        const qty = parseFloat(order.filledQuantity || order.quantity || '0');
+        console.log(`[MARTINGALE STRATEGY] 🔍 Validation - Order ${order.id}: ${qty.toFixed(8)}`);
+        return sum + qty;
+      }, 0);
+      
+      console.log(`[MARTINGALE STRATEGY] 🔍 QUANTITY VALIDATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Calculated Total: ${totalQuantity.toFixed(8)}`);
+      console.log(`[MARTINGALE STRATEGY]    Manual Verification: ${manualQuantityCheck.toFixed(8)}`);
+      console.log(`[MARTINGALE STRATEGY]    Difference: ${Math.abs(totalQuantity - manualQuantityCheck).toFixed(8)}`);
+      
+      if (Math.abs(totalQuantity - manualQuantityCheck) > 0.00000001) {
+        console.error(`[MARTINGALE STRATEGY] ❌ QUANTITY MISMATCH DETECTED! This indicates a calculation error.`);
+      } else {
+        console.log(`[MARTINGALE STRATEGY] ✅ Quantity calculation verified - all buy orders properly accumulated`);
+      }
 
       // Create take profit order record
       const takeProfitOrder = await storage.createCycleOrder({
@@ -3104,6 +3143,9 @@ export class WebSocketService {
       const exchangeOrderId = message.i.toString();
       const symbol = message.s;
       const status = message.X; // Order status
+      const side = message.S;
+      const executedQty = message.z; // Total executed quantity
+      const avgPrice = message.Z && message.z !== '0' ? (parseFloat(message.Z) / parseFloat(message.z)).toString() : message.p;
       
       console.log(`[USER STREAM] Order update: ${exchangeOrderId} (${symbol}) - Status: ${status}`);
       
@@ -3120,15 +3162,27 @@ export class WebSocketService {
           
           console.log(`[USER STREAM] Fee info - Amount: ${commission} ${commissionAsset}`);
           
+          // Calculate actual received quantity considering fees
+          let actualReceivedQuantity = executedQty;
+          
+          // Check if fee was deducted from the purchased asset (not from BNB)
+          if (side === 'BUY' && commissionAsset !== 'BNB' && commissionAsset === symbol.replace('USDT', '').replace('USDC', '').replace('BUSD', '')) {
+            // Fee was deducted from the asset we bought, so we received less
+            actualReceivedQuantity = (parseFloat(executedQty) - parseFloat(commission)).toFixed(8);
+            console.log(`[USER STREAM] ⚠️ Fee deducted from asset: ${executedQty} - ${commission} = ${actualReceivedQuantity} ${commissionAsset}`);
+          }
+          
           // Update order with fill data including fees
           await storage.updateCycleOrder(cycleOrder.id, {
             status: 'filled',
-            filledQuantity: message.q, // Executed quantity
-            filledPrice: message.L,    // Last executed price
-            fee: commission,           // Trading fee amount
-            feeAsset: commissionAsset, // Currency in which fee was charged
+            filledQuantity: actualReceivedQuantity, // Use actual received quantity after fees
+            filledPrice: avgPrice,                  // Average fill price
+            fee: commission,                        // Trading fee amount
+            feeAsset: commissionAsset,             // Currency in which fee was charged
             filledAt: new Date()
           });
+
+          console.log(`[USER STREAM] ✅ Order ${exchangeOrderId} filled - Actual quantity: ${actualReceivedQuantity}, Fee: ${commission} ${commissionAsset}`);
 
           // Get the active cycle and handle the fill
           const activeCycle = await storage.getActiveBotCycle(cycleOrder.botId);
@@ -3270,14 +3324,25 @@ export class WebSocketService {
       console.log(`[MARTINGALE STRATEGY]    Fill Quantity: ${order.quantity}`);
       console.log(`[MARTINGALE STRATEGY]    Order Investment: $${(parseFloat(order.quantity) * parseFloat(order.price || '0')).toFixed(2)}`);
 
-      // Recalculate average entry price
+      // Recalculate average entry price using actual filled quantities
       const previousInvested = parseFloat(cycle.totalInvested || '0');
       const previousQuantity = parseFloat(cycle.totalQuantity || '0');
-      const orderInvestment = parseFloat(order.quantity) * parseFloat(order.price || '0');
+      
+      // Use actual filled quantity and price for investment calculation
+      const actualFilledQty = parseFloat(order.filledQuantity || order.quantity || '0');
+      const actualFilledPrice = parseFloat(order.filledPrice || order.price || '0');
+      const orderInvestment = actualFilledQty * actualFilledPrice;
       
       const totalInvested = previousInvested + orderInvestment;
-      const totalQuantity = previousQuantity + parseFloat(order.quantity);
+      const totalQuantity = previousQuantity + actualFilledQty;
       const newAveragePrice = totalInvested / totalQuantity;
+      
+      console.log(`[MARTINGALE STRATEGY] 📊 SAFETY ORDER QUANTITY TRACKING:`);
+      console.log(`[MARTINGALE STRATEGY]    Requested Quantity: ${order.quantity}`);
+      console.log(`[MARTINGALE STRATEGY]    Actual Filled Quantity: ${actualFilledQty.toFixed(8)}`);
+      console.log(`[MARTINGALE STRATEGY]    Requested Price: ${order.price}`);
+      console.log(`[MARTINGALE STRATEGY]    Actual Filled Price: ${actualFilledPrice.toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    Fee: ${order.fee || '0'} ${order.feeAsset || 'N/A'}`);
       
       const currentSafetyOrders = (cycle.filledSafetyOrders || 0) + 1;
 
@@ -3741,19 +3806,27 @@ export class WebSocketService {
         console.log(`[MARTINGALE STRATEGY] ✓ Cancelled existing take profit order`);
       }
 
-      // Use the already fetched cycleOrders to calculate total quantity
+      // Use the already fetched cycleOrders to calculate total quantity with actual filled amounts
       const filledBuyOrdersForQuantity = allCycleOrders.filter(order => 
         order.orderType === 'base_order' || order.orderType === 'safety_order'
       ).filter(order => order.status === 'filled' && order.side === 'BUY');
       
+      // Use filledQuantity (actual received) instead of quantity (requested)
       const totalQuantity = filledBuyOrdersForQuantity.reduce((total: number, order: any) => {
-        return total + parseFloat(order.quantity || '0');
+        const actualQuantity = parseFloat(order.filledQuantity || order.quantity || '0');
+        return total + actualQuantity;
       }, 0);
       
-      console.log(`[MARTINGALE STRATEGY] 📊 QUANTITY CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY] 📊 ROBUST TP UPDATE CALCULATION:`);
       console.log(`[MARTINGALE STRATEGY]    Filled Buy Orders: ${filledBuyOrdersForQuantity.length}`);
       console.log(`[MARTINGALE STRATEGY]    Calculated Total Quantity: ${totalQuantity.toFixed(8)}`);
       console.log(`[MARTINGALE STRATEGY]    Cycle Total Quantity (old): ${parseFloat(cycle.totalQuantity || '0').toFixed(8)}`);
+      filledBuyOrdersForQuantity.forEach((order: any, index: number) => {
+        const requestedQty = parseFloat(order.quantity || '0');
+        const actualQty = parseFloat(order.filledQuantity || order.quantity || '0');
+        const fee = parseFloat(order.fee || '0');
+        console.log(`[MARTINGALE STRATEGY]    Order ${index + 1}: Req=${requestedQty.toFixed(8)}, Actual=${actualQty.toFixed(8)}, Fee=${fee.toFixed(8)}`);
+      });
       
       if (totalQuantity === 0) {
         console.error(`[MARTINGALE STRATEGY] ❌ No filled buy orders found for take profit calculation`);
@@ -4682,10 +4755,16 @@ export class WebSocketService {
         const orderStatus = message.X; // Order status: NEW, PARTIALLY_FILLED, FILLED, CANCELED, etc.
         const symbol = message.s;
         const side = message.S;
-        const executedQty = message.z;
+        const executedQty = message.z; // Total executed quantity
+        const lastExecutedQty = message.l; // Quantity of current execution
+        const lastExecutedPrice = message.L; // Price of current execution
+        const cummulativeQuoteQty = message.Z; // Cumulative quote asset transacted quantity
         const avgPrice = message.Z && message.z !== '0' ? (parseFloat(message.Z) / parseFloat(message.z)).toString() : message.p;
+        const commission = message.n || '0'; // Commission amount
+        const commissionAsset = message.N || ''; // Commission asset
 
         console.log(`[USER DATA STREAM] Order update: ${orderId} - ${orderStatus} (${symbol} ${side})`);
+        console.log(`[USER DATA STREAM] Executed: ${executedQty}, Last: ${lastExecutedQty} @ ${lastExecutedPrice}, Fee: ${commission} ${commissionAsset}`);
 
         // Find the order in our database
         const order = await storage.getCycleOrderByExchangeId(orderId);
@@ -4699,15 +4778,28 @@ export class WebSocketService {
           }
 
           if (dbStatus === 'filled') {
-            // Update order with fill data
+            // For BUY orders with BNB fee, the actual asset quantity received is the full executedQty
+            // For BUY orders with base asset fee, the actual asset quantity is reduced by the fee
+            let actualReceivedQuantity = executedQty;
+            
+            // Check if fee was deducted from the purchased asset (not from BNB)
+            if (side === 'BUY' && commissionAsset !== 'BNB' && commissionAsset === symbol.replace('USDT', '').replace('USDC', '').replace('BUSD', '')) {
+              // Fee was deducted from the asset we bought, so we received less
+              actualReceivedQuantity = (parseFloat(executedQty) - parseFloat(commission)).toFixed(8);
+              console.log(`[USER DATA STREAM] ⚠️ Fee deducted from asset: ${executedQty} - ${commission} = ${actualReceivedQuantity} ${commissionAsset}`);
+            }
+
+            // Update order with precise fill data
             await storage.updateCycleOrder(order.id, {
               status: 'filled',
-              filledQuantity: executedQty,
+              filledQuantity: actualReceivedQuantity, // Use actual received quantity after fees
               filledPrice: avgPrice,
+              fee: commission,
+              feeAsset: commissionAsset,
               filledAt: new Date()
             });
 
-            console.log(`[USER DATA STREAM] ✅ Order ${orderId} filled via WebSocket - processing...`);
+            console.log(`[USER DATA STREAM] ✅ Order ${orderId} filled - Actual quantity: ${actualReceivedQuantity}, Fee: ${commission} ${commissionAsset}`);
 
             // Get the active cycle and handle the fill
             const cycle = await storage.getActiveBotCycle(order.botId);

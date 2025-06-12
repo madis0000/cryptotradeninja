@@ -37,34 +37,20 @@ export default function BotLogsPage() {
 
   // Fetch bot logs
   const { data: botLogs, isLoading: botLogsLoading, refetch: refetchBotLogs } = useQuery<BotLogData>({
-    queryKey: ["/api/bot-logs", selectedBotId, logLines],
+    queryKey: [`/api/bot-logs/${selectedBotId}?lines=${logLines}`],
     enabled: viewMode === 'bot' && selectedBotId !== null,
-    queryFn: async () => {
-      const response = await fetch(`/api/bot-logs/${selectedBotId}?lines=${logLines}`);
-      if (!response.ok) throw new Error('Failed to fetch bot logs');
-      return response.json();
-    }
   });
 
   // Fetch system logs
   const { data: systemLogs, isLoading: systemLogsLoading, refetch: refetchSystemLogs } = useQuery<SystemLogData>({
-    queryKey: ["/api/system-logs", logLines],
+    queryKey: [`/api/system-logs?lines=${logLines}`],
     enabled: viewMode === 'system',
-    queryFn: async () => {
-      const response = await fetch(`/api/system-logs?lines=${logLines}`);
-      if (!response.ok) throw new Error('Failed to fetch system logs');
-      return response.json();
-    }
   });
 
   // Clear bot logs mutation
   const clearLogsMutation = useMutation({
     mutationFn: async (botId: number) => {
-      const response = await fetch(`/api/bot-logs/${botId}`, {
-        method: 'DELETE'
-      });
-      if (!response.ok) throw new Error('Failed to clear logs');
-      return response.json();
+      return apiRequest(`/api/bot-logs/${botId}`, 'DELETE');
     },
     onSuccess: () => {
       toast({
@@ -85,7 +71,18 @@ export default function BotLogsPage() {
   // Download bot logs
   const downloadBotLogs = async (botId: number) => {
     try {
-      const response = await fetch(`/api/bot-logs/${botId}/download`);
+      // Get the authentication token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await fetch(`/api/bot-logs/${botId}/download`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
       if (!response.ok) throw new Error('Failed to download logs');
       
       const blob = await response.blob();
@@ -317,40 +314,18 @@ export default function BotLogsPage() {
                 )}
 
                 {/* Bot Logs */}
-                {viewMode === 'bot' && botLogs?.logs.map((log, index) => {
-                  const { timestamp, content, level } = formatLogEntry(log);
-                  return (
-                    <div 
-                      key={index} 
-                      className={`p-2 rounded text-xs font-mono border ${getLevelColor(level)}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="text-xs opacity-70 flex-shrink-0">
-                          {timestamp}
-                        </span>
-                        <span className="flex-1">{content}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                {viewMode === 'bot' && botLogs?.logs && (
+                  <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed" style={{ color: '#ffffff' }}>
+                    {botLogs.logs.join('\n')}
+                  </pre>
+                )}
 
                 {/* System Logs */}
-                {viewMode === 'system' && systemLogs?.logs.map((log, index) => {
-                  const { timestamp, content, level } = formatLogEntry(log);
-                  return (
-                    <div 
-                      key={index} 
-                      className={`p-2 rounded text-xs font-mono border ${getLevelColor(level)}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="text-xs opacity-70 flex-shrink-0">
-                          {timestamp}
-                        </span>
-                        <span className="flex-1">{content}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                {viewMode === 'system' && systemLogs?.logs && (
+                  <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed" style={{ color: '#ffffff' }}>
+                    {systemLogs.logs.join('\n')}
+                  </pre>
+                )}
               </div>
             </ScrollArea>
           </CardContent>

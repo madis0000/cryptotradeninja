@@ -1,0 +1,58 @@
+# WebSocket and Vite Port Conflict Resolution
+
+I have a web application with the following setup that needs to be fixed:
+
+## Current Problem
+- **Vite dev server** and **WebSocket server** are competing for the same port
+- This causes one service to fail when starting
+- Need a solution that works in both **development** and **production** environments
+
+## Current Architecture
+- Frontend: Vite-based web application
+- Backend: Custom WebSocket server for real-time operations
+- Environment: Need to support both dev and production deployments
+
+## Requirements for Solution
+
+### Development Environment
+1. **Automatic port management**: Servers should automatically find available ports or use predefined separate ports
+2. **Hot reload compatibility**: Vite's HMR should work seamlessly with WebSocket connections
+3. **Easy startup**: Ideally single command to start both servers
+4. **Environment variables**: Configurable ports through .env files
+5. **Graceful fallbacks**: If preferred ports are occupied, auto-assign alternatives
+
+### Production Environment
+1. **Reverse proxy setup**: Proper nginx/Apache configuration if needed
+2. **Process management**: PM2 or similar process manager configuration
+3. **Port binding**: Clear separation of services on different ports
+4. **SSL/TLS support**: WebSocket secure connections (wss://) configuration
+5. **Docker compatibility**: If using containers, proper port mapping
+
+### Code Implementation Needed
+1. **Vite configuration**: Update vite.config.js for proper dev server setup
+2. **WebSocket server**: Modify server code for dynamic port assignment
+3. **Client-side connection**: Update frontend WebSocket connection logic to use correct endpoints
+4. **Environment detection**: Code to detect dev vs production and adjust accordingly
+5. **Error handling**: Robust connection retry logic and port conflict resolution
+
+### Additional Features
+1. **Health checks**: Endpoints to verify both services are running
+2. **Logging**: Clear logs showing which ports are being used
+3. **Documentation**: Clear setup instructions for other developers
+4. **Testing**: Unit tests for port assignment logic
+
+## Constraints
+- Must maintain existing WebSocket functionality
+- Should not break existing Vite build process
+- Solution should be scalable for multiple environments
+- Minimize configuration complexity for new developers
+
+## Expected Deliverables
+1. Updated project structure with proper configuration files
+2. Modified server code with port conflict resolution
+3. Updated client code for dynamic WebSocket connection
+4. Docker/deployment configurations if applicable
+5. Documentation with setup and troubleshooting guide
+6. Package.json scripts for easy development workflow
+
+Please provide a complete solution with code examples, configuration files, and step-by-step implementation guide that addresses all the above requirements for both development and production environments.
