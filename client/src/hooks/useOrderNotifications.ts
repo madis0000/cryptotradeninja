@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { audioService } from '../services/audioService';
 import { useQuery } from '@tanstack/react-query';
+import { useUserWebSocket } from './useWebSocketService';
 
 interface OrderNotification {
   type: 'order_fill';
@@ -23,13 +24,13 @@ export function useOrderNotifications() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  useEffect(() => {
-    if (!settings) return;
+  // Connect to WebSocket for order notifications
+  const { lastMessage } = useUserWebSocket({
+    onMessage: async (data) => {
+      if (!settings || !data) return;
 
-    const handleMessage = async (event: MessageEvent) => {
       try {
-        const data = JSON.parse(event.data);
-        
+        // Handle order fill notifications
         if (data.type === 'order_fill' && data.timestamp > lastNotificationRef.current) {
           lastNotificationRef.current = data.timestamp;
           
@@ -44,25 +45,21 @@ export function useOrderNotifications() {
             orderType = 'safety_order';
           }
 
+          console.log(`[AUDIO] Playing ${orderType} notification sound`);
+          
           // Play notification sound
           await audioService.playOrderFillNotification(orderType, settings);
         }
       } catch (error) {
-        // Ignore parsing errors for non-JSON messages
+        console.warn('[AUDIO] Failed to process order notification:', error);
       }
-    };
-
-    // Listen for WebSocket messages
-    window.addEventListener('message', handleMessage);
-
-    return () => {
-      window.removeEventListener('message', handleMessage);
-    };
-  }, [settings]);
+    }
+  });
 
   // Manual notification trigger for testing
   const playTestNotification = async (orderType: 'take_profit' | 'safety_order' | 'base_order') => {
     if (settings) {
+      console.log(`[AUDIO] Testing ${orderType} notification sound`);
       await audioService.playOrderFillNotification(orderType, settings);
     }
   };
