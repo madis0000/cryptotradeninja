@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useAuth } from './useAuth';
+import { audioService } from '../services/audioService';
 
 interface WebSocketHookOptions {
   onMessage?: (data: any) => void;
@@ -29,6 +30,48 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [lastMessage, setLastMessage] = useState<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Handle order fill notifications with audio alerts
+  const handleOrderFillNotification = useCallback(async (orderData: any) => {
+    try {
+      console.log(`[AUDIO NOTIFICATION] 🔊 Order fill detected:`, orderData);
+      console.log(`[AUDIO NOTIFICATION] Order Type: ${orderData.orderType}`);
+      console.log(`[AUDIO NOTIFICATION] Symbol: ${orderData.symbol}`);
+      console.log(`[AUDIO NOTIFICATION] Side: ${orderData.side}`);
+      console.log(`[AUDIO NOTIFICATION] Price: $${parseFloat(orderData.price || '0').toFixed(6)}`);
+      
+      // Get notification settings from localStorage (with defaults)
+      const notificationSettings = {
+        soundNotificationsEnabled: localStorage.getItem('soundNotificationsEnabled') !== 'false',
+        takeProfitSoundEnabled: localStorage.getItem('takeProfitSoundEnabled') !== 'false',
+        safetyOrderSoundEnabled: localStorage.getItem('safetyOrderSoundEnabled') !== 'false', 
+        baseOrderSoundEnabled: localStorage.getItem('baseOrderSoundEnabled') !== 'false',
+        takeProfitSound: localStorage.getItem('takeProfitSound') || 'chin-chin',
+        safetyOrderSound: localStorage.getItem('safetyOrderSound') || 'beep',
+        baseOrderSound: localStorage.getItem('baseOrderSound') || 'notification',
+        notificationVolume: parseFloat(localStorage.getItem('notificationVolume') || '0.5')
+      };
+
+      // Determine order type for audio notification
+      let audioOrderType: 'take_profit' | 'safety_order' | 'base_order' = 'base_order';
+      
+      if (orderData.orderType === 'take_profit') {
+        audioOrderType = 'take_profit';
+      } else if (orderData.orderType === 'safety_order') {
+        audioOrderType = 'safety_order';
+      } else if (orderData.orderType === 'base_order') {
+        audioOrderType = 'base_order';
+      }
+
+      // Play audio notification
+      await audioService.playOrderFillNotification(audioOrderType, notificationSettings);
+      
+      console.log(`[AUDIO NOTIFICATION] ✅ Played ${audioOrderType} sound notification`);
+      
+    } catch (error) {
+      console.error('[AUDIO NOTIFICATION] Error playing order fill sound:', error);
+    }
+  }, []);
 
   const connect = useCallback((symbols?: string[]) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -65,6 +108,12 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
         const data = JSON.parse(event.data);
         console.log('[CLIENT WS] Received message:', data);
         setLastMessage(data);
+        
+        // Handle order fill notifications with sound alerts
+        if (data.type === 'order_fill_notification') {
+          handleOrderFillNotification(data.data);
+        }
+        
         options.onMessage?.(data);
       } catch (error) {
         console.error('[CLIENT WS] Error parsing message:', error);
