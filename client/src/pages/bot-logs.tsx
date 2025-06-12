@@ -315,14 +315,14 @@ export default function BotLogsPage() {
 
                 {/* Bot Logs */}
                 {viewMode === 'bot' && botLogs?.logs && (
-                  <pre className="text-xs font-mono whitespace-pre-wrap text-gray-900 dark:text-white leading-relaxed">
+                  <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed" style={{ color: '#ffffff' }}>
                     {botLogs.logs.join('\n')}
                   </pre>
                 )}
 
                 {/* System Logs */}
                 {viewMode === 'system' && systemLogs?.logs && (
-                  <pre className="text-xs font-mono whitespace-pre-wrap text-gray-900 dark:text-white leading-relaxed">
+                  <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed" style={{ color: '#ffffff' }}>
                     {systemLogs.logs.join('\n')}
                   </pre>
                 )}
