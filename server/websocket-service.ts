@@ -749,7 +749,6 @@ export class WebSocketService {
       this.binancePublicWs.on('message', (data) => {
         try {
           const message = JSON.parse(data.toString());
-          console.log(`[KLINE CONNECTION] Received message:`, JSON.stringify(message).substring(0, 200) + '...');
           
           // Handle subscription confirmation
           if (message.result === null && message.id) {
@@ -757,25 +756,23 @@ export class WebSocketService {
             return;
           }
           
-          // Handle kline data
-          if (message.k) {
-            console.log(`[KLINE CONNECTION] Processing kline data for ${message.k.s} ${message.k.i}`);
+          // Handle kline data (Binance sends nested structure)
+          if (message.data && message.data.k) {
+            console.log(`[KLINE CONNECTION] Processing kline data for ${message.data.k.s} ${message.data.k.i}`);
             const klineData = {
-              symbol: message.k.s,
-              interval: message.k.i,
-              openTime: message.k.t,
-              closeTime: message.k.T,
-              open: parseFloat(message.k.o),
-              high: parseFloat(message.k.h),
-              low: parseFloat(message.k.l),
-              close: parseFloat(message.k.c),
-              volume: parseFloat(message.k.v),
-              isFinal: message.k.x
+              symbol: message.data.k.s,
+              interval: message.data.k.i,
+              openTime: message.data.k.t,
+              closeTime: message.data.k.T,
+              open: parseFloat(message.data.k.o),
+              high: parseFloat(message.data.k.h),
+              low: parseFloat(message.data.k.l),
+              close: parseFloat(message.data.k.c),
+              volume: parseFloat(message.data.k.v),
+              isFinal: message.data.k.x
             };
             
             this.broadcastKlineUpdate(klineData);
-          } else {
-            console.log(`[KLINE CONNECTION] Received non-kline message:`, message);
           }
         } catch (error) {
           console.error('[BINANCE STREAM] Error parsing message:', error);
