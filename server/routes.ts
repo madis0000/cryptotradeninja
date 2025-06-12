@@ -11,6 +11,8 @@ import { BotLoggerManager } from "./bot-logger";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import cors from "cors";
+import * as fs from "fs";
+import * as path from "path";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -688,18 +690,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Bot not found" });
       }
       
-      // Get bot logger and recent logs
-      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
       const lines = parseInt(req.query.lines as string) || 100;
-      const logs = logger.getRecentLogs(lines);
       
-      res.json({
-        botId,
-        tradingPair: bot.tradingPair,
-        logFilePath: logger.getLogFilePath(),
-        totalLines: logs.length,
-        logs
-      });
+      // Construct log file path directly
+      const logFilePath = path.join(process.cwd(), 'logs', `bot_${botId}_${bot.tradingPair}.log`);
+      
+      try {
+        // Read log file directly from filesystem
+        const content = fs.readFileSync(logFilePath, 'utf8');
+        const allLines = content.split('\n').filter(line => line.trim());
+        const logs = allLines.slice(-lines);
+        
+        res.json({
+          botId,
+          tradingPair: bot.tradingPair,
+          logFilePath,
+          totalLines: allLines.length,
+          logs
+        });
+      } catch (fileError) {
+        // If file doesn't exist, return empty logs
+        console.log(`No log file found for bot ${botId} at ${logFilePath}`);
+        res.json({
+          botId,
+          tradingPair: bot.tradingPair,
+          logFilePath,
+          totalLines: 0,
+          logs: []
+        });
+      }
     } catch (error) {
       console.error('Error fetching bot logs:', error);
       res.status(500).json({ error: "Failed to fetch bot logs" });
@@ -717,15 +736,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Bot not found" });
       }
       
-      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
-      const logFilePath = logger.getLogFilePath();
+      // Construct log file path directly
+      const logFilePath = path.join(process.cwd(), 'logs', `bot_${botId}_${bot.tradingPair}.log`);
+      
+      // Check if file exists
+      if (!fs.existsSync(logFilePath)) {
+        return res.status(404).json({ error: "Log file not found" });
+      }
       
       // Set headers for file download
       res.setHeader('Content-Disposition', `attachment; filename="bot_${botId}_${bot.tradingPair}.log"`);
       res.setHeader('Content-Type', 'text/plain');
       
       // Send file
-      res.sendFile(logFilePath);
+      res.sendFile(path.resolve(logFilePath));
     } catch (error) {
       console.error('Error downloading bot logs:', error);
       res.status(500).json({ error: "Failed to download bot logs" });
@@ -743,8 +767,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Bot not found" });
       }
       
-      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
-      logger.clearLogs();
+      // Construct log file path directly
+      const logFilePath = path.join(process.cwd(), 'logs', `bot_${botId}_${bot.tradingPair}.log`);
+      
+      try {
+        // Clear the log file by writing empty content
+        fs.writeFileSync(logFilePath, '');
+        console.log(`Cleared log file for bot ${botId}: ${logFilePath}`);
+      } catch (fileError) {
+        console.log(`No log file to clear for bot ${botId}: ${logFilePath}`);
+      }
       
       res.json({ success: true, message: "Bot logs cleared successfully" });
     } catch (error) {
