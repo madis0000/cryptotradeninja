@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insertUserSchema } from "@shared/schema";
+import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insertUserSchema, insertUserSettingsSchema, updateUserSettingsSchema } from "@shared/schema";
 import { z } from "zod";
 import WebSocket, { WebSocketServer } from "ws";
 import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";
@@ -140,6 +140,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({
       user: req.user,
     });
+  });
+
+  // User Settings API
+  app.get("/api/user/settings", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      let settings = await storage.getUserSettings(userId);
+      
+      // Create default settings if none exist
+      if (!settings) {
+        const defaultSettings = {
+          userId,
+          soundNotificationsEnabled: true,
+          takeProfitSoundEnabled: true,
+          safetyOrderSoundEnabled: true,
+          baseOrderSoundEnabled: true,
+          takeProfitSound: "chin-chin",
+          safetyOrderSound: "beep",
+          baseOrderSound: "notification",
+          notificationVolume: "0.50",
+        };
+        
+        settings = await storage.createUserSettings(defaultSettings);
+      }
+      
+      res.json(settings);
+    } catch (error) {
+      console.error("Failed to get user settings:", error);
+      res.status(500).json({ error: "Failed to get settings" });
+    }
+  });
+
+  app.put("/api/user/settings", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const validatedData = updateUserSettingsSchema.parse(req.body);
+      
+      const updatedSettings = await storage.updateUserSettings(userId, validatedData);
+      res.json(updatedSettings);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: "Validation error", details: error.errors });
+      } else {
+        console.error("Failed to update user settings:", error);
+        res.status(500).json({ error: "Failed to update settings" });
+      }
+    }
   });
 
   // Exchanges API - Secured with authentication

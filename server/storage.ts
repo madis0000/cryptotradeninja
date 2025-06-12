@@ -1,12 +1,13 @@
 import { 
-  users, exchanges, tradingBots, trades, portfolio, botCycles, cycleOrders,
+  users, exchanges, tradingBots, trades, portfolio, botCycles, cycleOrders, userSettings,
   type User, type InsertUser,
   type Exchange, type InsertExchange,
   type TradingBot, type InsertTradingBot,
   type Trade, type InsertTrade,
   type Portfolio, type InsertPortfolio,
   type BotCycle, type InsertBotCycle,
-  type CycleOrder, type InsertCycleOrder
+  type CycleOrder, type InsertCycleOrder,
+  type UserSettings, type InsertUserSettings, type UpdateUserSettings
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sum, count, isNotNull } from "drizzle-orm";
@@ -19,6 +20,11 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserLastLogin(id: number): Promise<void>;
+
+  // User Settings
+  getUserSettings(userId: number): Promise<UserSettings | undefined>;
+  createUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
+  updateUserSettings(userId: number, settings: UpdateUserSettings): Promise<UserSettings>;
 
   // Exchanges
   getExchangesByUserId(userId: number): Promise<Exchange[]>;
