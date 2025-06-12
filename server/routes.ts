@@ -13,6 +13,7 @@ import helmet from "helmet";
 import cors from "cors";
 import * as fs from "fs";
 import * as path from "path";
+import config from "./config";
 
 // Global WebSocket service instance
 let wsService: WebSocketService;
@@ -20,14 +21,19 @@ let wsService: WebSocketService;
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Initialize WebSocket service on dedicated port to avoid Vite HMR conflicts
-  const wsPort = parseInt(process.env.WS_PORT || '8080');
-  const wsServer = createServer();
-  wsService = new WebSocketService(wsServer);
-  
-  wsServer.listen(wsPort, '0.0.0.0', () => {
-    console.log(`[WEBSOCKET] Trading WebSocket server listening on port ${wsPort}`);
-  });
+  // Initialize WebSocket service using centralized config
+  if (config.isProduction) {
+    // In production, use the same HTTP server for WebSocket to avoid port conflicts
+    wsService = new WebSocketService(httpServer);
+  } else {
+    // In development, use dedicated port to avoid Vite HMR conflicts
+    const wsServer = createServer();
+    wsService = new WebSocketService(wsServer);
+    
+    wsServer.listen(config.wsPort, config.host, () => {
+      console.log(`[WEBSOCKET] Trading WebSocket server listening on port ${config.wsPort}`);
+    });
+  }
   
   // All market data is now handled by the unified WebSocket server
   // Old ticker stream disabled to prevent conflicts
@@ -46,12 +52,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Security middleware
   app.use(helmet({
-    contentSecurityPolicy: false, // Disable for development
-    crossOriginEmbedderPolicy: false
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'", "wss:", "https:"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"],
+      },
+    } : false,
+    crossOriginEmbedderPolicy: process.env.NODE_ENV === 'production'
   }));
   
   app.use(cors({
-    origin: process.env.NODE_ENV === 'production' ? ['https://yourdomain.com'] : true,
+    origin: process.env.NODE_ENV === 'production' ? 
+      (process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : true) : 
+      true,
     credentials: true
   }));
 
