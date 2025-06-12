@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { audioService } from '@/services/audioService';
+import { replitWsService } from '@/services/replitWebSocketService';
 
 interface OrderNotification {
   orderId: number;
@@ -43,39 +44,31 @@ export function useOrderNotifications() {
   });
 
   useEffect(() => {
-    // Use unified WebSocket URL for Replit compatibility
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws`;
-    
-    const connectWebSocket = () => {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    let connectionId: string | null = null;
 
-      ws.onopen = () => {
-        console.log('[ORDER NOTIFICATIONS] Connected to WebSocket for order updates');
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          
-          if (message.type === 'order_notification') {
-            handleOrderNotification(message.data);
+    const connectWebSocket = async () => {
+      try {
+        connectionId = 'order-notifications';
+        
+        await replitWsService.createConnection(
+          connectionId,
+          (data) => {
+            if (data.type === 'order_notification') {
+              handleOrderNotification(data.data);
+            }
+          },
+          () => {
+            console.log('[ORDER NOTIFICATIONS] Connected to WebSocket for order updates');
+          },
+          () => {
+            console.log('[ORDER NOTIFICATIONS] WebSocket connection closed, attempting to reconnect...');
           }
-        } catch (error) {
-          console.error('[ORDER NOTIFICATIONS] Error parsing WebSocket message:', error);
-        }
-      };
-
-      ws.onclose = () => {
-        console.log('[ORDER NOTIFICATIONS] WebSocket connection closed, attempting to reconnect...');
-        setTimeout(connectWebSocket, 3000); // Reconnect after 3 seconds
-      };
-
-      ws.onerror = (error) => {
-        console.error('[ORDER NOTIFICATIONS] WebSocket error:', error);
-      };
+        );
+      } catch (error) {
+        console.error('[ORDER NOTIFICATIONS] WebSocket connection failed:', error);
+        // Retry connection after delay
+        setTimeout(connectWebSocket, 3000);
+      }
     };
 
     const handleOrderNotification = async (data: OrderNotification) => {

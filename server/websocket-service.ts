@@ -243,8 +243,8 @@ export class WebSocketService {
   }
 
   private setupWebSocket() {
-    const wsPort = parseInt(process.env.WS_PORT || '8080');
-    // Removed verbose WebSocket logging
+    // WebSocket is already configured on the HTTP server, no separate port needed
+    console.log('[WEBSOCKET] Setting up WebSocket handlers on /ws path');
     
     this.wss.on('connection', (ws, request) => {
       const clientIP = request.socket.remoteAddress;

@@ -79,12 +79,25 @@ export class WebSocketConnectionService {
     if (!connection) return;
 
     try {
-      console.log(`[WS Connection] Connecting to ${connection.url} (${connectionId})`);
+      // Use optimized WebSocket URL for Replit environment
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
       
-      connection.ws = new WebSocket(connection.url);
+      console.log(`[WS Connection] Connecting to ${wsUrl} (${connectionId})`);
+      
+      connection.ws = new WebSocket(wsUrl);
+      
+      // Add connection timeout for Replit
+      const connectionTimeout = setTimeout(() => {
+        if (connection.ws && connection.ws.readyState === WebSocket.CONNECTING) {
+          console.warn(`[WS Connection] Timeout connecting to ${wsUrl} (${connectionId})`);
+          connection.ws.close();
+        }
+      }, 15000);
 
       connection.ws.onopen = () => {
-        console.log(`[WS Connection] Connected to ${connection.url} (${connectionId})`);
+        clearTimeout(connectionTimeout);
+        console.log(`[WS Connection] Connected to ${wsUrl} (${connectionId})`);
         connection.isConnected = true;
         connection.reconnectAttempts = 0;
       };
