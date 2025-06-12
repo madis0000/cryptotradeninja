@@ -14,11 +14,14 @@ import cors from "cors";
 import * as fs from "fs";
 import * as path from "path";
 
+// Global WebSocket service instance
+let wsService: WebSocketService;
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
   // Initialize WebSocket service after Vite HMR has connected
-  const wsService = new WebSocketService(httpServer);
+  wsService = new WebSocketService(httpServer);
   
   // Start all markets ticker stream for real-time data
   setTimeout(() => {

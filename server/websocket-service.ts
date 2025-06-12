@@ -98,7 +98,17 @@ export class WebSocketService {
       server: server,
       path: '/api/ws',
       perMessageDeflate: false,
-      maxPayload: 16 * 1024 * 1024
+      maxPayload: 16 * 1024 * 1024,
+      verifyClient: (info) => {
+        // Allow connections to our specific trading WebSocket path
+        const isValidPath = info.req.url === '/api/ws';
+        if (!isValidPath) {
+          console.log(`[WEBSOCKET] Rejecting connection to invalid path: ${info.req.url}`);
+        } else {
+          console.log(`[WEBSOCKET] Accepting connection to: ${info.req.url}`);
+        }
+        return isValidPath;
+      }
     });
 
     this.setupWebSocket();
