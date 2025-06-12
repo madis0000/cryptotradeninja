@@ -37,15 +37,16 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     setStatus('connecting');
     
-    // Connect to backend WebSocket server on port 3001 to avoid Vite conflict
+    // Connect to backend WebSocket server on /trading-ws path to avoid Vite conflict
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const ws = new WebSocket(`${protocol}//${hostname}:3001/ws`);
+    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+    const ws = new WebSocket(`${protocol}//${hostname}:${port}/trading-ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('[CLIENT WS] ===== CONNECTED TO BACKEND SERVER =====');
-      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:3001/ws`);
+      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:${port}/trading-ws`);
       setStatus('connected');
       options.onConnect?.();
       
@@ -130,10 +131,11 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
 
     setStatus('connecting');
     
-    // Connect to our unified WebSocket service on port 3001 to avoid Vite conflict
+    // Connect to our unified WebSocket service on /trading-ws path to avoid Vite conflict
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const ws = new WebSocket(`${protocol}//${hostname}:3001/ws`);
+    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+    const ws = new WebSocket(`${protocol}//${hostname}:${port}/trading-ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
