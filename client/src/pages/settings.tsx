@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,9 @@ import { apiRequest } from "@/lib/queryClient";
 import { usePublicWebSocket, useUserWebSocket } from "@/hooks/useWebSocketService";
 import { useQuery } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { audioService } from "@/services/audioService";
+import { Volume2, VolumeX, Bell, Settings2 } from "lucide-react";
 
 interface Exchange {
   id: number;
@@ -54,8 +57,64 @@ export default function Settings() {
     interval: '1m',
     depth: '5'
   });
+
+  // Audio notification settings
+  const [soundNotificationsEnabled, setSoundNotificationsEnabled] = useState(
+    localStorage.getItem('soundNotificationsEnabled') !== 'false'
+  );
+  const [takeProfitSoundEnabled, setTakeProfitSoundEnabled] = useState(
+    localStorage.getItem('takeProfitSoundEnabled') !== 'false'
+  );
+  const [safetyOrderSoundEnabled, setSafetyOrderSoundEnabled] = useState(
+    localStorage.getItem('safetyOrderSoundEnabled') !== 'false'
+  );
+  const [baseOrderSoundEnabled, setBaseOrderSoundEnabled] = useState(
+    localStorage.getItem('baseOrderSoundEnabled') !== 'false'
+  );
+  const [takeProfitSound, setTakeProfitSound] = useState(
+    localStorage.getItem('takeProfitSound') || 'chin-chin'
+  );
+  const [safetyOrderSound, setSafetyOrderSound] = useState(
+    localStorage.getItem('safetyOrderSound') || 'beep'
+  );
+  const [baseOrderSound, setBaseOrderSound] = useState(
+    localStorage.getItem('baseOrderSound') || 'notification'
+  );
+  const [notificationVolume, setNotificationVolume] = useState(
+    parseFloat(localStorage.getItem('notificationVolume') || '0.5')
+  );
   
   const { toast } = useToast();
+
+  // Save notification setting to localStorage
+  const saveNotificationSetting = (key: string, value: any) => {
+    localStorage.setItem(key, value.toString());
+    toast({
+      title: "Settings Saved",
+      description: "Notification preference updated successfully",
+    });
+  };
+
+  // Test audio notification
+  const testAudioNotification = async (orderType: 'take_profit' | 'safety_order' | 'base_order') => {
+    const settings = {
+      soundNotificationsEnabled,
+      takeProfitSoundEnabled,
+      safetyOrderSoundEnabled,
+      baseOrderSoundEnabled,
+      takeProfitSound,
+      safetyOrderSound,
+      baseOrderSound,
+      notificationVolume
+    };
+
+    await audioService.playOrderFillNotification(orderType, settings);
+    
+    toast({
+      title: "Test Sound",
+      description: `Playing ${orderType.replace('_', ' ')} notification sound`,
+    });
+  };
 
   // Fetch exchanges for selection
   const { data: exchanges = [], isLoading: exchangesLoading } = useQuery<Exchange[]>({
@@ -603,42 +662,214 @@ export default function Settings() {
           Configure audio and visual notifications for trading events and order fills.
         </p>
         
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Master Audio Control */}
           <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
-            <h4 className="text-md font-medium text-white mb-3">Audio Notifications</h4>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2">
+                <Bell className="h-5 w-5 text-crypto-primary" />
+                <h4 className="text-md font-medium text-white">Sound Notifications</h4>
+              </div>
+              <Switch 
+                checked={soundNotificationsEnabled}
+                onCheckedChange={(checked) => {
+                  setSoundNotificationsEnabled(checked);
+                  saveNotificationSetting('soundNotificationsEnabled', checked);
+                }}
+              />
+            </div>
             <p className="text-sm text-crypto-light mb-4">
-              Configure sound alerts for order fills and trading events with customizable audio settings.
+              Enable or disable all audio notifications for bot trading events.
             </p>
-            <Button 
-              className="bg-crypto-primary hover:bg-crypto-primary/90 text-white"
-              onClick={() => window.location.href = '/settings/notifications'}
-            >
-              Configure Audio Notifications
-            </Button>
           </div>
-          
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-crypto-light">Email Notifications</Label>
-              <p className="text-sm text-crypto-light/70">Receive notifications via email</p>
+
+          {/* Volume Control */}
+          <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
+            <div className="flex items-center space-x-2 mb-4">
+              <Volume2 className="h-5 w-5 text-crypto-primary" />
+              <h4 className="text-md font-medium text-white">Volume Control</h4>
             </div>
-            <Switch defaultChecked />
+            <div className="space-y-3">
+              <div className="flex items-center space-x-4">
+                <VolumeX className="h-4 w-4 text-crypto-light" />
+                <Slider
+                  value={[notificationVolume]}
+                  onValueChange={(value) => {
+                    setNotificationVolume(value[0]);
+                    saveNotificationSetting('notificationVolume', value[0]);
+                    audioService.setVolume(value[0]);
+                  }}
+                  max={1}
+                  min={0}
+                  step={0.1}
+                  className="flex-1"
+                />
+                <Volume2 className="h-4 w-4 text-crypto-light" />
+                <span className="text-sm text-crypto-light w-12 text-right">
+                  {Math.round(notificationVolume * 100)}%
+                </span>
+              </div>
+            </div>
           </div>
-          
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-crypto-light">Trade Alerts</Label>
-              <p className="text-sm text-crypto-light/70">Get notified when trades are executed</p>
+
+          {/* Individual Order Type Settings */}
+          <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
+            <h4 className="text-md font-medium text-white mb-4">Order Type Notifications</h4>
+            <div className="space-y-4">
+              
+              {/* Take Profit Orders */}
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <Label className="text-crypto-light">Take Profit Orders</Label>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Select 
+                      value={takeProfitSound} 
+                      onValueChange={(value) => {
+                        setTakeProfitSound(value);
+                        saveNotificationSetting('takeProfitSound', value);
+                      }}
+                    >
+                      <SelectTrigger className="w-32 bg-crypto-dark border-gray-700 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-crypto-dark border-gray-700">
+                        <SelectItem value="chin-chin">Chin-Chin</SelectItem>
+                        <SelectItem value="beep">Beep</SelectItem>
+                        <SelectItem value="notification">Notification</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => testAudioNotification('take_profit')}
+                      className="border-gray-700 text-crypto-light hover:bg-gray-800"
+                    >
+                      Test
+                    </Button>
+                  </div>
+                </div>
+                <Switch 
+                  checked={takeProfitSoundEnabled}
+                  onCheckedChange={(checked) => {
+                    setTakeProfitSoundEnabled(checked);
+                    saveNotificationSetting('takeProfitSoundEnabled', checked);
+                  }}
+                />
+              </div>
+
+              {/* Safety Orders */}
+              <Separator className="bg-gray-800" />
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                    <Label className="text-crypto-light">Safety Orders</Label>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Select 
+                      value={safetyOrderSound} 
+                      onValueChange={(value) => {
+                        setSafetyOrderSound(value);
+                        saveNotificationSetting('safetyOrderSound', value);
+                      }}
+                    >
+                      <SelectTrigger className="w-32 bg-crypto-dark border-gray-700 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-crypto-dark border-gray-700">
+                        <SelectItem value="beep">Beep</SelectItem>
+                        <SelectItem value="chin-chin">Chin-Chin</SelectItem>
+                        <SelectItem value="notification">Notification</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => testAudioNotification('safety_order')}
+                      className="border-gray-700 text-crypto-light hover:bg-gray-800"
+                    >
+                      Test
+                    </Button>
+                  </div>
+                </div>
+                <Switch 
+                  checked={safetyOrderSoundEnabled}
+                  onCheckedChange={(checked) => {
+                    setSafetyOrderSoundEnabled(checked);
+                    saveNotificationSetting('safetyOrderSoundEnabled', checked);
+                  }}
+                />
+              </div>
+
+              {/* Base Orders */}
+              <Separator className="bg-gray-800" />
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <Label className="text-crypto-light">Base Orders</Label>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Select 
+                      value={baseOrderSound} 
+                      onValueChange={(value) => {
+                        setBaseOrderSound(value);
+                        saveNotificationSetting('baseOrderSound', value);
+                      }}
+                    >
+                      <SelectTrigger className="w-32 bg-crypto-dark border-gray-700 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-crypto-dark border-gray-700">
+                        <SelectItem value="notification">Notification</SelectItem>
+                        <SelectItem value="beep">Beep</SelectItem>
+                        <SelectItem value="chin-chin">Chin-Chin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => testAudioNotification('base_order')}
+                      className="border-gray-700 text-crypto-light hover:bg-gray-800"
+                    >
+                      Test
+                    </Button>
+                  </div>
+                </div>
+                <Switch 
+                  checked={baseOrderSoundEnabled}
+                  onCheckedChange={(checked) => {
+                    setBaseOrderSoundEnabled(checked);
+                    saveNotificationSetting('baseOrderSoundEnabled', checked);
+                  }}
+                />
+              </div>
             </div>
-            <Switch defaultChecked />
           </div>
-          
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-crypto-light">Bot Status Changes</Label>
-              <p className="text-sm text-crypto-light/70">Notifications for bot start/stop events</p>
+
+          {/* Notification Status */}
+          <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
+            <h4 className="text-md font-medium text-white mb-3">System Status</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mx-auto mb-2"></div>
+                <p className="text-sm text-crypto-light">Audio Service</p>
+                <p className="text-xs text-green-400">Ready</p>
+              </div>
+              <div className="text-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mx-auto mb-2"></div>
+                <p className="text-sm text-crypto-light">WebSocket</p>
+                <p className="text-xs text-green-400">Connected</p>
+              </div>
+              <div className="text-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mx-auto mb-2"></div>
+                <p className="text-sm text-crypto-light">Bot Integration</p>
+                <p className="text-xs text-green-400">Active</p>
+              </div>
             </div>
-            <Switch defaultChecked />
           </div>
         </div>
       </div>
