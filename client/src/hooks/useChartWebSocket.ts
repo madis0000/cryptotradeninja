@@ -25,13 +25,12 @@ export function useChartWebSocket(
 ): ChartWebSocketService {
   const [currentSymbol, setCurrentSymbol] = useState(initialSymbol);
   const [currentInterval, setCurrentInterval] = useState(initialInterval);
+  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const { onKlineUpdate, onConnect, onDisconnect, onError } = options;
 
   // Use singleton WebSocket service to prevent multiple connections
-  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
-
   useEffect(() => {
-    const unsubscribeData = webSocketSingleton.subscribe((data) => {
+    const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
       try {
         if (data.type === 'kline_update' && onKlineUpdate) {
           console.log('[CHART] Received kline update:', data);
@@ -54,7 +53,7 @@ export function useChartWebSocket(
       if (onDisconnect) onDisconnect();
     });
 
-    const unsubscribeError = webSocketSingleton.onError((error) => {
+    const unsubscribeError = webSocketSingleton.onError((error: Event) => {
       setStatus('error');
       console.error('[CHART] WebSocket error:', error);
       if (onError) onError(error);
@@ -73,45 +72,45 @@ export function useChartWebSocket(
 
   const connect = useCallback(() => {
     console.log(`[CHART] Connecting to unified WebSocket service for ${currentSymbol} ${currentInterval}`);
-    publicWs.connect([currentSymbol]);
+    webSocketSingleton.connect([currentSymbol]);
     
     // Send kline subscription message through unified service
-    if (publicWs.status === 'connected') {
-      publicWs.sendMessage?.({
+    if (webSocketSingleton.isConnected()) {
+      webSocketSingleton.sendMessage({
         type: 'configure_stream',
         dataType: 'kline',
         symbols: [currentSymbol],
         interval: currentInterval
       });
     }
-  }, [currentSymbol, currentInterval, publicWs]);
+  }, [currentSymbol, currentInterval]);
 
   const disconnect = useCallback(() => {
-    console.log('[CHART] Disconnecting from unified WebSocket service');
-    publicWs.disconnect();
-  }, [publicWs]);
+    console.log('[CHART] Disconnecting from WebSocket');
+    webSocketSingleton.disconnect();
+  }, []);
 
   const changeSymbol = useCallback((symbol: string) => {
-    console.log(`[CHART] Changing symbol to ${symbol}`);
+    console.log(`[CHART] Changing symbol from ${currentSymbol} to ${symbol}`);
     setCurrentSymbol(symbol);
     
     // Send configuration update through unified service
-    if (publicWs.status === 'connected') {
-      publicWs.sendMessage?.({
+    if (webSocketSingleton.isConnected()) {
+      webSocketSingleton.sendMessage({
         type: 'configure_stream',
         dataType: 'kline',
         symbols: [symbol],
         interval: currentInterval
       });
     }
-  }, [currentInterval, publicWs]);
+  }, [currentSymbol, currentInterval]);
 
   const changeInterval = useCallback((interval: string) => {
     console.log(`[CHART] Changing interval from ${currentInterval} to ${interval}`);
     setCurrentInterval(interval);
     
     // Send configuration update through unified service
-    if (publicWs.status === 'connected') {
+    if (webSocketSingleton.isConnected()) {
       const configMessage = {
         type: 'configure_stream',
         dataType: 'kline',
@@ -119,9 +118,9 @@ export function useChartWebSocket(
         interval: interval
       };
       console.log('[CHART] Sending interval change configuration:', configMessage);
-      publicWs.sendMessage?.(configMessage);
+      webSocketSingleton.sendMessage(configMessage);
     }
-  }, [currentSymbol, currentInterval, publicWs]);
+  }, [currentSymbol, currentInterval]);
 
   // Auto-connect when component mounts
   useEffect(() => {
@@ -129,26 +128,26 @@ export function useChartWebSocket(
     return () => {
       disconnect();
     };
-  }, []);
+  }, [connect, disconnect]);
 
   // Reconfigure when symbol or interval changes
   useEffect(() => {
-    if (publicWs.status === 'connected') {
-      publicWs.sendMessage?.({
+    if (webSocketSingleton.isConnected()) {
+      webSocketSingleton.sendMessage({
         type: 'configure_stream',
         dataType: 'kline',
         symbols: [currentSymbol],
         interval: currentInterval
       });
     }
-  }, [currentSymbol, currentInterval, publicWs]);
+  }, [currentSymbol, currentInterval]);
 
   return {
     connect,
     disconnect,
     changeSymbol,
     changeInterval,
-    status: publicWs.status,
+    status,
     currentSymbol,
     currentInterval
   };
