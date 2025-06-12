@@ -57,23 +57,28 @@ function Router() {
   }
 
   return (
-    <AuthenticatedLayout>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/trading" component={Trading} />
-        <Route path="/bots" component={TradingBots} />
-        <Route path="/my-bots" component={MyBotsPage} />
-        <Route path="/bot-logs" component={BotLogsPage} />
-        <Route path="/api-keys" component={ApiKeys} />
-        <Route path="/portfolio" component={Portfolio} />
-        <Route path="/my-exchanges" component={MyExchanges} />
-        <Route path="/settings" component={Settings} />
-        <Route path="/settings/notifications" component={NotificationSettings} />
-        <Route path="/websocket-test" component={WebSocketTest} />
-        <Route component={NotFound} />
-      </Switch>
-    </AuthenticatedLayout>
+    <Switch>
+      <Route path="/home" component={Landing} />
+      <Route path="*">
+        <AuthenticatedLayout>
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/trading" component={Trading} />
+            <Route path="/bots" component={TradingBots} />
+            <Route path="/my-bots" component={MyBotsPage} />
+            <Route path="/bot-logs" component={BotLogsPage} />
+            <Route path="/api-keys" component={ApiKeys} />
+            <Route path="/portfolio" component={Portfolio} />
+            <Route path="/my-exchanges" component={MyExchanges} />
+            <Route path="/settings" component={Settings} />
+            <Route path="/settings/notifications" component={NotificationSettings} />
+            <Route path="/websocket-test" component={WebSocketTest} />
+            <Route component={NotFound} />
+          </Switch>
+        </AuthenticatedLayout>
+      </Route>
+    </Switch>
   );
 }
 

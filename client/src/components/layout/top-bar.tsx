@@ -40,12 +40,14 @@ export function TopBar({ onLogout }: TopBarProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-8">
           {/* Logo/Brand */}
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-crypto-accent to-crypto-success rounded-lg flex items-center justify-center">
-              <i className="fas fa-robot text-white text-sm"></i>
+          <Link href="/home">
+            <div className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity">
+              <div className="w-8 h-8 bg-gradient-to-br from-crypto-accent to-crypto-success rounded-lg flex items-center justify-center">
+                <i className="fas fa-robot text-white text-sm"></i>
+              </div>
+              <span className="text-xl font-bold text-white">CryptoBot</span>
             </div>
-            <span className="text-xl font-bold text-white">CryptoBot</span>
-          </div>
+          </Link>
 
           {/* Navigation Menu */}
           <nav className="hidden md:flex items-center space-x-6">
