@@ -23,7 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 export default function Landing() {
   const [hoveredFeature, setHoveredFeature] = useState<number | null>(null);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
 
   const features = [
     {
@@ -128,11 +128,12 @@ export default function Landing() {
                       Access App
                     </Button>
                   </Link>
-                  <Link href="/dashboard">
-                    <Button className="bg-gradient-to-r from-crypto-accent to-crypto-primary hover:from-crypto-accent/90 hover:to-crypto-primary/90 text-white">
-                      Dashboard
-                    </Button>
-                  </Link>
+                  <Button 
+                    onClick={logout}
+                    className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white"
+                  >
+                    Logout
+                  </Button>
                 </>
               ) : (
                 <>
