@@ -417,9 +417,9 @@ export class WebSocketService {
               // Create fresh connection specifically for kline data
               console.log(`[UNIFIED WS SERVER] Creating fresh connection for ${symbols.join(',')} at ${requestedInterval}`);
               
-              // Use the existing setupKlineStream method which handles connection creation and subscription
+              // Create fresh kline connection directly
               try {
-                await this.setupKlineStream(symbols, requestedInterval);
+                await this.createNewKlineConnection(symbols, requestedInterval);
                 console.log(`[UNIFIED WS SERVER] Successfully established fresh kline connection for ${symbols.join(',')} ${requestedInterval}`);
                 this.isStreamsActive = true;
               } catch (error) {
@@ -694,6 +694,113 @@ export class WebSocketService {
       
     } catch (error) {
       console.error(`[WEBSOCKET] Error creating new connection:`, error);
+    }
+  }
+
+  private async createNewKlineConnection(symbols: string[], interval: string) {
+    // Close existing connection if any
+    if (this.binancePublicWs) {
+      this.binancePublicWs.close();
+      this.binancePublicWs = null;
+    }
+
+    // Get the exchange configuration for the WebSocket endpoint
+    try {
+      const { storage } = await import('./storage');
+      let baseUrl = 'wss://stream.binance.com:9443/ws/';
+      
+      const exchanges = await storage.getExchangesByUserId(1);
+      if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
+        const endpoint = exchanges[0].wsStreamEndpoint;
+        
+        if (endpoint.includes('testnet')) {
+          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
+        } else if (endpoint.includes('binance.com')) {
+          baseUrl = 'wss://stream.binance.com:9443/ws/';
+        } else {
+          baseUrl = 'wss://stream.testnet.binance.vision/ws/';
+        }
+      }
+
+      // Use combined stream endpoint for subscription-based WebSocket API
+      const subscriptionUrl = baseUrl.replace('/ws/', '/stream');
+      
+      console.log(`[UNIFIED WS SERVER] Creating kline connection to: ${subscriptionUrl}`);
+      
+      // Create WebSocket connection
+      this.binancePublicWs = new WebSocket(subscriptionUrl);
+      
+      this.binancePublicWs.on('open', () => {
+        console.log(`[UNIFIED WS SERVER] Connected to Binance stream: ${subscriptionUrl}`);
+        
+        // Subscribe to kline streams
+        const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
+        const subscribeMessage = {
+          method: 'SUBSCRIBE',
+          params: klineStreamPaths,
+          id: Date.now()
+        };
+        
+        console.log(`[UNIFIED WS SERVER] Subscribing to kline streams: ${klineStreamPaths.join(', ')}`);
+        this.binancePublicWs!.send(JSON.stringify(subscribeMessage));
+        this.currentKlineSubscriptions = klineStreamPaths;
+      });
+
+      this.binancePublicWs.on('message', (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+          
+          // Handle kline data
+          if (message.k) {
+            const klineData = {
+              symbol: message.k.s,
+              interval: message.k.i,
+              openTime: message.k.t,
+              closeTime: message.k.T,
+              open: parseFloat(message.k.o),
+              high: parseFloat(message.k.h),
+              low: parseFloat(message.k.l),
+              close: parseFloat(message.k.c),
+              volume: parseFloat(message.k.v),
+              isFinal: message.k.x
+            };
+            
+            this.broadcastKlineUpdate(klineData);
+          }
+        } catch (error) {
+          console.error('[BINANCE STREAM] Error parsing message:', error);
+        }
+      });
+
+      this.binancePublicWs.on('error', (error) => {
+        console.error('[BINANCE STREAM] WebSocket error:', error);
+      });
+
+      this.binancePublicWs.on('close', () => {
+        console.log('[BINANCE STREAM] WebSocket connection closed');
+        this.binancePublicWs = null;
+      });
+
+      // Wait for connection to establish
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Connection timeout'));
+        }, 5000);
+        
+        this.binancePublicWs!.once('open', () => {
+          clearTimeout(timeout);
+          resolve(true);
+        });
+        
+        this.binancePublicWs!.once('error', (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        });
+      });
+      
+    } catch (error) {
+      console.error(`[WEBSOCKET] Error creating kline connection:`, error);
+      throw error;
     }
   }
 
