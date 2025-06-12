@@ -322,7 +322,7 @@ export default function BotLogsPage() {
 
                 {/* System Logs */}
                 {viewMode === 'system' && systemLogs?.logs && (
-                  <pre className="text-xs font-mono whitespace-pre-wrap text-gray-800 dark:text-gray-200 leading-relaxed">
+                  <pre className="text-xs font-mono whitespace-pre-wrap text-gray-900 dark:text-gray-100 leading-relaxed">
                     {systemLogs.logs.join('\n')}
                   </pre>
                 )}
