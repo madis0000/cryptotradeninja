@@ -37,7 +37,9 @@ export function useChartWebSocket(
     setStatus('connecting');
     
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+    const hostname = window.location.hostname;
+    const wsPort = import.meta.env.VITE_WS_PORT || '8080';
+    const wsUrl = `${protocol}//${hostname}:${wsPort}/api/ws`;
     
     try {
       const ws = new WebSocket(wsUrl);
