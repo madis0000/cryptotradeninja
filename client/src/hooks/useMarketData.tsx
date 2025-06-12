@@ -19,19 +19,11 @@ export function useMarketData() {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const connect = () => {
-    // Skip WebSocket connection in development to avoid Vite HMR conflicts
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[MARKET WS] Skipping WebSocket connection in development mode');
-      setIsConnected(false);
-      return;
-    }
-    
     try {
-      // Connect to the existing WebSocket service on same port as HTTP server
+      // Connect to dedicated WebSocket server on port 5001 to avoid Vite HMR conflicts
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.hostname;
-      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-      const wsUrl = `${protocol}//${host}:${port}/ws`;
+      const wsUrl = `${protocol}//${host}:5001`;
       
       wsRef.current = new WebSocket(wsUrl);
 

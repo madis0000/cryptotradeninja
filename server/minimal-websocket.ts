@@ -1,26 +1,25 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { Server } from 'http';
 
 /**
  * Minimal WebSocket solution that eliminates port conflicts with Vite HMR
- * Uses HTTP upgrade handling instead of separate server instances
+ * Runs on dedicated port 5001 to avoid conflicting with Vite's WebSocket on port 5000
  */
 export class MinimalWebSocket {
   private wss: WebSocketServer;
   private connections = new Map<string, WebSocket>();
 
-  constructor(server: Server) {
-    // Create WebSocket server that uses HTTP upgrade instead of separate port
+  constructor() {
+    // Create WebSocket server on dedicated port to avoid Vite HMR conflicts
     this.wss = new WebSocketServer({ 
-      server: server,
-      path: '/ws',
+      port: 5001,
+      host: '0.0.0.0',
       // Prevent any port binding conflicts
       perMessageDeflate: false,
       maxPayload: 1024 * 1024 // 1MB limit
     });
 
     this.setupConnectionHandling();
-    console.log('[Minimal WS] WebSocket server attached to HTTP server on /ws path');
+    console.log('[Minimal WS] WebSocket server running on port 5001');
   }
 
   private setupConnectionHandling() {

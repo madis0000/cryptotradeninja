@@ -43,8 +43,8 @@ export class ReplitWebSocketService {
    */
   private getWebSocketUrl(): string {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    return `${protocol}//${host}/ws`;
+    const host = window.location.hostname;
+    return `${protocol}//${host}:5001`;
   }
 
   /**
@@ -92,12 +92,6 @@ export class ReplitWebSocketService {
    * Establish WebSocket connection with optimized settings
    */
   private async connect(connection: WebSocketConnection): Promise<void> {
-    // Skip WebSocket connections in development to avoid Vite HMR conflicts
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Replit WS] Skipping WebSocket connection in development mode (${connection.id})`);
-      return Promise.reject(new Error('Development mode - WebSocket disabled'));
-    }
-
     return new Promise((resolve, reject) => {
       const url = this.getWebSocketUrl();
       

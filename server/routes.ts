@@ -16,8 +16,8 @@ import * as path from "path";
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Initialize minimal WebSocket (eliminates port conflicts)
-  const wsManager = new MinimalWebSocket(httpServer);
+  // Initialize minimal WebSocket on separate port to avoid Vite HMR conflicts
+  const wsManager = new MinimalWebSocket();
   
   // Store reference for API routes
   (httpServer as any).wsManager = wsManager;
