@@ -19,8 +19,19 @@ export class AudioService {
   private initializeAudioContext() {
     try {
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Add click listener to initialize audio on first user interaction
+      const initAudio = async () => {
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+          await this.audioContext.resume();
+          console.log('[AUDIO] Audio context resumed after user interaction');
+        }
+        document.removeEventListener('click', initAudio);
+      };
+      
+      document.addEventListener('click', initAudio, { once: true });
     } catch (error) {
-      console.warn('Audio not supported in this browser:', error);
+      console.warn('[AUDIO] Audio not supported in this browser:', error);
     }
   }
 
@@ -127,16 +138,24 @@ export class AudioService {
   // Play sound
   public async playSound(soundName: string): Promise<void> {
     if (!this.audioContext) {
-      console.warn('Audio context not available');
+      console.warn('[AUDIO] Audio context not available');
       return;
     }
 
     try {
       // Resume audio context if suspended (due to autoplay policies)
       if (this.audioContext.state === 'suspended') {
+        console.log('[AUDIO] Resuming suspended audio context');
         await this.audioContext.resume();
       }
 
+      if (this.audioContext.state !== 'running') {
+        console.warn('[AUDIO] Audio context not running:', this.audioContext.state);
+        return;
+      }
+
+      console.log(`[AUDIO] Playing sound: ${soundName} at volume ${this.volume}`);
+      
       const buffer = await this.getSound(soundName);
       const source = this.audioContext.createBufferSource();
       const gainNode = this.audioContext.createGain();
@@ -148,8 +167,10 @@ export class AudioService {
       gainNode.connect(this.audioContext.destination);
       
       source.start();
+      
+      console.log(`[AUDIO] Sound ${soundName} started playing`);
     } catch (error) {
-      console.warn('Failed to play sound:', error);
+      console.error('[AUDIO] Failed to play sound:', error);
     }
   }
 

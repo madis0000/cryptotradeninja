@@ -21,9 +21,6 @@ import BotLogsPage from "@/pages/bot-logs";
 
 function AuthenticatedApp() {
   const { logout } = useAuth();
-  
-  // Initialize audio notifications
-  useOrderNotifications();
 
   return (
     <div className="min-h-screen bg-crypto-darker">

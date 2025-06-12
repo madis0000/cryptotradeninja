@@ -26,32 +26,60 @@ export function useOrderNotifications() {
 
   // Connect to WebSocket for order notifications
   const { lastMessage } = useUserWebSocket({
-    onMessage: async (data) => {
-      if (!settings || !data) return;
+    onMessage: async (message) => {
+      console.log('[AUDIO] Received WebSocket message:', message);
+      
+      if (!message) {
+        console.log('[AUDIO] No message received');
+        return;
+      }
+
+      if (!settings) {
+        console.log('[AUDIO] No settings available yet');
+        return;
+      }
 
       try {
-        // Handle order fill notifications
-        if (data.type === 'order_fill' && data.timestamp > lastNotificationRef.current) {
-          lastNotificationRef.current = data.timestamp;
+        // Handle order fill notifications - check for filled orders
+        if (message.type === 'order_notification') {
+          console.log('[AUDIO] Order notification received:', message.data);
           
-          // Determine order type based on the order data
-          let orderType: 'take_profit' | 'safety_order' | 'base_order' = 'safety_order';
-          
-          if (data.side === 'SELL') {
-            orderType = 'take_profit';
-          } else if (data.orderType === 'base_order' || data.isBaseOrder) {
-            orderType = 'base_order';
-          } else {
-            orderType = 'safety_order';
-          }
+          if (message.data?.status === 'filled') {
+            const data = message.data;
+            const timestamp = new Date(data.timestamp).getTime();
+            
+            console.log(`[AUDIO] Order filled! Timestamp: ${timestamp}, Last: ${lastNotificationRef.current}`);
+            
+            if (timestamp > lastNotificationRef.current) {
+              lastNotificationRef.current = timestamp;
+              
+              // Determine order type based on the order data
+              let orderType: 'take_profit' | 'safety_order' | 'base_order' = 'safety_order';
+              
+              if (data.side === 'SELL') {
+                orderType = 'take_profit';
+              } else if (data.orderType === 'base_order') {
+                orderType = 'base_order';
+              } else {
+                orderType = 'safety_order';
+              }
 
-          console.log(`[AUDIO] Playing ${orderType} notification sound`);
-          
-          // Play notification sound
-          await audioService.playOrderFillNotification(orderType, settings);
+              console.log(`[AUDIO] Playing ${orderType} notification sound for order ${data.orderId}`);
+              console.log('[AUDIO] Settings:', settings);
+              
+              // Play notification sound
+              await audioService.playOrderFillNotification(orderType, settings);
+            } else {
+              console.log('[AUDIO] Duplicate notification ignored');
+            }
+          } else {
+            console.log(`[AUDIO] Order status is ${message.data?.status}, not filled`);
+          }
+        } else {
+          console.log(`[AUDIO] Message type is ${message.type}, not order_notification`);
         }
       } catch (error) {
-        console.warn('[AUDIO] Failed to process order notification:', error);
+        console.error('[AUDIO] Failed to process order notification:', error);
       }
     }
   });

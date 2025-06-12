@@ -19,7 +19,7 @@ export function MyBotsPage() {
   const queryClient = useQueryClient();
 
   // Initialize order notifications and market data
-  useOrderNotifications();
+  const { playTestNotification } = useOrderNotifications();
   const marketData = useMarketData();
 
   // Utility functions for bot data calculations
