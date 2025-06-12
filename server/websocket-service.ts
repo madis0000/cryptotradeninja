@@ -388,13 +388,32 @@ export class WebSocketService {
               
               // Establish Binance connection if needed, then setup kline stream
               if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
-                console.log(`[UNIFIED WS SERVER] No Binance connection, establishing new connection for kline data`);
+                console.log(`[UNIFIED WS SERVER] Creating new Binance connection for kline data`);
                 this.isStreamsActive = true;
-                await this.connectConfigurableStream('kline', symbols, newInterval);
+                await this.createNewBinanceConnection(symbols);
+                // Wait for connection to establish
+                await new Promise(resolve => setTimeout(resolve, 200));
+              }
+              
+              // Now setup kline streams on the established connection
+              if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+                console.log(`[UNIFIED WS SERVER] Setting up kline subscription for ${symbols.join(', ')} at ${newInterval} interval`);
+                
+                // Subscribe to kline streams
+                const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${newInterval}`);
+                const subscribeMessage = {
+                  method: 'SUBSCRIBE',
+                  params: klineStreamPaths,
+                  id: Date.now()
+                };
+                
+                this.binancePublicWs.send(JSON.stringify(subscribeMessage));
+                this.currentKlineSubscriptions = klineStreamPaths;
+                
+                // Fetch historical data
+                await this.fetchHistoricalKlinesWS(symbols, newInterval);
               } else {
-                console.log(`[UNIFIED WS SERVER] Using existing Binance connection for kline stream`);
-                this.isStreamsActive = true;
-                await this.setupKlineStream(symbols, newInterval);
+                console.log(`[UNIFIED WS SERVER] Failed to establish connection for kline data`);
               }
               
               // Send historical data for the new interval
@@ -583,9 +602,17 @@ export class WebSocketService {
     
     this.connectionLock = true;
     try {
-      console.log(`[UNIFIED WS SERVER] Setting up kline stream for ${symbols.join(', ')} at ${interval} interval via unified connection`);
+      console.log(`[UNIFIED WS SERVER] Setting up kline stream for ${symbols.join(', ')} at ${interval} interval`);
       
-      // Only proceed if we have an active unified connection
+      // Create connection if not available
+      if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
+        console.log(`[UNIFIED WS SERVER] Creating new Binance connection for kline data`);
+        await this.createNewBinanceConnection(symbols);
+        // Wait a moment for connection to establish
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // Proceed with kline stream setup
       if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
         // Unsubscribe from old kline streams first
         if (this.currentKlineSubscriptions.length > 0) {
@@ -600,7 +627,7 @@ export class WebSocketService {
         // Fetch historical data before subscribing to real-time streams  
         await this.fetchHistoricalKlinesWS(symbols, interval);
         
-        // Subscribe to new kline streams via unified connection
+        // Subscribe to new kline streams
         const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
         const subscribeMessage = {
           method: 'SUBSCRIBE',
@@ -608,10 +635,11 @@ export class WebSocketService {
           id: Date.now()
         };
         
+        console.log(`[UNIFIED WS SERVER] Subscribing to kline streams:`, klineStreamPaths);
         this.binancePublicWs.send(JSON.stringify(subscribeMessage));
         this.currentKlineSubscriptions = klineStreamPaths;
       } else {
-        console.log(`[UNIFIED WS SERVER] Unified connection not available, kline stream setup skipped`);
+        console.log(`[UNIFIED WS SERVER] Connection establishment failed, kline stream setup aborted`);
       }
     } finally {
       this.connectionLock = false;
