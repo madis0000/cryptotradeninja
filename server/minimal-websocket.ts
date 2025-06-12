@@ -29,6 +29,9 @@ export class MinimalWebSocket {
       
       console.log(`[Minimal WS] Client ${clientId} connected`);
       
+      // Configure WebSocket settings for better stability
+      ws.binaryType = 'nodebuffer';
+      
       // Send immediate connection confirmation
       this.sendToClient(ws, {
         type: 'connected',
@@ -36,6 +39,18 @@ export class MinimalWebSocket {
         message: 'Connected to backend server',
         timestamp: Date.now()
       });
+
+      // Set up keepalive mechanism
+      const keepaliveInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          this.sendToClient(ws, {
+            type: 'keepalive',
+            timestamp: Date.now()
+          });
+        } else {
+          clearInterval(keepaliveInterval);
+        }
+      }, 30000); // Send keepalive every 30 seconds
 
       // Handle incoming messages
       ws.on('message', (data) => {
@@ -50,13 +65,20 @@ export class MinimalWebSocket {
       // Handle connection close
       ws.on('close', (code, reason) => {
         console.log(`[Minimal WS] Client ${clientId} disconnected: ${code}`);
+        clearInterval(keepaliveInterval);
         this.connections.delete(clientId);
       });
 
       // Handle errors
       ws.on('error', (error) => {
         console.error(`[Minimal WS] Client ${clientId} error:`, error);
+        clearInterval(keepaliveInterval);
         this.connections.delete(clientId);
+      });
+
+      // Handle pong responses
+      ws.on('pong', () => {
+        // Connection is alive, no action needed
       });
     });
   }
