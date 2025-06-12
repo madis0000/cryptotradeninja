@@ -31,6 +31,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Configure trust proxy for Replit environment
   app.set('trust proxy', true);
   
+  // Middleware to skip WebSocket routes from Express routing
+  app.use('/api/ws', (req, res, next) => {
+    if (req.headers.upgrade === 'websocket') {
+      // This is a WebSocket upgrade request, skip Express routing
+      return;
+    }
+    next();
+  });
+  
   // Security middleware
   app.use(helmet({
     contentSecurityPolicy: false, // Disable for development

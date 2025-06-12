@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div id="status">Disconnected</div>
+    <div id="messages"></div>
+
+    <script>
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const hostname = window.location.hostname;
+        const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+        const wsUrl = `${protocol}//${hostname}:${port}/api/ws`;
+        
+        console.log('Attempting to connect to:', wsUrl);
+        
+        const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = function(event) {
+            console.log('WebSocket connected successfully');
+            document.getElementById('status').innerText = 'Connected';
+            ws.send(JSON.stringify({
+                type: 'subscribe',
+                symbols: ['BTCUSDT']
+            }));
+        };
+        
+        ws.onmessage = function(event) {
+            console.log('Received:', event.data);
+            const messages = document.getElementById('messages');
+            messages.innerHTML += '<div>' + event.data + '</div>';
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            console.error('Error details:', {
+                readyState: ws.readyState,
+                url: ws.url,
+                protocol: ws.protocol
+            });
+            document.getElementById('status').innerText = 'Error';
+        };
+        
+        ws.onclose = function(event) {
+            console.log('WebSocket closed:', event.code, event.reason);
+            document.getElementById('status').innerText = 'Closed - Code: ' + event.code;
+        };
+    </script>
+</body>
+</html>

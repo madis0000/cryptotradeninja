@@ -79,6 +79,11 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     ws.onerror = (error) => {
       console.error('[CLIENT WS] Connection error:', error);
+      console.error('[CLIENT WS] Error details:', {
+        readyState: ws.readyState,
+        url: ws.url,
+        protocol: ws.protocol
+      });
       setStatus('error');
       options.onError?.(error);
     };
