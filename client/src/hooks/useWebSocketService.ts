@@ -13,6 +13,7 @@ interface PublicWebSocketService {
   connect: (symbols?: string[]) => void;
   disconnect: () => void;
   subscribe: (symbols: string[]) => void;
+  sendMessage: (message: any) => void;
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
   lastMessage: any;
 }
@@ -155,6 +156,12 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     }
   }, []);
 
+  const sendMessage = useCallback((message: any) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(message));
+    }
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -167,6 +174,7 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     connect,
     disconnect,
     subscribe,
+    sendMessage,
     status,
     lastMessage
   };

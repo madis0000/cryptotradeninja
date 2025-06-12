@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { usePublicWebSocket } from './useWebSocketService';
 
 interface ChartWebSocketOptions {
   onKlineUpdate?: (data: any) => void;
@@ -22,130 +23,77 @@ export function useChartWebSocket(
   initialInterval: string = '1m',
   options: ChartWebSocketOptions = {}
 ): ChartWebSocketService {
-  const wsRef = useRef<WebSocket | null>(null);
-  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [currentSymbol, setCurrentSymbol] = useState(initialSymbol);
   const [currentInterval, setCurrentInterval] = useState(initialInterval);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const { onKlineUpdate, onConnect, onDisconnect, onError } = options;
 
+  // Use the unified WebSocket service instead of creating a separate connection
+  const publicWs = usePublicWebSocket({
+    onMessage: (data) => {
+      try {
+        if (data.type === 'kline_update' && onKlineUpdate) {
+          console.log('[CHART] Received message:', data);
+          onKlineUpdate(data);
+        }
+      } catch (error) {
+        console.error('[CHART] Error processing kline update:', error);
+      }
+    },
+    onConnect: () => {
+      console.log('[CHART] Connected to kline WebSocket server');
+      if (onConnect) onConnect();
+    },
+    onDisconnect: () => {
+      console.log('[CHART] Disconnected from kline WebSocket server');
+      if (onDisconnect) onDisconnect();
+    },
+    onError: (error) => {
+      console.error('[CHART] WebSocket error:', error);
+      if (onError) onError(error);
+    }
+  });
+
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return; // Already connected
-    }
-
-    setStatus('connecting');
+    console.log(`[CHART] Connecting to unified WebSocket service for ${currentSymbol} ${currentInterval}`);
+    publicWs.connect([currentSymbol]);
     
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const hostname = window.location.hostname;
-    const wsPort = import.meta.env.VITE_WS_PORT || '8080';
-    const wsUrl = `${protocol}//${hostname}:${wsPort}/api/ws`;
-    
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log(`[CHART] Connected to WebSocket for chart data`);
-        setStatus('connected');
-        onConnect?.();
-        
-        // Send initial connection message
-        ws.send(JSON.stringify({
-          type: 'connected',
-          clientId: 'chart_klines',
-          message: 'Chart component requesting kline data'
-        }));
-        
-        // Configure stream with current symbol and interval
-        setTimeout(() => {
-          const configMessage = {
-            type: 'configure_stream',
-            dataType: 'kline',
-            symbols: [currentSymbol],
-            interval: currentInterval
-          };
-          console.log('[CHART] Sending configure_stream message:', configMessage);
-          ws.send(JSON.stringify(configMessage));
-        }, 100);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          console.log('[CHART] Received message:', message);
-          
-          if (message.type === 'kline_update') {
-            onKlineUpdate?.(message.data);
-          } else if (message.type === 'historical_klines') {
-            console.log(`[CHART] Received ${message.data.klines.length} historical klines for ${message.data.symbol} ${message.data.interval}`);
-            // Process each historical kline as individual updates
-            message.data.klines.forEach((kline: any) => {
-              onKlineUpdate?.(kline);
-            });
-          }
-        } catch (error) {
-          console.error('[CHART] Error parsing WebSocket message:', error);
-        }
-      };
-
-      ws.onclose = (event) => {
-        console.log(`[CHART] WebSocket disconnected - Code: ${event.code}, Reason: ${event.reason}`);
-        setStatus('disconnected');
-        wsRef.current = null;
-        onDisconnect?.();
-        
-        // Auto-reconnect after a delay if not intentionally closed
-        if (event.code !== 1000) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-          }, 3000);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('[CHART] WebSocket error:', error);
-        setStatus('error');
-        onError?.(error);
-      };
-
-    } catch (error) {
-      console.error('[CHART] Failed to create WebSocket connection:', error);
-      setStatus('error');
+    // Send kline subscription message through unified service
+    if (publicWs.status === 'connected') {
+      publicWs.sendMessage?.({
+        type: 'configure_stream',
+        dataType: 'kline',
+        symbols: [currentSymbol],
+        interval: currentInterval
+      });
     }
-  }, [currentSymbol, currentInterval, onConnect, onDisconnect, onError, onKlineUpdate]);
+  }, [currentSymbol, currentInterval, publicWs]);
 
   const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
-    
-    if (wsRef.current) {
-      wsRef.current.close(1000, 'Manual disconnect');
-      wsRef.current = null;
-    }
-    setStatus('disconnected');
-  }, []);
+    console.log('[CHART] Disconnecting from unified WebSocket service');
+    publicWs.disconnect();
+  }, [publicWs]);
 
   const changeSymbol = useCallback((symbol: string) => {
     console.log(`[CHART] Changing symbol to ${symbol}`);
     setCurrentSymbol(symbol);
     
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
+    // Send configuration update through unified service
+    if (publicWs.status === 'connected') {
+      publicWs.sendMessage?.({
         type: 'configure_stream',
         dataType: 'kline',
         symbols: [symbol],
         interval: currentInterval
-      }));
+      });
     }
-  }, [currentInterval]);
+  }, [currentInterval, publicWs]);
 
   const changeInterval = useCallback((interval: string) => {
     console.log(`[CHART] Changing interval from ${currentInterval} to ${interval}`);
     setCurrentInterval(interval);
     
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // Send configuration update through unified service
+    if (publicWs.status === 'connected') {
       const configMessage = {
         type: 'configure_stream',
         dataType: 'kline',
@@ -153,23 +101,36 @@ export function useChartWebSocket(
         interval: interval
       };
       console.log('[CHART] Sending interval change configuration:', configMessage);
-      wsRef.current.send(JSON.stringify(configMessage));
+      publicWs.sendMessage?.(configMessage);
     }
-  }, [currentSymbol, currentInterval]);
+  }, [currentSymbol, currentInterval, publicWs]);
 
-  // Cleanup on unmount
+  // Auto-connect when component mounts
   useEffect(() => {
+    connect();
     return () => {
       disconnect();
     };
-  }, [disconnect]);
+  }, []);
+
+  // Reconfigure when symbol or interval changes
+  useEffect(() => {
+    if (publicWs.status === 'connected') {
+      publicWs.sendMessage?.({
+        type: 'configure_stream',
+        dataType: 'kline',
+        symbols: [currentSymbol],
+        interval: currentInterval
+      });
+    }
+  }, [currentSymbol, currentInterval, publicWs]);
 
   return {
     connect,
     disconnect,
     changeSymbol,
     changeInterval,
-    status,
+    status: publicWs.status,
     currentSymbol,
     currentInterval
   };
