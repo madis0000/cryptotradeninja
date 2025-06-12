@@ -44,7 +44,7 @@ export class ReplitWebSocketService {
   private getWebSocketUrl(): string {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
-    return `${protocol}//${host}:5001`;
+    return `${protocol}//${host}:8080`;
   }
 
   /**

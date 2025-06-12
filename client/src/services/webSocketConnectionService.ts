@@ -79,9 +79,9 @@ export class WebSocketConnectionService {
     if (!connection) return;
 
     try {
-      // Connect to dedicated WebSocket server on port 5001
+      // Connect to dedicated WebSocket server on port 8080
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.hostname}:5001`;
+      const wsUrl = `${protocol}//${window.location.hostname}:8080`;
       
       console.log(`[WS Connection] Connecting to ${wsUrl} (${connectionId})`);
       

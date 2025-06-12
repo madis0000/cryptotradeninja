@@ -11,7 +11,7 @@ export class MinimalWebSocket {
   constructor() {
     // Create WebSocket server on dedicated port to avoid Vite HMR conflicts
     this.wss = new WebSocketServer({ 
-      port: 5001,
+      port: 8080,
       host: '0.0.0.0',
       // Prevent any port binding conflicts
       perMessageDeflate: false,
@@ -19,7 +19,7 @@ export class MinimalWebSocket {
     });
 
     this.setupConnectionHandling();
-    console.log('[Minimal WS] WebSocket server running on port 5001');
+    console.log('[Minimal WS] WebSocket server running on port 8080');
   }
 
   private setupConnectionHandling() {
