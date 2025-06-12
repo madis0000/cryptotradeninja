@@ -467,26 +467,17 @@ export default function Settings() {
                   <span className="text-xs font-medium text-crypto-light">Connection Status</span>
                   <div className="flex items-center space-x-1">
                     <div className={`w-2 h-2 rounded-full ${
-                      publicWs.status === 'connected' ? 'bg-crypto-success animate-pulse' :
-                      publicWs.status === 'connecting' ? 'bg-yellow-500 animate-pulse' :
-                      publicWs.status === 'error' ? 'bg-crypto-danger' :
-                      'bg-gray-500'
+                      wsConnected ? 'bg-crypto-success animate-pulse' : 'bg-gray-500'
                     }`}></div>
                     <span className={`text-xs ${
-                      publicWs.status === 'connected' ? 'text-crypto-success' :
-                      publicWs.status === 'connecting' ? 'text-yellow-500' :
-                      publicWs.status === 'error' ? 'text-crypto-danger' :
-                      'text-gray-500'
+                      wsConnected ? 'text-crypto-success' : 'text-gray-500'
                     }`}>
-                      {publicWs.status === 'connected' ? 'Connected' :
-                       publicWs.status === 'connecting' ? 'Connecting' :
-                       publicWs.status === 'error' ? 'Error' :
-                       'Disconnected'}
+                      {wsConnected ? 'Connected' : 'Disconnected'}
                     </span>
                   </div>
                 </div>
                 <div className="text-xs text-crypto-light/70 font-mono bg-black/30 p-2 rounded max-h-24 overflow-y-auto">
-                  {publicWs.lastMessage ? JSON.stringify(publicWs.lastMessage, null, 2) : 'Select an exchange account and test connection to receive live market data...'}
+                  {wsConnected ? 'Connected to unified trading stream' : 'Select an exchange account and test connection to receive live market data...'}
                 </div>
               </div>
             </div>
@@ -506,10 +497,10 @@ export default function Settings() {
                   size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
                   onClick={testUserWebSocket}
-                  disabled={userWs.status === 'connecting' || !selectedExchangeId}
+                  disabled={!wsConnected || !selectedExchangeId}
                 >
-                  <i className={`${userWs.status === 'connecting' ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
-                  {userWs.status === 'connecting' ? 'Connecting...' : 'Test Connection'}
+                  <i className={`${!wsConnected ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
+                  {!wsConnected ? 'Connecting...' : 'Test Connection'}
                 </Button>
               </div>
               
@@ -518,26 +509,20 @@ export default function Settings() {
                   <span className="text-xs font-medium text-crypto-light">Connection Status</span>
                   <div className="flex items-center space-x-1">
                     <div className={`w-2 h-2 rounded-full ${
-                      userWs.status === 'connected' ? 'bg-crypto-success animate-pulse' :
-                      userWs.status === 'connecting' ? 'bg-yellow-500 animate-pulse' :
-                      userWs.status === 'error' ? 'bg-crypto-danger' :
+                      wsConnected ? 'bg-crypto-success animate-pulse' :
                       selectedExchangeId ? 'bg-yellow-500' : 'bg-gray-500'
                     }`}></div>
                     <span className={`text-xs ${
-                      userWs.status === 'connected' ? 'text-crypto-success' :
-                      userWs.status === 'connecting' ? 'text-yellow-500' :
-                      userWs.status === 'error' ? 'text-crypto-danger' :
+                      wsConnected ? 'text-crypto-success' :
                       selectedExchangeId ? 'text-yellow-500' : 'text-gray-500'
                     }`}>
-                      {userWs.status === 'connected' ? 'Connected' :
-                       userWs.status === 'connecting' ? 'Connecting' :
-                       userWs.status === 'error' ? 'Connection Error' :
+                      {wsConnected ? 'Connected' :
                        selectedExchangeId ? 'Ready to Connect' : 'Select Exchange Account'}
                     </span>
                   </div>
                 </div>
                 <div className="text-xs text-crypto-light/70 font-mono bg-black/30 p-2 rounded max-h-24 overflow-y-auto">
-                  {userWs.lastMessage ? JSON.stringify(userWs.lastMessage, null, 2) : 'Select an exchange account and test connection to receive authenticated data...'}
+                  {wsConnected ? 'Connected to unified trading stream' : 'Select an exchange account and test connection to receive authenticated data...'}
                 </div>
               </div>
             </div>
