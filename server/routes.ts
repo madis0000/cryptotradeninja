@@ -21,18 +21,19 @@ let wsService: WebSocketService;
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Initialize WebSocket service using centralized config
-  if (config.isProduction) {
-    // In production, use the same HTTP server for WebSocket to avoid port conflicts
-    wsService = new WebSocketService(httpServer);
-  } else {
-    // In development, use dedicated port to avoid Vite HMR conflicts
+  // Initialize WebSocket service with deployment-aware configuration
+  if (config.websocket.useSeparatePort && !config.isDeployment) {
+    // Development mode with separate WebSocket port to avoid Vite HMR conflicts
     const wsServer = createServer();
     wsService = new WebSocketService(wsServer);
     
     wsServer.listen(config.wsPort, config.host, () => {
       console.log(`[WEBSOCKET] Trading WebSocket server listening on port ${config.wsPort}`);
     });
+  } else {
+    // Production/deployment mode - use same HTTP server for WebSocket
+    console.log(`[WEBSOCKET] Using shared HTTP server for WebSocket on port ${config.port}`);
+    wsService = new WebSocketService(httpServer);
   }
   
   // All market data is now handled by the unified WebSocket server

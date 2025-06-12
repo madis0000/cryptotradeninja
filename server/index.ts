@@ -48,17 +48,18 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
+  // Setup Vite in development or serve static files in production
+  if (config.isDevelopment && !config.isDeployment) {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // Use centralized config for deployment compatibility
+  // Start server with proper deployment configuration
   server.listen(config.port, config.host, () => {
-    log(`serving on port ${config.port}`);
+    log(`Server running on ${config.host}:${config.port}`);
+    log(`Environment: ${config.isProduction ? 'production' : 'development'}`);
+    log(`Deployment mode: ${config.isDeployment ? 'enabled' : 'disabled'}`);
+    log(`WebSocket: ${config.websocket.useSeparatePort ? `separate port ${config.wsPort}` : `shared port ${config.port}`}`);
   });
 })();

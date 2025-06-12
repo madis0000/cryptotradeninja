@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { symbolFilterService, SymbolFilters } from './symbol-filters';
 import { getBinanceSymbolFilters, adjustPrice, adjustQuantity } from './binance-filters';
 import { BotLoggerManager } from './bot-logger';
+import config from './config';
 
 interface UserConnection {
   ws: WebSocket;
@@ -94,22 +95,25 @@ export class WebSocketService {
   private pendingCycleStarts = new Map<number, NodeJS.Timeout>(); // botId -> timeout handle
 
   constructor(server: Server) {
-    // WebSocket server attached to the same HTTP server (port 5000)
-    // Using strict path filtering to avoid conflicts with Vite HMR
+    // WebSocket server configuration for deployment compatibility
+    const wsPath = config.websocket.path;
+    console.log(`[WEBSOCKET] Initializing WebSocket server on path: ${wsPath}`);
+    console.log(`[WEBSOCKET] Deployment mode: ${config.isDeployment ? 'enabled' : 'disabled'}`);
+    console.log(`[WEBSOCKET] Production mode: ${config.isProduction ? 'enabled' : 'disabled'}`);
+    
     this.wss = new WebSocketServer({ 
       server: server,
-      path: '/api/ws',
+      path: wsPath,
       perMessageDeflate: false,
       maxPayload: 16 * 1024 * 1024,
       verifyClient: (info: any) => {
         // Allow connections to our specific trading WebSocket path
-        const isValidPath = info.req.url === '/api/ws';
-        console.log(`[UNIFIED WS SERVER] Connection attempt - URL: ${info.req.url}, Valid: ${isValidPath}`);
-        console.log(`[UNIFIED WS SERVER] Headers:`, info.req.headers);
+        const isValidPath = info.req.url === wsPath;
+        console.log(`[WEBSOCKET] Connection attempt - URL: ${info.req.url}, Valid: ${isValidPath}`);
         if (!isValidPath) {
-          console.log(`[UNIFIED WS SERVER] Rejecting connection to invalid path: ${info.req.url}`);
+          console.log(`[WEBSOCKET] Rejecting connection to invalid path: ${info.req.url}`);
         } else {
-          console.log(`[UNIFIED WS SERVER] Accepting connection to: ${info.req.url}`);
+          console.log(`[WEBSOCKET] Accepting connection to: ${info.req.url}`);
         }
         return isValidPath;
       }
