@@ -1,0 +1,135 @@
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { usePublicWebSocket } from "@/hooks/useWebSocketService";
+
+export default function WebSocketTest() {
+  const [messages, setMessages] = useState<string[]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<string>('disconnected');
+
+  const publicWs = usePublicWebSocket({
+    onMessage: (data) => {
+      const timestamp = new Date().toLocaleTimeString();
+      setMessages(prev => [...prev.slice(-9), `${timestamp}: ${JSON.stringify(data)}`]);
+    },
+    onConnect: () => {
+      setConnectionStatus('connected');
+      const timestamp = new Date().toLocaleTimeString();
+      setMessages(prev => [...prev, `${timestamp}: WebSocket Connected Successfully`]);
+    },
+    onDisconnect: () => {
+      setConnectionStatus('disconnected');
+      const timestamp = new Date().toLocaleTimeString();
+      setMessages(prev => [...prev, `${timestamp}: WebSocket Disconnected`]);
+    },
+    onError: (error) => {
+      setConnectionStatus('error');
+      const timestamp = new Date().toLocaleTimeString();
+      setMessages(prev => [...prev, `${timestamp}: WebSocket Error`]);
+    }
+  });
+
+  const handleConnect = () => {
+    publicWs.connect(['BTCUSDT']);
+  };
+
+  const handleDisconnect = () => {
+    publicWs.disconnect();
+  };
+
+  const handleSubscribe = () => {
+    publicWs.subscribe(['ETHUSDT', 'ADAUSDT']);
+  };
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-white mb-6">WebSocket Connection Test</h1>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Connection Controls */}
+          <Card className="bg-crypto-dark border-gray-800">
+            <CardHeader>
+              <CardTitle className="text-white">Connection Controls</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-crypto-light">Status:</span>
+                <span className={`font-medium ${
+                  connectionStatus === 'connected' ? 'text-green-400' :
+                  connectionStatus === 'error' ? 'text-red-400' : 'text-gray-400'
+                }`}>
+                  {connectionStatus.toUpperCase()}
+                </span>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleConnect}
+                  disabled={connectionStatus === 'connected'}
+                  className="bg-crypto-accent hover:bg-crypto-accent/80"
+                >
+                  Connect
+                </Button>
+                <Button 
+                  onClick={handleDisconnect}
+                  disabled={connectionStatus === 'disconnected'}
+                  variant="outline"
+                >
+                  Disconnect
+                </Button>
+                <Button 
+                  onClick={handleSubscribe}
+                  disabled={connectionStatus !== 'connected'}
+                  variant="secondary"
+                >
+                  Subscribe
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Connection Messages */}
+          <Card className="bg-crypto-dark border-gray-800">
+            <CardHeader>
+              <CardTitle className="text-white">Live Messages</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64 overflow-y-auto bg-black/20 rounded p-2 space-y-1">
+                {messages.length === 0 ? (
+                  <div className="text-gray-500 text-center py-8">
+                    No messages yet. Click Connect to start.
+                  </div>
+                ) : (
+                  messages.map((msg, index) => (
+                    <div key={index} className="text-xs text-crypto-light font-mono">
+                      {msg}
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Technical Information */}
+        <Card className="bg-crypto-dark border-gray-800 mt-6">
+          <CardHeader>
+            <CardTitle className="text-white">Technical Information</CardTitle>
+          </CardHeader>
+          <CardContent className="text-crypto-light text-sm space-y-2">
+            <div>
+              <strong>WebSocket URL:</strong> {window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//{window.location.hostname}:{window.location.port || '80'}/api/ws
+            </div>
+            <div>
+              <strong>Current Status:</strong> {publicWs.status}
+            </div>
+            <div>
+              <strong>Last Message:</strong> {publicWs.lastMessage ? JSON.stringify(publicWs.lastMessage).slice(0, 100) + '...' : 'None'}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
