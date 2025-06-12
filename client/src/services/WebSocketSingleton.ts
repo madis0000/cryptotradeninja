@@ -21,14 +21,29 @@ class WebSocketSingleton {
   }
 
   public connect(symbols?: string[]): void {
+    // Prevent multiple connections more aggressively
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('[WS SINGLETON] Already connected');
       return;
     }
 
-    if (this.status === 'connecting') {
-      console.log('[WS SINGLETON] Connection already in progress');
+    if (this.ws?.readyState === WebSocket.CONNECTING) {
+      console.log('[WS SINGLETON] Connection already in progress (WebSocket CONNECTING)');
       return;
+    }
+
+    if (this.status === 'connecting') {
+      console.log('[WS SINGLETON] Connection already in progress (status CONNECTING)');
+      return;
+    }
+
+    // Close any existing broken connection
+    if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
+      try {
+        this.ws.close();
+      } catch (e) {
+        console.warn('[WS SINGLETON] Error closing existing connection:', e);
+      }
     }
 
     this.status = 'connecting';
