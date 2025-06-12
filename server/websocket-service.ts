@@ -414,29 +414,16 @@ export class WebSocketService {
               // Wait for connection to fully close
               await new Promise(resolve => setTimeout(resolve, 300));
               
-              // Create fresh connection with only the new subscription
+              // Create fresh connection specifically for kline data
               console.log(`[UNIFIED WS SERVER] Creating fresh connection for ${symbols.join(',')} at ${requestedInterval}`);
-              await this.createNewBinanceConnection(symbols);
-              await new Promise(resolve => setTimeout(resolve, 200));
               
-              // Setup clean kline subscription
-              if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
-                const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${requestedInterval}`);
-                console.log(`[UNIFIED WS SERVER] Setting up fresh kline subscription: ${klineStreamPaths.join(', ')}`);
-                
-                const subscribeMessage = {
-                  method: 'SUBSCRIBE',
-                  params: klineStreamPaths,
-                  id: Date.now()
-                };
-                
-                this.binancePublicWs.send(JSON.stringify(subscribeMessage));
-                this.currentKlineSubscriptions = klineStreamPaths;
+              // Use the existing setupKlineStream method which handles connection creation and subscription
+              try {
+                await this.setupKlineStream(symbols, requestedInterval);
+                console.log(`[UNIFIED WS SERVER] Successfully established fresh kline connection for ${symbols.join(',')} ${requestedInterval}`);
                 this.isStreamsActive = true;
-                
-                // Fetch historical data for new subscription
-                await this.fetchHistoricalKlinesWS(symbols, requestedInterval);
-              } else {
+              } catch (error) {
+                console.error(`[UNIFIED WS SERVER] Error establishing fresh kline connection:`, error);
                 console.log(`[UNIFIED WS SERVER] Failed to establish fresh connection for kline data`);
               }
               
