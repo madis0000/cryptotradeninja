@@ -749,9 +749,17 @@ export class WebSocketService {
       this.binancePublicWs.on('message', (data) => {
         try {
           const message = JSON.parse(data.toString());
+          console.log(`[KLINE CONNECTION] Received message:`, JSON.stringify(message).substring(0, 200) + '...');
+          
+          // Handle subscription confirmation
+          if (message.result === null && message.id) {
+            console.log(`[KLINE CONNECTION] Subscription confirmed for ID: ${message.id}`);
+            return;
+          }
           
           // Handle kline data
           if (message.k) {
+            console.log(`[KLINE CONNECTION] Processing kline data for ${message.k.s} ${message.k.i}`);
             const klineData = {
               symbol: message.k.s,
               interval: message.k.i,
@@ -766,6 +774,8 @@ export class WebSocketService {
             };
             
             this.broadcastKlineUpdate(klineData);
+          } else {
+            console.log(`[KLINE CONNECTION] Received non-kline message:`, message);
           }
         } catch (error) {
           console.error('[BINANCE STREAM] Error parsing message:', error);
