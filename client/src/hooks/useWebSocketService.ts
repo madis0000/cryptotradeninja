@@ -275,3 +275,79 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     lastMessage
   };
 }
+
+// User WebSocket interface (for authenticated connections)
+interface UserWebSocketService {
+  connect: (apiKey?: string) => void;
+  disconnect: () => void;
+  authenticate: (userId: number, apiKey?: string) => void;
+  sendMessage: (message: any) => void;
+  status: WebSocketStatus;
+  lastMessage: any;
+}
+
+export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSocketService {
+  const [lastMessage, setLastMessage] = useState<any>(null);
+  const webSocket = useWebSocketService();
+
+  const handleMessage = useCallback((data: any) => {
+    setLastMessage(data);
+    
+    // Handle authentication responses
+    if (data.type === 'authenticated') {
+      options.onConnect?.();
+    } else if (data.type === 'error') {
+      options.onError?.(new Event(data.message));
+    } else {
+      options.onMessage?.(data);
+      
+      // Emit custom event for order notifications to enable audio notifications
+      if (data.type === 'order_notification') {
+        window.dispatchEvent(new CustomEvent('websocket-message', { detail: data }));
+      }
+    }
+  }, [options]);
+
+  const connect = useCallback((apiKey?: string) => {
+    webSocket.connect({
+      onMessage: handleMessage,
+      onConnect: () => {
+        // Auto-authenticate when connected if we have user context
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (user?.id) {
+          authenticate(user.id, apiKey);
+        }
+      },
+      onDisconnect: options.onDisconnect,
+      onError: options.onError
+    });
+  }, [webSocket, handleMessage, options]);
+
+  const authenticate = useCallback((userId: number, apiKey?: string) => {
+    if (webSocket.isConnected) {
+      webSocket.sendMessage({
+        type: 'authenticate',
+        userId,
+        apiKey
+      });
+    }
+  }, [webSocket]);
+
+  const sendMessage = useCallback((message: any) => {
+    if (webSocket.isConnected) {
+      console.log('[USER WS] Sending message:', message);
+      webSocket.sendMessage(message);
+    } else {
+      console.error('[USER WS] Cannot send message - WebSocket not connected');
+    }
+  }, [webSocket]);
+
+  return {
+    connect,
+    disconnect: webSocket.disconnect,
+    authenticate,
+    sendMessage,
+    status: webSocket.status,
+    lastMessage
+  };
+}
