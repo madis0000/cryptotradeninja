@@ -104,12 +104,12 @@ export class WebSocketService {
       verifyClient: (info: any) => {
         // Allow connections to our specific trading WebSocket path
         const isValidPath = info.req.url === '/api/ws';
-        console.log(`[WEBSOCKET] Connection attempt - URL: ${info.req.url}, Valid: ${isValidPath}`);
-        console.log(`[WEBSOCKET] Headers:`, info.req.headers);
+        console.log(`[UNIFIED WS SERVER] Connection attempt - URL: ${info.req.url}, Valid: ${isValidPath}`);
+        console.log(`[UNIFIED WS SERVER] Headers:`, info.req.headers);
         if (!isValidPath) {
-          console.log(`[WEBSOCKET] Rejecting connection to invalid path: ${info.req.url}`);
+          console.log(`[UNIFIED WS SERVER] Rejecting connection to invalid path: ${info.req.url}`);
         } else {
-          console.log(`[WEBSOCKET] Accepting connection to: ${info.req.url}`);
+          console.log(`[UNIFIED WS SERVER] Accepting connection to: ${info.req.url}`);
         }
         return isValidPath;
       }
@@ -571,7 +571,7 @@ export class WebSocketService {
     
     this.connectionLock = true;
     try {
-      console.log(`[WEBSOCKET] Setting up kline stream for ${symbols.join(', ')} at ${interval} interval via unified connection`);
+      console.log(`[UNIFIED WS SERVER] Setting up kline stream for ${symbols.join(', ')} at ${interval} interval via unified connection`);
       
       // Only proceed if we have an active unified connection
       if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
@@ -599,7 +599,7 @@ export class WebSocketService {
         this.binancePublicWs.send(JSON.stringify(subscribeMessage));
         this.currentKlineSubscriptions = klineStreamPaths;
       } else {
-        console.log(`[WEBSOCKET] Unified connection not available, kline stream setup skipped`);
+        console.log(`[UNIFIED WS SERVER] Unified connection not available, kline stream setup skipped`);
       }
     } finally {
       this.connectionLock = false;

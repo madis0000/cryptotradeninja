@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { usePublicWebSocket } from './useWebSocketService';
+import { webSocketSingleton } from '../services/WebSocketSingleton';
 
 interface MarketData {
   symbol: string;
@@ -14,10 +14,11 @@ interface MarketData {
 
 export function useMarketData() {
   const [marketData, setMarketData] = useState<MarketData[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
   
-  // Use the centralized WebSocket service instead of creating a separate connection
-  const publicWs = usePublicWebSocket({
-    onMessage: (data) => {
+  // Use singleton WebSocket service to prevent multiple connections
+  useEffect(() => {
+    const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
       try {
         if (data.type === 'market_update' || data.type === 'ticker_update') {
           const update = data.data || data;
@@ -46,35 +47,43 @@ export function useMarketData() {
       } catch (error) {
         console.error('[MARKET WS] Error processing market update:', error);
       }
-    },
-    onConnect: () => {
-      console.log('[MARKET WS] Connected to centralized WebSocket service');
-    },
-    onDisconnect: () => {
-      console.log('[MARKET WS] Disconnected from centralized WebSocket service');
-    }
-  });
+    });
 
-  useEffect(() => {
-    // Subscribe to market data when component mounts
-    const symbols = ['DOGEUSDT', 'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'SOLUSDT', 'DOTUSDT', 'LINKUSDT', 'AVAXUSDT', 'ICPUSDT', '1INCHUSDT'];
-    
-    console.log('[MARKET WS] Subscribing to market data for symbols:', symbols);
-    publicWs.connect(symbols);
-    publicWs.subscribe(symbols);
+    const unsubscribeConnect = webSocketSingleton.onConnect(() => {
+      setIsConnected(true);
+      console.log('[MARKET WS] Connected to centralized WebSocket service');
+    });
+
+    const unsubscribeDisconnect = webSocketSingleton.onDisconnect(() => {
+      setIsConnected(false);
+      console.log('[MARKET WS] Disconnected from centralized WebSocket service');
+    });
+
+    // Auto-connect and subscribe to market symbols
+    if (!webSocketSingleton.isConnected()) {
+      const defaultSymbols = ['DOGEUSDT', 'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'SOLUSDT', 'DOTUSDT', 'LINKUSDT', 'AVAXUSDT', 'ICPUSDT', '1INCHUSDT'];
+      webSocketSingleton.connect(defaultSymbols);
+    }
 
     return () => {
-      publicWs.disconnect();
+      unsubscribeData();
+      unsubscribeConnect();
+      unsubscribeDisconnect();
     };
   }, []);
 
-  const getSymbolData = (symbol: string): MarketData | null => {
-    return marketData.find(item => item.symbol === symbol) || null;
+  const connectToMarketData = (symbols: string[]) => {
+    webSocketSingleton.connect(symbols);
+  };
+
+  const disconnectFromMarketData = () => {
+    webSocketSingleton.disconnect();
   };
 
   return {
     marketData,
-    isConnected: publicWs.status === 'connected',
-    getSymbolData
+    isConnected,
+    connectToMarketData,
+    disconnectFromMarketData
   };
 }
