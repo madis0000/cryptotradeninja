@@ -34,7 +34,9 @@ export function useChartWebSocket(
       try {
         if (data.type === 'kline_update' && onKlineUpdate) {
           console.log('[CHART] Received kline update:', data);
-          onKlineUpdate(data);
+          // Extract the actual kline data from the message
+          const klineData = data.data || data;
+          onKlineUpdate(klineData);
         }
       } catch (error) {
         console.error('[CHART] Error processing kline update:', error);

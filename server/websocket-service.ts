@@ -1173,6 +1173,7 @@ export class WebSocketService {
               };
 
               this.marketData.set(symbol, marketUpdate);
+              console.log(`[BINANCE STREAM] Broadcasting market update: ${symbol} = $${marketUpdate.price}`);
               this.broadcastMarketUpdate(marketUpdate);
             }
           }
