@@ -89,16 +89,30 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     setStatus('connecting');
     
-    // Connect to backend WebSocket server (dedicated port for trading)
+    // Smart WebSocket endpoint configuration for deployment compatibility
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const wsPort = import.meta.env.VITE_WS_PORT || '8080';
-    const ws = new WebSocket(`${protocol}//${hostname}:${wsPort}/api/ws`);
+    
+    // In production/deployment, use same port as HTTP server
+    // In development, use dedicated WebSocket port
+    let wsUrl: string;
+    if (import.meta.env.PROD || hostname.includes('.replit.app') || hostname.includes('repl.co')) {
+      // Production deployment - use same port as web server
+      const port = window.location.port || (protocol === 'wss:' ? '443' : '80');
+      wsUrl = `${protocol}//${hostname}${port !== '80' && port !== '443' ? ':' + port : ''}/api/ws`;
+    } else {
+      // Development - use dedicated WebSocket port
+      const wsPort = import.meta.env.VITE_WS_PORT || '8080';
+      wsUrl = `${protocol}//${hostname}:${wsPort}/api/ws`;
+    }
+    
+    console.log(`[CLIENT WS] Connecting to: ${wsUrl}`);
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('[CLIENT WS] ===== CONNECTED TO BACKEND SERVER =====');
-      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:${wsPort}/api/ws`);
+      console.log(`[CLIENT WS] Connected to: ${wsUrl}`);
       setStatus('connected');
       options.onConnect?.();
       
