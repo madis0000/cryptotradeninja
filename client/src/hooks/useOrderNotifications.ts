@@ -136,14 +136,15 @@ export function useOrderNotifications() {
     connectWebSocket();
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+      if (connectionId) {
+        replitWsService.closeConnection(connectionId);
       }
     };
   }, [toast]);
 
   return {
-    // Return any methods if needed for manual control
-    isConnected: wsRef.current?.readyState === WebSocket.OPEN
+    // Return connection status and methods for manual control
+    isConnected: connectionId ? replitWsService.getConnectionStatus(connectionId).connected : false,
+    getStatus: () => connectionId ? replitWsService.getConnectionStatus(connectionId) : { connected: false, retryCount: 0 }
   };
 }
