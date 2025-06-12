@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { TopBar } from "@/components/layout/top-bar";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { useAuth } from "@/hooks/useAuth";
-import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 import Dashboard from "@/pages/dashboard";
 import Trading from "@/pages/trading";
 import TradingBots from "@/pages/trading-bots";
@@ -21,9 +20,6 @@ import BotLogsPage from "@/pages/bot-logs";
 
 function AuthenticatedApp() {
   const { logout } = useAuth();
-  
-  // Initialize audio notifications
-  useOrderNotifications();
 
   return (
     <div className="min-h-screen bg-crypto-darker">

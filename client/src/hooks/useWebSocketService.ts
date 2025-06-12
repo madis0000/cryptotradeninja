@@ -176,11 +176,6 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
           options.onError?.(new Event(data.message));
         } else {
           options.onMessage?.(data);
-          
-          // Emit custom event for order notifications to enable audio notifications
-          if (data.type === 'order_notification') {
-            window.dispatchEvent(new CustomEvent('websocket-message', { detail: data }));
-          }
         }
       } catch (error) {
         console.error('Error parsing user WebSocket message:', error);
