@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insertUserSchema } from "@shared/schema";
+import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insertUserSchema, insertUserSettingsSchema, updateUserSettingsSchema } from "@shared/schema";
 import { z } from "zod";
 import WebSocket, { WebSocketServer } from "ws";
 import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";

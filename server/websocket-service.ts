@@ -95,7 +95,7 @@ export class WebSocketService {
     // WebSocket server attached to the same HTTP server (port 5000)
     this.wss = new WebSocketServer({ 
       server: server,
-      path: '/ws'
+      path: '/api/ws'
     });
 
     this.setupWebSocket();

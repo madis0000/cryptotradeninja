@@ -41,12 +41,12 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
     const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-    const ws = new WebSocket(`${protocol}//${hostname}:${port}/ws`);
+    const ws = new WebSocket(`${protocol}//${hostname}:${port}/api/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('[CLIENT WS] ===== CONNECTED TO BACKEND SERVER =====');
-      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:${port}/ws`);
+      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:${port}/api/ws`);
       setStatus('connected');
       options.onConnect?.();
       
@@ -135,7 +135,7 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
     const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-    const ws = new WebSocket(`${protocol}//${hostname}:${port}/ws`);
+    const ws = new WebSocket(`${protocol}//${hostname}:${port}/api/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
