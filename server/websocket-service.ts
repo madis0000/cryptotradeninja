@@ -431,7 +431,7 @@ export class WebSocketService {
                 if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
                   await this.setupKlineStream(symbolsArray, message.interval || '1m');
                 } else {
-                  console.log(`[WEBSOCKET] Kline stream requested but unified connection not ready`);
+                  console.log(`[UNIFIED WS SERVER] Kline stream requested but unified connection not ready`);
                 }
               }
             } else {
@@ -441,7 +441,7 @@ export class WebSocketService {
                 if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
                   await this.setupKlineStream(symbolsArray, message.interval || '1m');
                 } else {
-                  console.log(`[WEBSOCKET] Kline stream requested but unified connection not ready, establishing connection first`);
+                  console.log(`[UNIFIED WS SERVER] Kline stream requested but unified connection not ready, establishing connection first`);
                   await this.connectWithSubscription('wss://stream.testnet.binance.vision/stream', []);
                 }
               } else {
@@ -2227,7 +2227,7 @@ export class WebSocketService {
   }
 
   public async startAllMarketsTicker() {
-    console.log('[WEBSOCKET] Starting live market data streams for active trading pairs');
+    console.log('[UNIFIED WS SERVER] Starting live market data streams for active trading pairs');
     
     // Get all active trading pairs from bots
     try {
@@ -2241,7 +2241,7 @@ export class WebSocketService {
       });
       
       if (symbols.size > 0) {
-        console.log(`[WEBSOCKET] Starting live streams for symbols: ${Array.from(symbols).join(', ')}`);
+        console.log(`[UNIFIED WS SERVER] Starting live streams for symbols: ${Array.from(symbols).join(', ')}`);
         // Start live ticker streams for real-time updates
         this.startBinanceTickerStreams(Array.from(symbols));
         // Get initial data via API once
@@ -2249,9 +2249,9 @@ export class WebSocketService {
       }
       
       // No need for polling interval since we have live WebSocket data
-      console.log('[WEBSOCKET] Using live streams only - no polling interval needed');
+      console.log('[UNIFIED WS SERVER] Using live streams only - no polling interval needed');
     } catch (error) {
-      console.error('[WEBSOCKET] Error starting market ticker:', error);
+      console.error('[UNIFIED WS SERVER] Error starting market ticker:', error);
     }
   }
 
@@ -2261,12 +2261,12 @@ export class WebSocketService {
       const streamNames = symbols.map(symbol => `${symbol.toLowerCase()}@ticker`);
       const streamUrl = `wss://stream.testnet.binance.vision/ws/${streamNames.join('/')}`;
       
-      console.log(`[WEBSOCKET] Connecting to live ticker stream: ${streamUrl}`);
+      console.log(`[WS] Connecting to live ticker stream: ${streamUrl}`);
       
       this.binanceTickerWs = new WebSocket(streamUrl);
       
       this.binanceTickerWs.on('open', () => {
-        console.log(`[WEBSOCKET] Live ticker stream connected for symbols: ${symbols.join(', ')}`);
+        console.log(`[WS] Live ticker stream connected for symbols: ${symbols.join(', ')}`);
       });
       
       this.binanceTickerWs.on('message', (data) => {
