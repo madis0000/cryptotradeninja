@@ -92,15 +92,15 @@ export class WebSocketService {
   private pendingCycleStarts = new Map<number, NodeJS.Timeout>(); // botId -> timeout handle
 
   constructor(server: Server) {
-    // Create separate WebSocket server on port 5001 to avoid Vite conflict
-    console.log('[WEBSOCKET] Starting WebSocket server on port 5001...');
+    // Create separate WebSocket server on port 3001 to avoid Vite conflict
+    console.log('[WEBSOCKET] Starting WebSocket server on port 3001...');
     this.wss = new WebSocketServer({ 
-      port: 5001,
+      port: 3001,
       path: '/ws'
     });
 
     this.wss.on('listening', () => {
-      console.log('[WEBSOCKET] ✅ WebSocket server listening on port 5001');
+      console.log('[WEBSOCKET] ✅ WebSocket server listening on port 3001');
     });
 
     this.wss.on('error', (error) => {
