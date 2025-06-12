@@ -365,7 +365,7 @@ export class WebSocketService {
           }
           
           if (message.type === 'configure_stream') {
-            // Removed verbose WebSocket logging
+            console.log(`[UNIFIED WS SERVER] Configure stream request: dataType=${message.dataType}, symbols=${JSON.stringify(message.symbols)}, interval=${message.interval}`);
             
             // Update the subscription with the requested configuration
             subscription.symbols.clear();
@@ -374,6 +374,8 @@ export class WebSocketService {
             });
             subscription.dataType = message.dataType || 'ticker';
             subscription.interval = message.interval || '1m';
+            
+            console.log(`[UNIFIED WS SERVER] Updated subscription: dataType=${subscription.dataType}, symbols=${Array.from(subscription.symbols)}, interval=${subscription.interval}`);
             
             // For kline data type, update the current interval and hot-swap subscription
             if (message.dataType === 'kline') {
@@ -427,6 +429,7 @@ export class WebSocketService {
               }
               
               if (message.dataType === 'kline') {
+                console.log(`[UNIFIED WS SERVER] Kline subscription request received: symbols=${symbolsArray.join(',')}, interval=${message.interval || '1m'}`);
                 // Update kline stream through unified connection only if available
                 if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
                   await this.setupKlineStream(symbolsArray, message.interval || '1m');
@@ -437,6 +440,7 @@ export class WebSocketService {
             } else {
               // Single client type - use appropriate stream method
               if (message.dataType === 'kline') {
+                console.log(`[UNIFIED WS SERVER] Single client kline subscription: symbols=${symbolsArray.join(',')}, interval=${message.interval || '1m'}`);
                 // Only setup kline stream if unified connection is available
                 if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
                   await this.setupKlineStream(symbolsArray, message.interval || '1m');
@@ -1140,12 +1144,15 @@ export class WebSocketService {
           
           // Handle kline data with strict interval filtering
           if (streamName.includes('@kline')) {
+            console.log(`[UNIFIED WS SERVER] Processing kline data from stream: ${streamName}`);
             const symbol = processedData.s;
             const kline = processedData.k;
             
             if (symbol && kline) {
               const receivedInterval = kline.i;
               const expectedInterval = this.currentInterval;
+              
+              console.log(`[UNIFIED WS SERVER] Kline data: ${symbol} interval ${receivedInterval}, expected ${expectedInterval}`);
               
               // STRICT: Only process data for the exactly requested interval
               if (receivedInterval === expectedInterval) {
@@ -1162,6 +1169,8 @@ export class WebSocketService {
                   isFinal: kline.x,
                   timestamp: Date.now()
                 };
+                
+                console.log(`[UNIFIED WS SERVER] Processing kline update for ${symbol}: OHLC ${klineUpdate.open}/${klineUpdate.high}/${klineUpdate.low}/${klineUpdate.close}`);
                 
                 // Store and broadcast only the selected interval data
                 this.storeHistoricalKlineData(klineUpdate);
@@ -1442,6 +1451,7 @@ export class WebSocketService {
   private broadcastKlineUpdate(klineUpdate: any) {
     // Only broadcast if there are connected clients
     if (this.marketSubscriptions.size === 0) {
+      console.log(`[UNIFIED WS SERVER] No kline clients connected, skipping broadcast for ${klineUpdate.symbol}`);
       return;
     }
 
@@ -1453,7 +1463,7 @@ export class WebSocketService {
       data: klineUpdate
     });
 
-    // Removed verbose WebSocket logging
+    console.log(`[UNIFIED WS SERVER] Broadcasting kline update: ${klineUpdate.symbol} ${klineUpdate.interval} - OHLC: ${klineUpdate.open}/${klineUpdate.high}/${klineUpdate.low}/${klineUpdate.close}`);
     
     let sentCount = 0;
     let skippedCount = 0;
@@ -1462,26 +1472,24 @@ export class WebSocketService {
       if (subscription.ws.readyState === WebSocket.OPEN && subscription.dataType === 'kline') {
         const subscribedSymbols = Array.from(subscription.symbols).map(s => s.toUpperCase());
         const isMatched = subscription.symbols.size === 0 || subscribedSymbols.includes(klineUpdate.symbol.toUpperCase());
-        // Removed verbose WebSocket logging
         
         if (isMatched) {
           // Check if this kline data matches the client's requested interval
           const clientInterval = subscription.interval || '1m';
           if (klineUpdate.interval === clientInterval) {
-            // Removed verbose WebSocket logging
+            console.log(`[UNIFIED WS SERVER] Sending kline data to client: ${subscription.clientId} for ${klineUpdate.symbol} ${klineUpdate.interval}`);
             subscription.ws.send(message);
             sentCount++;
           } else {
-            // Removed verbose WebSocket logging
+            console.log(`[UNIFIED WS SERVER] Interval mismatch: client wants ${clientInterval}, got ${klineUpdate.interval}`);
           }
         }
       } else if (subscription.dataType === 'ticker') {
         skippedCount++;
-        // Removed verbose WebSocket logging
       }
     });
     
-    // Removed verbose WebSocket logging
+    console.log(`[UNIFIED WS SERVER] Kline broadcast complete: ${sentCount} sent, ${skippedCount} skipped for ${klineUpdate.symbol}`);
   }
 
   private storeHistoricalKlineData(klineUpdate: any) {
