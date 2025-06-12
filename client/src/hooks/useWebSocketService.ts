@@ -22,31 +22,22 @@ export const useWebSocketService = () => {
     const isSecure = window.location.protocol === 'https:';
     const hostname = window.location.hostname;
     const currentPort = window.location.port;
-    const isDev = import.meta.env.DEV;
     
-    console.log('[CLIENT WS] Environment detection:', { isSecure, hostname, currentPort, isDev });
+    console.log('[CLIENT WS] Environment detection:', { isSecure, hostname, currentPort });
     
-    // Connection priority order
-    const attempts = [];
+    // Always use the same server with /trading-ws path
+    // This works for both HTTP and HTTPS since WebSocket server is attached to the main HTTP server
+    const protocol = isSecure ? 'wss:' : 'ws:';
+    let wsUrl: string;
     
-    if (isSecure) {
-      // HTTPS environment: Must use secure WebSocket
-      if (currentPort) {
-        attempts.push(`wss://${hostname}:${currentPort}/trading-ws`);
-      }
-      attempts.push(`wss://${hostname}/trading-ws`);
+    if (currentPort) {
+      wsUrl = `${protocol}//${hostname}:${currentPort}/trading-ws`;
     } else {
-      // HTTP environment: Can use insecure WebSocket
-      if (isDev && hostname === 'localhost') {
-        attempts.push(`ws://${hostname}:3001/ws`);
-      }
-      if (currentPort) {
-        attempts.push(`ws://${hostname}:${currentPort}/trading-ws`);
-      }
-      attempts.push(`ws://${hostname}/trading-ws`);
+      wsUrl = `${protocol}//${hostname}/trading-ws`;
     }
     
-    return attempts;
+    console.log('[CLIENT WS] WebSocket URL:', wsUrl);
+    return [wsUrl];
   }, []);
 
   const connectToWebSocket = useCallback(async (options: WebSocketOptions = {}) => {
