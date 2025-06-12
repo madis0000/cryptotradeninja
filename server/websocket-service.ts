@@ -383,11 +383,15 @@ export class WebSocketService {
               const newInterval = message.interval || '1m';
               const symbols = Array.from(subscription.symbols);
               
-              // Removed verbose WebSocket logging
+              console.log(`[UNIFIED WS SERVER] Setting up kline stream for ${symbols.join(',')} at ${newInterval} interval`);
               this.currentInterval = newInterval;
               
-              // Update kline subscription through the unified connection if available
-              if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN && !this.connectionLock) {
+              // Establish Binance connection if needed, then setup kline stream
+              if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
+                console.log(`[UNIFIED WS SERVER] No Binance connection, establishing new connection for kline data`);
+                await this.connectConfigurableStream('kline', symbols, newInterval);
+              } else {
+                console.log(`[UNIFIED WS SERVER] Using existing Binance connection for kline stream`);
                 await this.setupKlineStream(symbols, newInterval);
               }
               
