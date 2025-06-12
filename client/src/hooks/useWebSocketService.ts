@@ -37,16 +37,30 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     setStatus('connecting');
     
-    // Connect to backend WebSocket server on /trading-ws path to avoid Vite conflict
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const hostname = window.location.hostname;
-    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-    const ws = new WebSocket(`${protocol}//${hostname}:${port}/trading-ws`);
+    // Connect to WebSocket server using environment-specific configuration
+    let wsUrl: string;
+    const isDevelopment = import.meta.env.DEV;
+    
+    if (isDevelopment) {
+      // Development: Connect to separate WebSocket port (3001) to avoid Vite conflict
+      const protocol = 'ws:';
+      const hostname = window.location.hostname;
+      const wsPort = '3001'; // Development WebSocket port
+      wsUrl = `${protocol}//${hostname}:${wsPort}/ws`;
+    } else {
+      // Production: Use same server with different path
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const hostname = window.location.hostname;
+      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+      wsUrl = `${protocol}//${hostname}:${port}/trading-ws`;
+    }
+    
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('[CLIENT WS] ===== CONNECTED TO BACKEND SERVER =====');
-      console.log(`[CLIENT WS] Connected to: ${protocol}//${hostname}:${port}/trading-ws`);
+      console.log(`[CLIENT WS] Connected to: ${wsUrl}`);
       setStatus('connected');
       options.onConnect?.();
       
@@ -131,11 +145,25 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
 
     setStatus('connecting');
     
-    // Connect to our unified WebSocket service on /trading-ws path to avoid Vite conflict
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const hostname = window.location.hostname;
-    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-    const ws = new WebSocket(`${protocol}//${hostname}:${port}/trading-ws`);
+    // Connect to WebSocket server using environment-specific configuration
+    let wsUrl: string;
+    const isDevelopment = import.meta.env.DEV;
+    
+    if (isDevelopment) {
+      // Development: Connect to separate WebSocket port (3001) to avoid Vite conflict
+      const protocol = 'ws:';
+      const hostname = window.location.hostname;
+      const wsPort = '3001'; // Development WebSocket port
+      wsUrl = `${protocol}//${hostname}:${wsPort}/ws`;
+    } else {
+      // Production: Use same server with different path
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const hostname = window.location.hostname;
+      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+      wsUrl = `${protocol}//${hostname}:${port}/trading-ws`;
+    }
+    
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {

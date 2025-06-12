@@ -92,16 +92,38 @@ export class WebSocketService {
   private pendingCycleStarts = new Map<number, NodeJS.Timeout>(); // botId -> timeout handle
 
   constructor(server: Server) {
-    // Attach WebSocket server to HTTP server with specific path to avoid Vite HMR conflict
-    console.log('[WEBSOCKET] Starting WebSocket server on /trading-ws path...');
-    this.wss = new WebSocketServer({ 
-      server: server,
-      path: '/trading-ws'
-    });
-
-    this.wss.on('listening', () => {
-      console.log('[WEBSOCKET] ✅ WebSocket server listening on /trading-ws path');
-    });
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
+    if (isDevelopment) {
+      // Development: Use separate port to avoid Vite conflict
+      const wsPort = parseInt(process.env.WS_PORT || '3001');
+      console.log(`[WEBSOCKET] Starting WebSocket server on port ${wsPort}...`);
+      this.wss = new WebSocketServer({ 
+        port: wsPort,
+        path: '/ws'
+      });
+      
+      this.wss.on('listening', () => {
+        console.log(`[WEBSOCKET] ✅ WebSocket server listening on port ${wsPort}`);
+        console.log(`[PORT MANAGER] Environment: Development`);
+        console.log(`[PORT MANAGER] WebSocket Port: ${wsPort}`);
+        console.log(`[PORT MANAGER] WebSocket Path: /ws`);
+        console.log(`[PORT MANAGER] Client URL: ws://localhost:${wsPort}/ws`);
+      });
+    } else {
+      // Production: Attach to HTTP server with specific path
+      console.log(`[WEBSOCKET] Starting WebSocket server on path /trading-ws...`);
+      this.wss = new WebSocketServer({ 
+        server: server,
+        path: '/trading-ws'
+      });
+      
+      this.wss.on('listening', () => {
+        console.log(`[WEBSOCKET] ✅ WebSocket server listening on path /trading-ws`);
+        console.log(`[PORT MANAGER] Environment: Production`);
+        console.log(`[PORT MANAGER] WebSocket Path: /trading-ws`);
+      });
+    }
 
     this.wss.on('error', (error) => {
       console.error('[WEBSOCKET] ❌ WebSocket server error:', error);
