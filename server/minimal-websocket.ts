@@ -81,6 +81,17 @@ export class MinimalWebSocket {
         });
         break;
         
+      case 'configure_stream':
+        console.log(`[Minimal WS] Stream configuration from ${clientId}:`, message.dataType, message.symbols);
+        this.sendToClient(ws, {
+          type: 'stream_configured',
+          dataType: message.dataType,
+          symbols: message.symbols || [],
+          interval: message.interval,
+          clientId
+        });
+        break;
+        
       case 'order_notification':
         // Broadcast order notifications to all connected clients
         this.broadcast({
@@ -90,7 +101,7 @@ export class MinimalWebSocket {
         break;
         
       default:
-        console.log(`[Minimal WS] Unknown message type from ${clientId}:`, message.type);
+        // Don't log unknown message types to reduce noise
         break;
     }
   }

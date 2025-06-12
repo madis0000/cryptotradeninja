@@ -21,6 +21,14 @@ export const useWebSocketManager = (config: WebSocketManagerConfig) => {
   const isUnmountedRef = useRef(false);
 
   const connect = () => {
+    // Skip WebSocket connections in development to avoid Vite HMR conflicts
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[WS Manager] Skipping WebSocket connection in development mode`);
+      setIsConnected(false);
+      setConnectionState('disconnected');
+      return;
+    }
+
     if (isUnmountedRef.current || wsRef.current?.readyState === WebSocket.CONNECTING || wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }

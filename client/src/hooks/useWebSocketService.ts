@@ -31,6 +31,13 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
   const wsRef = useRef<WebSocket | null>(null);
 
   const connect = useCallback((symbols?: string[]) => {
+    // Skip WebSocket connections in development to avoid Vite HMR conflicts
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[CLIENT WS] Skipping WebSocket connection in development mode');
+      setStatus('disconnected');
+      return;
+    }
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
@@ -125,6 +132,13 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
   const { user } = useAuth();
 
   const connect = useCallback((apiKey?: string) => {
+    // Skip WebSocket connections in development to avoid Vite HMR conflicts
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[USER WS] Skipping WebSocket connection in development mode');
+      setStatus('disconnected');
+      return;
+    }
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
