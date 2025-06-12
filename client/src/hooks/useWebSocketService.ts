@@ -27,10 +27,18 @@ interface UserWebSocketService {
   lastMessage: any;
 }
 
+// Global WebSocket instance to prevent multiple connections
+let globalWsInstance: WebSocket | null = null;
+let globalWsStatus: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected';
+let globalWsSubscribers = new Set<(data: any) => void>();
+let globalWsConnectedCallbacks = new Set<() => void>();
+let globalWsDisconnectedCallbacks = new Set<() => void>();
+let globalWsErrorCallbacks = new Set<(error: Event) => void>();
+
 export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWebSocketService {
-  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>(globalWsStatus);
   const [lastMessage, setLastMessage] = useState<any>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<WebSocket | null>(globalWsInstance);
 
   // Handle order fill notifications with audio alerts
   const handleOrderFillNotification = useCallback(async (orderData: any) => {

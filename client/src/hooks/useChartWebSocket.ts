@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { usePublicWebSocket } from './useWebSocketService';
+import { webSocketSingleton } from '../services/WebSocketSingleton';
 
 interface ChartWebSocketOptions {
   onKlineUpdate?: (data: any) => void;
@@ -27,31 +27,49 @@ export function useChartWebSocket(
   const [currentInterval, setCurrentInterval] = useState(initialInterval);
   const { onKlineUpdate, onConnect, onDisconnect, onError } = options;
 
-  // Use the unified WebSocket service instead of creating a separate connection
-  const publicWs = usePublicWebSocket({
-    onMessage: (data) => {
+  // Use singleton WebSocket service to prevent multiple connections
+  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+
+  useEffect(() => {
+    const unsubscribeData = webSocketSingleton.subscribe((data) => {
       try {
         if (data.type === 'kline_update' && onKlineUpdate) {
-          console.log('[CHART] Received message:', data);
+          console.log('[CHART] Received kline update:', data);
           onKlineUpdate(data);
         }
       } catch (error) {
         console.error('[CHART] Error processing kline update:', error);
       }
-    },
-    onConnect: () => {
+    });
+
+    const unsubscribeConnect = webSocketSingleton.onConnect(() => {
+      setStatus('connected');
       console.log('[CHART] Connected to kline WebSocket server');
       if (onConnect) onConnect();
-    },
-    onDisconnect: () => {
+    });
+
+    const unsubscribeDisconnect = webSocketSingleton.onDisconnect(() => {
+      setStatus('disconnected');
       console.log('[CHART] Disconnected from kline WebSocket server');
       if (onDisconnect) onDisconnect();
-    },
-    onError: (error) => {
+    });
+
+    const unsubscribeError = webSocketSingleton.onError((error) => {
+      setStatus('error');
       console.error('[CHART] WebSocket error:', error);
       if (onError) onError(error);
-    }
-  });
+    });
+
+    // Set initial status
+    setStatus(webSocketSingleton.getStatus() as any);
+
+    return () => {
+      unsubscribeData();
+      unsubscribeConnect();
+      unsubscribeDisconnect();
+      unsubscribeError();
+    };
+  }, [onKlineUpdate, onConnect, onDisconnect, onError]);
 
   const connect = useCallback(() => {
     console.log(`[CHART] Connecting to unified WebSocket service for ${currentSymbol} ${currentInterval}`);
