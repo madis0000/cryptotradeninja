@@ -1,12 +1,13 @@
 import { 
-  users, exchanges, tradingBots, trades, portfolio, botCycles, cycleOrders,
+  users, exchanges, tradingBots, trades, portfolio, botCycles, cycleOrders, userSettings,
   type User, type InsertUser,
   type Exchange, type InsertExchange,
   type TradingBot, type InsertTradingBot,
   type Trade, type InsertTrade,
   type Portfolio, type InsertPortfolio,
   type BotCycle, type InsertBotCycle,
-  type CycleOrder, type InsertCycleOrder
+  type CycleOrder, type InsertCycleOrder,
+  type UserSettings, type InsertUserSettings, type UpdateUserSettings
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sum, count, isNotNull } from "drizzle-orm";
@@ -67,6 +68,10 @@ export interface IStorage {
   getCycleOrderByExchangeId(exchangeOrderId: string): Promise<CycleOrder | undefined>;
   getPendingCycleOrders(botId: number): Promise<CycleOrder[]>;
   getCycleOrdersByBotId(botId: number): Promise<any[]>;
+
+  // User Settings
+  getUserSettings(userId: number): Promise<UserSettings>;
+  updateUserSettings(userId: number, settings: UpdateUserSettings): Promise<UserSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -409,6 +414,52 @@ export class DatabaseStorage implements IStorage {
         eq(cycleOrders.status, 'placed')
       ))
       .orderBy(desc(cycleOrders.createdAt));
+  }
+
+  async getUserSettings(userId: number): Promise<UserSettings> {
+    // Try to get existing settings
+    const [existingSettings] = await db
+      .select()
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+
+    if (existingSettings) {
+      return existingSettings;
+    }
+
+    // Create default settings if none exist
+    const [newSettings] = await db
+      .insert(userSettings)
+      .values({
+        userId,
+        soundNotificationsEnabled: true,
+        takeProfitSoundEnabled: true,
+        safetyOrderSoundEnabled: true,
+        baseOrderSoundEnabled: true,
+        takeProfitSound: 'chin-chin',
+        safetyOrderSound: 'beep',
+        baseOrderSound: 'notification',
+        notificationVolume: '0.50'
+      })
+      .returning();
+
+    return newSettings;
+  }
+
+  async updateUserSettings(userId: number, settings: UpdateUserSettings): Promise<UserSettings> {
+    // Ensure user settings exist first
+    await this.getUserSettings(userId);
+
+    const [updatedSettings] = await db
+      .update(userSettings)
+      .set({
+        ...settings,
+        updatedAt: new Date()
+      })
+      .where(eq(userSettings.userId, userId))
+      .returning();
+
+    return updatedSettings;
   }
 }
 
