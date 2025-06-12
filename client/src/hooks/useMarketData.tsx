@@ -23,7 +23,7 @@ export function useMarketData() {
       // Connect to dedicated WebSocket server on port 8080 to avoid Vite HMR conflicts
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host; // Include port for development
-      const wsUrl = `${protocol}//${host}/api/ws`;
+      const wsUrl = `${protocol}//${host}/ws`;
       
       wsRef.current = new WebSocket(wsUrl);
 

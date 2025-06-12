@@ -5,7 +5,7 @@ import { insertExchangeSchema, insertTradingBotSchema, insertTradeSchema, insert
 import { z } from "zod";
 import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";
 import { encryptApiCredentials, decryptApiCredentials } from "./encryption";
-import { MinimalWebSocket } from "./minimal-websocket";
+import { SimpleWebSocket } from "./simple-websocket";
 import { BotLoggerManager } from "./bot-logger";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -16,8 +16,8 @@ import * as path from "path";
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Initialize minimal WebSocket using HTTP upgrade to avoid Vite HMR conflicts
-  const wsManager = new MinimalWebSocket(httpServer);
+  // Initialize simple WebSocket using HTTP upgrade to avoid Vite HMR conflicts
+  const wsManager = new SimpleWebSocket(httpServer);
   
   // Store reference for API routes
   (httpServer as any).wsManager = wsManager;
