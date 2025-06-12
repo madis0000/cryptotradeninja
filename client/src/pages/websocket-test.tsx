@@ -119,7 +119,7 @@ export default function WebSocketTest() {
           </CardHeader>
           <CardContent className="text-crypto-light text-sm space-y-2">
             <div>
-              <strong>WebSocket URL:</strong> {window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//{window.location.hostname}:8080/api/ws
+              <strong>WebSocket URL:</strong> {window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//{window.location.hostname}:{import.meta.env.VITE_WS_PORT || '8080'}/api/ws
             </div>
             <div>
               <strong>Current Status:</strong> {publicWs.status}

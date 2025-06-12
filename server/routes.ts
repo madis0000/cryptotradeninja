@@ -20,12 +20,12 @@ let wsService: WebSocketService;
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Initialize WebSocket service on different port to avoid Vite HMR conflicts
-  const wsPort = 8080;
+  // Initialize WebSocket service on dedicated port to avoid Vite HMR conflicts
+  const wsPort = parseInt(process.env.WS_PORT || '8080');
   const wsServer = createServer();
   wsService = new WebSocketService(wsServer);
   
-  wsServer.listen(wsPort, () => {
+  wsServer.listen(wsPort, '0.0.0.0', () => {
     console.log(`[WEBSOCKET] Trading WebSocket server listening on port ${wsPort}`);
   });
   

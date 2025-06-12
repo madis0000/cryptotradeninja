@@ -37,10 +37,10 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     setStatus('connecting');
     
-    // Connect to backend WebSocket server (dedicated port 8080)
+    // Connect to backend WebSocket server (dedicated port for trading)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const wsPort = '8080';
+    const wsPort = import.meta.env.VITE_WS_PORT || '8080';
     const ws = new WebSocket(`${protocol}//${hostname}:${wsPort}/api/ws`);
     wsRef.current = ws;
 
