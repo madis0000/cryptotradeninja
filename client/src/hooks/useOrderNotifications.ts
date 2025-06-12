@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { audioService } from '@/services/audioService';
 
 interface OrderNotification {
   orderId: number;
@@ -14,12 +15,32 @@ interface OrderNotification {
   status: 'placed' | 'filled' | 'cancelled' | 'failed';
   timestamp: string;
   notification: string;
+  audioNotification?: {
+    orderType: 'take_profit' | 'safety_order' | 'base_order';
+    shouldPlay: boolean;
+  };
 }
 
 export function useOrderNotifications() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Fetch user settings for audio notifications
+  const { data: userSettings } = useQuery({
+    queryKey: ["/api/user/settings"],
+    queryFn: async () => {
+      const response = await fetch("/api/user/settings", {
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      if (!response.ok) return null;
+      return response.json();
+    },
+    retry: false,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";

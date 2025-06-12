@@ -106,6 +106,31 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id));
   }
 
+  async getUserSettings(userId: number): Promise<UserSettings | undefined> {
+    const [settings] = await db
+      .select()
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return settings || undefined;
+  }
+
+  async createUserSettings(settings: InsertUserSettings): Promise<UserSettings> {
+    const [newSettings] = await db
+      .insert(userSettings)
+      .values(settings)
+      .returning();
+    return newSettings;
+  }
+
+  async updateUserSettings(userId: number, settings: UpdateUserSettings): Promise<UserSettings> {
+    const [updatedSettings] = await db
+      .update(userSettings)
+      .set({ ...settings, updatedAt: new Date() })
+      .where(eq(userSettings.userId, userId))
+      .returning();
+    return updatedSettings;
+  }
+
   async getExchangesByUserId(userId: number): Promise<Exchange[]> {
     return await db.select().from(exchanges).where(eq(exchanges.userId, userId));
   }

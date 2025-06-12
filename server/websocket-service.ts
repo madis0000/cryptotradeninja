@@ -2965,7 +2965,12 @@ export class WebSocketService {
         orderType: order.orderType,
         status: status,
         timestamp: new Date().toISOString(),
-        notification: this.generateOrderNotificationMessage(order, status)
+        notification: this.generateOrderNotificationMessage(order, status),
+        // Audio notification data for client
+        audioNotification: status === 'filled' ? {
+          orderType: order.orderType,
+          shouldPlay: true
+        } : null
       }
     };
 
