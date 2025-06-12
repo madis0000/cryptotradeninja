@@ -37,9 +37,17 @@ export function useChartWebSocket(
           // Extract the actual kline data from the message
           const klineData = data.data || data;
           onKlineUpdate(klineData);
+        } else if (data.type === 'historical_klines' && onKlineUpdate) {
+          console.log('[CHART] Received historical klines:', data.data?.klines?.length || 0, 'candles');
+          // Process historical klines one by one
+          if (data.data?.klines) {
+            data.data.klines.forEach((kline: any) => {
+              onKlineUpdate(kline);
+            });
+          }
         }
       } catch (error) {
-        console.error('[CHART] Error processing kline update:', error);
+        console.error('[CHART] Error processing message:', error);
       }
     });
 
@@ -141,13 +149,14 @@ export function useChartWebSocket(
   useEffect(() => {
     connect();
     return () => {
-      disconnect();
+      // Don't disconnect on unmount as other components may be using the connection
     };
-  }, [connect, disconnect]);
+  }, [connect]);
 
   // Reconfigure when symbol or interval changes
   useEffect(() => {
     if (webSocketSingleton.isConnected()) {
+      console.log(`[CHART] Reconfiguring stream: ${currentSymbol} ${currentInterval}`);
       webSocketSingleton.sendMessage({
         type: 'configure_stream',
         dataType: 'kline',
