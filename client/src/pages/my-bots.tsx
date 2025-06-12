@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 import { useMarketData } from "@/hooks/useMarketData";
+import { useUserWebSocket } from "@/hooks/useWebSocketService";
+import { audioService } from "@/services/audioService";
 import { BotDetailsPage } from "./bot-details";
 import { format } from 'date-fns';
 
@@ -21,6 +23,45 @@ export function MyBotsPage() {
   // Initialize order notifications and market data
   const { playTestNotification } = useOrderNotifications();
   const marketData = useMarketData();
+
+  // Fetch user settings for audio notifications
+  const { data: settings } = useQuery({
+    queryKey: ['/api/settings'],
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // WebSocket connection for audio notifications
+  useUserWebSocket({
+    onMessage: async (message) => {
+      // Handle order fill notifications
+      if (message.type === 'order_notification' && message.data?.status === 'filled' && settings) {
+        const data = message.data;
+        
+        console.log('[AUDIO] Order filled! Processing notification:', data);
+        
+        // Determine order type based on the order data
+        let orderType: 'take_profit' | 'safety_order' | 'base_order' = 'safety_order';
+        
+        if (data.side === 'SELL') {
+          orderType = 'take_profit';
+        } else if (data.orderType === 'base_order') {
+          orderType = 'base_order';
+        } else {
+          orderType = 'safety_order';
+        }
+
+        console.log(`[AUDIO] Playing ${orderType} notification sound for order ${data.orderId}`);
+        
+        try {
+          // Play notification sound
+          await audioService.playOrderFillNotification(orderType, settings);
+          console.log(`[AUDIO] Successfully played ${orderType} notification`);
+        } catch (error) {
+          console.error('[AUDIO] Failed to play notification:', error);
+        }
+      }
+    }
+  });
 
   // Utility functions for bot data calculations
   const formatCurrency = (amount: string | number) => {
