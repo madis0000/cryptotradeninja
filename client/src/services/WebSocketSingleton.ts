@@ -9,6 +9,7 @@ class WebSocketSingleton {
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
+  private messageQueue: any[] = [];
 
   private constructor() {}
 
@@ -49,6 +50,13 @@ class WebSocketSingleton {
       this.status = 'connected';
       this.reconnectAttempts = 0;
       
+      // Send any queued messages
+      while (this.messageQueue.length > 0) {
+        const queuedMessage = this.messageQueue.shift();
+        console.log('[WS SINGLETON] Sending queued message:', queuedMessage);
+        this.ws!.send(JSON.stringify(queuedMessage));
+      }
+      
       // Notify all connection callbacks
       this.connectionCallbacks.forEach(callback => callback());
       
@@ -58,6 +66,7 @@ class WebSocketSingleton {
         type: 'subscribe',
         symbols: symbolsToUse
       };
+      console.log('[WS SINGLETON] Sending initial subscription:', subscribeMessage);
       this.sendMessage(subscribeMessage);
     };
 
@@ -124,10 +133,13 @@ class WebSocketSingleton {
   }
 
   public sendMessage(message: any): void {
+    console.log('[WS SINGLETON] Attempting to send message:', message);
     if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('[WS SINGLETON] Sending message immediately');
       this.ws.send(JSON.stringify(message));
     } else {
-      console.warn('[WS SINGLETON] Cannot send message - WebSocket not connected');
+      console.log('[WS SINGLETON] Connection not ready, queuing message');
+      this.messageQueue.push(message);
     }
   }
 
