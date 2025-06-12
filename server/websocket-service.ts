@@ -549,12 +549,11 @@ export class WebSocketService {
   // Removed - streams now started on-demand when frontend subscribes
 
   private async setupKlineStream(symbols: string[], interval: string) {
-    // Removed verbose WebSocket logging
+    // Use the unified WebSocket connection instead of creating separate kline connection
+    console.log(`[WEBSOCKET] Setting up kline stream for ${symbols.join(', ')} at ${interval} interval via unified connection`);
     
-    // If we have an existing kline connection, update subscriptions
-    if (this.binanceKlineWs && this.binanceKlineWs.readyState === WebSocket.OPEN) {
-      // Removed verbose WebSocket logging
-      
+    // Update through the main unified connection
+    if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
       // Unsubscribe from old kline streams first
       if (this.currentKlineSubscriptions.length > 0) {
         const unsubscribeMessage = {
@@ -562,14 +561,13 @@ export class WebSocketService {
           params: this.currentKlineSubscriptions,
           id: Date.now()
         };
-        // Removed verbose WebSocket logging
-        this.binanceKlineWs.send(JSON.stringify(unsubscribeMessage));
+        this.binancePublicWs.send(JSON.stringify(unsubscribeMessage));
       }
       
-      // Fetch historical data before subscribing to real-time streams
+      // Fetch historical data before subscribing to real-time streams  
       await this.fetchHistoricalKlinesWS(symbols, interval);
       
-      // Subscribe to new kline streams
+      // Subscribe to new kline streams via unified connection
       const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
       const subscribeMessage = {
         method: 'SUBSCRIBE',
@@ -577,102 +575,14 @@ export class WebSocketService {
         id: Date.now()
       };
       
-      // Removed verbose WebSocket logging
-      this.binanceKlineWs.send(JSON.stringify(subscribeMessage));
+      this.binancePublicWs.send(JSON.stringify(subscribeMessage));
       this.currentKlineSubscriptions = klineStreamPaths;
       return;
     }
     
-    // If no existing connection, create a new one specifically for klines
-    // Removed verbose WebSocket logging
-    
-    const { storage } = await import('./storage');
-    let baseUrl = 'wss://stream.testnet.binance.vision/stream';
-    
-    try {
-      const exchanges = await storage.getExchangesByUserId(1);
-      if (exchanges.length > 0 && exchanges[0].wsStreamEndpoint) {
-        const endpoint = exchanges[0].wsStreamEndpoint;
-        if (endpoint.includes('testnet')) {
-          baseUrl = 'wss://stream.testnet.binance.vision/stream';
-        } else {
-          baseUrl = 'wss://stream.binance.com:9443/stream';
-        }
-      }
-    } catch (error) {
-      console.error(`[WEBSOCKET] Error fetching exchange config for kline:`, error);
-    }
-    
-    // Removed verbose WebSocket logging
-    
-    this.binanceKlineWs = new WebSocket(baseUrl);
-    
-    this.binanceKlineWs.on('open', () => {
-      // Removed verbose kline stream logging
-      
-      // Subscribe to kline streams immediately for faster response
-      const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
-      const subscribeMessage = {
-        method: 'SUBSCRIBE',
-        params: klineStreamPaths,
-        id: Date.now()
-      };
-      
-      // Removed verbose kline stream logging
-      if (this.binanceKlineWs && this.binanceKlineWs.readyState === WebSocket.OPEN) {
-        this.binanceKlineWs.send(JSON.stringify(subscribeMessage));
-        this.currentKlineSubscriptions = klineStreamPaths;
-        
-        // Fetch historical data asynchronously for better performance
-        this.fetchHistoricalKlinesWS(symbols, interval).catch(console.error);
-      }
-    });
-    
-    this.binanceKlineWs.on('message', (data) => {
-      try {
-        const message = JSON.parse(data.toString());
-        
-        // Handle subscription confirmation
-        if (message.result === null && message.id) {
-          // Removed verbose kline stream logging
-          return;
-        }
-        
-        // Handle kline stream data
-        if (message.stream && message.data && message.data.e === 'kline' && message.data.k) {
-          const kline = message.data.k;
-          const klineUpdate = {
-            symbol: kline.s,
-            interval: kline.i,
-            openTime: parseInt(kline.t),
-            closeTime: parseInt(kline.T),
-            open: parseFloat(kline.o),
-            high: parseFloat(kline.h),
-            low: parseFloat(kline.l),
-            close: parseFloat(kline.c),
-            volume: parseFloat(kline.v),
-            isClosed: kline.x,
-            timestamp: Date.now()
-          };
-          
-          // Removed verbose kline stream logging
-          // Only log but don't filter - let each client decide what interval data they want
-          // Removed verbose kline stream logging
-          this.broadcastKlineUpdate(klineUpdate);
-        }
-      } catch (error) {
-        console.error('[KLINE STREAM] Error parsing message:', error);
-      }
-    });
-    
-    this.binanceKlineWs.on('error', (error) => {
-      console.error('[KLINE STREAM] WebSocket error:', error);
-    });
-    
-    this.binanceKlineWs.on('close', () => {
-      console.log('[KLINE STREAM] Kline WebSocket connection closed');
-      this.binanceKlineWs = null;
-    });
+    // If no unified connection exists, use it instead of creating separate kline connection
+    console.log(`[WEBSOCKET] No unified connection available, creating one for kline data`);
+    await this.createNewBinanceConnection(symbols);
   }
 
   private async createNewBinanceConnection(symbols: string[]) {
@@ -5019,21 +4929,17 @@ export class WebSocketService {
 
   private sendOrderToWebSocket(exchange: any, orderMessage: any): boolean {
     try {
-      // Create or use existing WebSocket connection for orders
-      if (!this.binanceOrderWs || this.binanceOrderWs.readyState !== WebSocket.OPEN) {
-        this.createOrderWebSocketConnection(exchange);
-      }
-
-      if (this.binanceOrderWs && this.binanceOrderWs.readyState === WebSocket.OPEN) {
-        this.binanceOrderWs.send(JSON.stringify(orderMessage));
-        console.log(`[WS ORDER] ✓ Order message sent via WebSocket`);
+      // Use the unified WebSocket connection for orders instead of separate connection
+      if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+        this.binancePublicWs.send(JSON.stringify(orderMessage));
+        console.log(`[WS ORDER] ✓ Order message sent via unified WebSocket`);
         return true;
       } else {
-        console.error(`[WS ORDER] ❌ WebSocket connection not ready`);
+        console.error(`[WS ORDER] ❌ Unified WebSocket connection not ready`);
         return false;
       }
     } catch (error) {
-      console.error(`[WS ORDER] ❌ Error sending order via WebSocket:`, error);
+      console.error(`[WS ORDER] ❌ Error sending order via unified WebSocket:`, error);
       return false;
     }
   }
