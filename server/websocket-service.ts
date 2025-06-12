@@ -3287,6 +3287,9 @@ export class WebSocketService {
 
       // Broadcast order fill notification to connected clients
       this.broadcastOrderNotification(order, 'filled');
+      
+      // Also broadcast specific audio notification for order fills
+      this.broadcastOrderFillNotification(order);
       console.log(`[MARTINGALE STRATEGY] ✓ Broadcasted order fill notification to clients`);
 
     } catch (error) {
@@ -4622,6 +4625,47 @@ export class WebSocketService {
     });
 
     console.log(`[MARTINGALE STRATEGY] ✓ Broadcasted to ${broadcastCount} connected clients`);
+  }
+
+  private broadcastOrderFillNotification(order: CycleOrder) {
+    const message = JSON.stringify({
+      type: 'order_fill_notification',
+      data: {
+        orderId: order.id,
+        exchangeOrderId: order.exchangeOrderId,
+        botId: order.botId,
+        orderType: order.orderType,
+        orderSubType: order.orderType, // For compatibility with client logic
+        symbol: order.symbol,
+        side: order.side,
+        quantity: order.quantity,
+        price: order.price,
+        status: 'filled',
+        filledAt: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      }
+    });
+
+    console.log(`[AUDIO NOTIFICATION] 🔊 Broadcasting audio notification for ${order.orderType} order`);
+
+    // Broadcast to all connected clients for audio notifications
+    let notificationCount = 0;
+    this.userConnections.forEach((connection) => {
+      if (connection.ws.readyState === WebSocket.OPEN) {
+        connection.ws.send(message);
+        notificationCount++;
+      }
+    });
+
+    // Also send to market subscriptions for broader reach
+    this.marketSubscriptions.forEach(subscription => {
+      if (subscription.ws.readyState === WebSocket.OPEN) {
+        subscription.ws.send(message);
+        notificationCount++;
+      }
+    });
+
+    console.log(`[AUDIO NOTIFICATION] ✓ Sent audio notification to ${notificationCount} clients`);
   }
 
   private async initializeUserDataStreams() {

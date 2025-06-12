@@ -14,6 +14,7 @@ import ApiKeys from "@/pages/api-keys";
 import Portfolio from "@/pages/portfolio";
 import MyExchanges from "@/pages/my-exchanges";
 import Settings from "@/pages/settings";
+import NotificationSettings from "@/pages/notification-settings";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth";
 import BotLogsPage from "@/pages/bot-logs";
@@ -35,6 +36,7 @@ function AuthenticatedApp() {
           <Route path="/portfolio" component={Portfolio} />
           <Route path="/my-exchanges" component={MyExchanges} />
           <Route path="/settings" component={Settings} />
+          <Route path="/settings/notifications" component={NotificationSettings} />
           <Route component={NotFound} />
         </Switch>
       </main>

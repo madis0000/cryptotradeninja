@@ -599,7 +599,24 @@ export default function Settings() {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-medium text-white mb-4">Notification Settings</h3>
+        <p className="text-sm text-crypto-light mb-6">
+          Configure audio and visual notifications for trading events and order fills.
+        </p>
+        
         <div className="space-y-4">
+          <div className="bg-crypto-darker p-4 rounded-lg border border-gray-800">
+            <h4 className="text-md font-medium text-white mb-3">Audio Notifications</h4>
+            <p className="text-sm text-crypto-light mb-4">
+              Configure sound alerts for order fills and trading events with customizable audio settings.
+            </p>
+            <Button 
+              className="bg-crypto-primary hover:bg-crypto-primary/90 text-white"
+              onClick={() => window.location.href = '/settings/notifications'}
+            >
+              Configure Audio Notifications
+            </Button>
+          </div>
+          
           <div className="flex items-center justify-between">
             <div>
               <Label className="text-crypto-light">Email Notifications</Label>
