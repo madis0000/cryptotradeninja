@@ -93,9 +93,16 @@ export class WebSocketService {
 
   constructor(server: Server) {
     // WebSocket server attached to the same HTTP server (port 5000)
+    // Using strict path filtering to avoid conflicts with Vite HMR
     this.wss = new WebSocketServer({ 
       server: server,
-      path: '/api/ws'
+      path: '/api/ws',
+      perMessageDeflate: false,
+      maxPayload: 16 * 1024 * 1024,
+      // Only handle connections specifically to our trading WebSocket path
+      verifyClient: (info) => {
+        return info.req.url === '/api/ws';
+      }
     });
 
     this.setupWebSocket();
