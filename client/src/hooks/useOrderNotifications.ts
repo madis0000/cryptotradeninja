@@ -1,8 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { audioService } from '@/services/audioService';
-import { replitWsService } from '@/services/replitWebSocketService';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface OrderNotification {
   orderId: number;
@@ -16,10 +14,6 @@ interface OrderNotification {
   status: 'placed' | 'filled' | 'cancelled' | 'failed';
   timestamp: string;
   notification: string;
-  audioNotification?: {
-    orderType: 'take_profit' | 'safety_order' | 'base_order';
-    shouldPlay: boolean;
-  };
 }
 
 export function useOrderNotifications() {
@@ -27,52 +21,42 @@ export function useOrderNotifications() {
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Fetch user settings for audio notifications
-  const { data: userSettings } = useQuery({
-    queryKey: ["/api/user/settings"],
-    queryFn: async () => {
-      const response = await fetch("/api/user/settings", {
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-      if (!response.ok) return null;
-      return response.json();
-    },
-    retry: false,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-  });
-
   useEffect(() => {
-    let connectionId: string | null = null;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    const connectWebSocket = () => {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    const connectWebSocket = async () => {
-      try {
-        connectionId = 'order-notifications';
-        
-        await replitWsService.createConnection(
-          connectionId,
-          (data) => {
-            if (data.type === 'order_notification') {
-              handleOrderNotification(data.data);
-            }
-          },
-          () => {
-            console.log('[ORDER NOTIFICATIONS] Connected to WebSocket for order updates');
-          },
-          () => {
-            console.log('[ORDER NOTIFICATIONS] WebSocket connection closed, attempting to reconnect...');
+      ws.onopen = () => {
+        console.log('[ORDER NOTIFICATIONS] Connected to WebSocket for order updates');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          
+          if (message.type === 'order_notification') {
+            handleOrderNotification(message.data);
           }
-        );
-      } catch (error) {
-        console.error('[ORDER NOTIFICATIONS] WebSocket connection failed:', error);
-        // Retry connection after delay
-        setTimeout(connectWebSocket, 3000);
-      }
+        } catch (error) {
+          console.error('[ORDER NOTIFICATIONS] Error parsing WebSocket message:', error);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log('[ORDER NOTIFICATIONS] WebSocket connection closed, attempting to reconnect...');
+        setTimeout(connectWebSocket, 3000); // Reconnect after 3 seconds
+      };
+
+      ws.onerror = (error) => {
+        console.error('[ORDER NOTIFICATIONS] WebSocket error:', error);
+      };
     };
 
-    const handleOrderNotification = async (data: OrderNotification) => {
-      const { status, notification, orderType, symbol, side, quantity, price, audioNotification } = data;
+    const handleOrderNotification = (data: OrderNotification) => {
+      const { status, notification, orderType, symbol, side, quantity, price } = data;
       
       let title = '';
       let description = notification;
@@ -94,19 +78,6 @@ export function useOrderNotifications() {
           title = 'Order Failed';
           variant = 'destructive';
           break;
-      }
-
-      // Play audio notification if available and enabled
-      if (audioNotification?.shouldPlay && userSettings) {
-        try {
-          await audioService.playOrderFillNotification(
-            audioNotification.orderType,
-            userSettings
-          );
-          console.log(`[Audio Notification] Played sound for ${audioNotification.orderType} order fill`);
-        } catch (error) {
-          console.warn('[Audio Notification] Failed to play sound:', error);
-        }
       }
 
       // Show toast notification
@@ -136,18 +107,14 @@ export function useOrderNotifications() {
     connectWebSocket();
 
     return () => {
-      if (connectionId) {
-        replitWsService.closeConnection(connectionId);
+      if (wsRef.current) {
+        wsRef.current.close();
       }
     };
   }, [toast]);
 
   return {
-    // Return connection status and methods for manual control
-    isConnected: wsRef.current?.readyState === WebSocket.OPEN,
-    getStatus: () => ({ 
-      connected: wsRef.current?.readyState === WebSocket.OPEN || false, 
-      retryCount: 0 
-    })
+    // Return any methods if needed for manual control
+    isConnected: wsRef.current?.readyState === WebSocket.OPEN
   };
 }

@@ -1,13 +1,12 @@
 import { 
-  users, exchanges, tradingBots, trades, portfolio, botCycles, cycleOrders, userSettings,
+  users, exchanges, tradingBots, trades, portfolio, botCycles, cycleOrders,
   type User, type InsertUser,
   type Exchange, type InsertExchange,
   type TradingBot, type InsertTradingBot,
   type Trade, type InsertTrade,
   type Portfolio, type InsertPortfolio,
   type BotCycle, type InsertBotCycle,
-  type CycleOrder, type InsertCycleOrder,
-  type UserSettings, type InsertUserSettings, type UpdateUserSettings
+  type CycleOrder, type InsertCycleOrder
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sum, count, isNotNull } from "drizzle-orm";
@@ -21,17 +20,11 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUserLastLogin(id: number): Promise<void>;
 
-  // User Settings
-  getUserSettings(userId: number): Promise<UserSettings | undefined>;
-  createUserSettings(settings: InsertUserSettings): Promise<UserSettings>;
-  updateUserSettings(userId: number, settings: UpdateUserSettings): Promise<UserSettings>;
-
   // Exchanges
   getExchangesByUserId(userId: number): Promise<Exchange[]>;
-  getUserExchanges(userId: number): Promise<Exchange[]>;
   createExchange(exchange: InsertExchange): Promise<Exchange>;
-  updateExchange(id: number, exchange: Partial<InsertExchange>, userId?: number): Promise<Exchange>;
-  deleteExchange(id: number, userId?: number): Promise<void>;
+  updateExchange(id: number, exchange: Partial<InsertExchange>): Promise<Exchange>;
+  deleteExchange(id: number): Promise<void>;
 
   // Trading Bots
   getTradingBotsByUserId(userId: number): Promise<TradingBot[]>;
@@ -105,31 +98,6 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({ lastLogin: new Date() })
       .where(eq(users.id, id));
-  }
-
-  async getUserSettings(userId: number): Promise<UserSettings | undefined> {
-    const [settings] = await db
-      .select()
-      .from(userSettings)
-      .where(eq(userSettings.userId, userId));
-    return settings || undefined;
-  }
-
-  async createUserSettings(settings: InsertUserSettings): Promise<UserSettings> {
-    const [newSettings] = await db
-      .insert(userSettings)
-      .values(settings)
-      .returning();
-    return newSettings;
-  }
-
-  async updateUserSettings(userId: number, settings: UpdateUserSettings): Promise<UserSettings> {
-    const [updatedSettings] = await db
-      .update(userSettings)
-      .set({ ...settings, updatedAt: new Date() })
-      .where(eq(userSettings.userId, userId))
-      .returning();
-    return updatedSettings;
   }
 
   async getExchangesByUserId(userId: number): Promise<Exchange[]> {
@@ -289,135 +257,6 @@ export class DatabaseStorage implements IStorage {
       totalTrades: totalTradesResult.count,
       winRate: winRate.toFixed(2),
     };
-  }
-
-  // Additional helper methods for API compatibility
-  async getUserExchanges(userId: number): Promise<Exchange[]> {
-    return this.getExchangesByUserId(userId);
-  }
-
-  async getUserTradingBots(userId: number): Promise<TradingBot[]> {
-    return this.getTradingBotsByUserId(userId);
-  }
-
-  async getTradingBot(id: number, userId: number): Promise<TradingBot | undefined> {
-    const [bot] = await db
-      .select()
-      .from(tradingBots)
-      .where(and(eq(tradingBots.id, id), eq(tradingBots.userId, userId)));
-    return bot || undefined;
-  }
-
-  async updateTradingBot(id: number, updates: Partial<InsertTradingBot>, userId?: number): Promise<TradingBot> {
-    const whereClause = userId 
-      ? and(eq(tradingBots.id, id), eq(tradingBots.userId, userId))
-      : eq(tradingBots.id, id);
-
-    const [updatedBot] = await db
-      .update(tradingBots)
-      .set(updates)
-      .where(whereClause)
-      .returning();
-    return updatedBot;
-  }
-
-  async deleteTradingBot(id: number, userId?: number): Promise<void> {
-    const whereClause = userId 
-      ? and(eq(tradingBots.id, id), eq(tradingBots.userId, userId))
-      : eq(tradingBots.id, id);
-
-    await db.delete(tradingBots).where(whereClause);
-  }
-
-  async updateExchange(id: number, updates: Partial<InsertExchange>, userId?: number): Promise<Exchange> {
-    const whereClause = userId 
-      ? and(eq(exchanges.id, id), eq(exchanges.userId, userId))
-      : eq(exchanges.id, id);
-
-    const [updatedExchange] = await db
-      .update(exchanges)
-      .set(updates)
-      .where(whereClause)
-      .returning();
-    return updatedExchange;
-  }
-
-  async deleteExchange(id: number, userId?: number): Promise<void> {
-    const whereClause = userId 
-      ? and(eq(exchanges.id, id), eq(exchanges.userId, userId))
-      : eq(exchanges.id, id);
-
-    await db.delete(exchanges).where(whereClause);
-  }
-
-  async getBotCycles(botId: number, userId: number): Promise<BotCycle[]> {
-    const cycles = await db
-      .select()
-      .from(botCycles)
-      .where(and(eq(botCycles.botId, botId), eq(botCycles.userId, userId)))
-      .orderBy(desc(botCycles.createdAt));
-    return cycles;
-  }
-
-  async getBotOrders(botId: number, userId: number): Promise<CycleOrder[]> {
-    const orders = await db
-      .select()
-      .from(cycleOrders)
-      .innerJoin(botCycles, eq(cycleOrders.cycleId, botCycles.id))
-      .where(and(eq(botCycles.botId, botId), eq(botCycles.userId, userId)))
-      .orderBy(desc(cycleOrders.createdAt));
-    return orders.map(order => order.cycle_orders);
-  }
-
-  async getCycleProfits(userId: number): Promise<BotCycle[]> {
-    const cycles = await db
-      .select()
-      .from(botCycles)
-      .where(and(eq(botCycles.userId, userId), isNotNull(botCycles.cycleProfit)))
-      .orderBy(desc(botCycles.completedAt));
-    return cycles;
-  }
-
-  async getBotStats(userId: number): Promise<any> {
-    // Get bot statistics
-    const [activeBotsResult] = await db
-      .select({ count: count() })
-      .from(tradingBots)
-      .where(and(eq(tradingBots.userId, userId), eq(tradingBots.isActive, true)));
-
-    const [totalBotsResult] = await db
-      .select({ count: count() })
-      .from(tradingBots)
-      .where(eq(tradingBots.userId, userId));
-
-    const [completedCyclesResult] = await db
-      .select({ count: count() })
-      .from(botCycles)
-      .where(and(eq(botCycles.userId, userId), eq(botCycles.status, 'completed')));
-
-    const [totalProfitResult] = await db
-      .select({ totalProfit: sum(botCycles.cycleProfit) })
-      .from(botCycles)
-      .where(and(eq(botCycles.userId, userId), isNotNull(botCycles.cycleProfit)));
-
-    return {
-      activeBots: activeBotsResult.count,
-      totalBots: totalBotsResult.count,
-      completedCycles: completedCyclesResult.count,
-      totalProfit: totalProfitResult.totalProfit || "0"
-    };
-  }
-
-  async getUserTrades(userId: number): Promise<Trade[]> {
-    return this.getTradesByUserId(userId);
-  }
-
-  async getPortfolio(userId: number): Promise<Portfolio[]> {
-    return this.getPortfolioByUserId(userId);
-  }
-
-  async getStats(userId: number): Promise<any> {
-    return this.getUserStats(userId);
   }
 
   // Bot Cycle Management

@@ -20,10 +20,11 @@ export function useMarketData() {
 
   const connect = () => {
     try {
-      // Connect to dedicated WebSocket server on port 8080 to avoid Vite HMR conflicts
+      // Connect to the existing WebSocket service on same port as HTTP server
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host; // Include port for development
-      const wsUrl = `${protocol}//${host}/ws`;
+      const host = window.location.hostname;
+      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+      const wsUrl = `${protocol}//${host}:${port}/ws`;
       
       wsRef.current = new WebSocket(wsUrl);
 
@@ -37,31 +38,17 @@ export function useMarketData() {
           reconnectTimeoutRef.current = null;
         }
         
-        // Wait a moment before sending subscription to ensure connection is stable
-        setTimeout(() => {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-              type: 'subscribe',
-              dataType: 'ticker',
-              symbols: ['DOGEUSDT', 'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'SOLUSDT', 'DOTUSDT', 'LINKUSDT', 'AVAXUSDT', 'ICPUSDT', '1INCHUSDT']
-            }));
-          }
-        }, 100);
+        // Send subscription request for all available ticker data
+        wsRef.current?.send(JSON.stringify({
+          type: 'subscribe',
+          dataType: 'ticker',
+          symbols: ['DOGEUSDT', 'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'SOLUSDT', 'DOTUSDT', 'LINKUSDT', 'AVAXUSDT', 'ICPUSDT', '1INCHUSDT']
+        }));
       };
 
       wsRef.current.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          
-          // Handle keepalive messages
-          if (message.type === 'keepalive') {
-            return; // Connection is alive
-          }
-          
-          if (message.type === 'connected') {
-            console.log('[MARKET WS] Connection confirmed');
-            return;
-          }
           
           if (message.type === 'market_update' || message.type === 'ticker_update') {
             const update = message.data || message;

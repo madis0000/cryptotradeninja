@@ -13,24 +13,6 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const userSettings = pgTable("user_settings", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
-  // Notification Settings
-  soundNotificationsEnabled: boolean("sound_notifications_enabled").default(true).notNull(),
-  takeProfitSoundEnabled: boolean("take_profit_sound_enabled").default(true).notNull(),
-  safetyOrderSoundEnabled: boolean("safety_order_sound_enabled").default(true).notNull(),
-  baseOrderSoundEnabled: boolean("base_order_sound_enabled").default(true).notNull(),
-  // Sound Selection
-  takeProfitSound: text("take_profit_sound").default("chin-chin").notNull(),
-  safetyOrderSound: text("safety_order_sound").default("beep").notNull(),
-  baseOrderSound: text("base_order_sound").default("notification").notNull(),
-  // Volume Settings
-  notificationVolume: decimal("notification_volume", { precision: 3, scale: 2 }).default("0.50").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
 export const exchanges = pgTable("exchanges", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
@@ -191,22 +173,11 @@ export const cycleOrders = pgTable("cycle_orders", {
 });
 
 // Relations
-export const usersRelations = relations(users, ({ many, one }) => ({
+export const usersRelations = relations(users, ({ many }) => ({
   exchanges: many(exchanges),
   tradingBots: many(tradingBots),
   trades: many(trades),
   portfolio: many(portfolio),
-  settings: one(userSettings, {
-    fields: [users.id],
-    references: [userSettings.userId],
-  }),
-}));
-
-export const userSettingsRelations = relations(userSettings, ({ one }) => ({
-  user: one(users, {
-    fields: [userSettings.userId],
-    references: [users.id],
-  }),
 }));
 
 export const exchangesRelations = relations(exchanges, ({ one, many }) => ({
@@ -281,18 +252,6 @@ export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
 });
 
-export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const updateUserSettingsSchema = createInsertSchema(userSettings).omit({
-  id: true,
-  userId: true,
-  createdAt: true,
-}).partial();
-
 export const insertExchangeSchema = createInsertSchema(exchanges).omit({
   id: true,
   createdAt: true,
@@ -356,7 +315,3 @@ export type InsertBotCycle = z.infer<typeof insertBotCycleSchema>;
 
 export type CycleOrder = typeof cycleOrders.$inferSelect;
 export type InsertCycleOrder = z.infer<typeof insertCycleOrderSchema>;
-
-export type UserSettings = typeof userSettings.$inferSelect;
-export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
-export type UpdateUserSettings = z.infer<typeof updateUserSettingsSchema>;
