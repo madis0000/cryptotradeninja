@@ -861,6 +861,12 @@ export class WebSocketService {
   // Mock data generation removed - only real exchange data
 
   private connectWithSubscription(wsUrl: string, streamPaths: string[]) {
+    // Skip external WebSocket connections in development to avoid Vite HMR conflicts
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[BINANCE] Skipping external WebSocket connection in development mode');
+      return;
+    }
+
     // Creating new subscription-based WebSocket connection
     
     // Close existing connection if any
@@ -2258,6 +2264,12 @@ export class WebSocketService {
   }
 
   private startBinanceTickerStreams(symbols: string[]) {
+    // Skip external WebSocket connections in development to avoid Vite HMR conflicts
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[WEBSOCKET] Skipping Binance stream in development mode');
+      return;
+    }
+
     try {
       // Create live ticker stream URL for Binance testnet
       const streamNames = symbols.map(symbol => `${symbol.toLowerCase()}@ticker`);
