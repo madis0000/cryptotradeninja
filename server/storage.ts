@@ -469,9 +469,9 @@ export class DatabaseStorage implements IStorage {
       .from(cycleOrders)
       .where(and(
         eq(cycleOrders.userId, userId),
-        sql`${cycleOrders.updatedAt} >= ${since}`
+        gte(cycleOrders.filledAt, since)
       ))
-      .orderBy(desc(cycleOrders.updatedAt));
+      .orderBy(desc(cycleOrders.filledAt));
   }
 }
 
