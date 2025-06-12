@@ -31,7 +31,7 @@ export function MyBotsPage() {
   });
 
   // WebSocket connection for audio notifications
-  useUserWebSocket({
+  const { lastMessage } = useUserWebSocket({
     onMessage: async (message) => {
       console.log('[AUDIO] WebSocket message received:', message);
       
@@ -80,6 +80,19 @@ export function MyBotsPage() {
       }
     }
   });
+
+  // Add a test button for immediate audio testing
+  const testAudio = async () => {
+    if (settings) {
+      console.log('[AUDIO] Manual test triggered');
+      try {
+        await audioService.playOrderFillNotification('base_order', settings);
+        console.log('[AUDIO] Manual test successful');
+      } catch (error) {
+        console.error('[AUDIO] Manual test failed:', error);
+      }
+    }
+  };
 
   // Utility functions for bot data calculations
   const formatCurrency = (amount: string | number) => {
@@ -597,9 +610,19 @@ export function MyBotsPage() {
         ) : (
           <div className="space-y-6">
             {/* Header */}
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">My Trading Bots</h1>
-              <p className="text-crypto-light">Manage your automated trading strategies</p>
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-2">My Trading Bots</h1>
+                <p className="text-crypto-light">Manage your automated trading strategies</p>
+              </div>
+              <Button 
+                onClick={testAudio}
+                variant="outline"
+                size="sm"
+                className="border-blue-600 text-blue-400 hover:bg-blue-600 hover:text-white"
+              >
+                Test Audio
+              </Button>
             </div>
 
             {/* Portfolio Statistics */}
