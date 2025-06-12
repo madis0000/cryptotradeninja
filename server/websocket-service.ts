@@ -330,8 +330,10 @@ export class WebSocketService {
               // Removed verbose WebSocket logging
             }
             
-            // Send current market data from backend to frontend
+            // Send current market data immediately to frontend for faster response
             this.sendMarketDataToClient(ws);
+            
+
           }
           
           if (message.type === 'authenticate') {
@@ -584,9 +586,6 @@ export class WebSocketService {
     // If no existing connection, create a new one specifically for klines
     // Removed verbose WebSocket logging
     
-    // Fetch historical data first, then start real-time streams
-    await this.fetchHistoricalKlinesWS(symbols, interval);
-    
     const { storage } = await import('./storage');
     let baseUrl = 'wss://stream.testnet.binance.vision/stream';
     
@@ -624,10 +623,8 @@ export class WebSocketService {
         this.binanceKlineWs.send(JSON.stringify(subscribeMessage));
         this.currentKlineSubscriptions = klineStreamPaths;
         
-        // Fetch historical data in parallel for better performance
-        setTimeout(() => {
-          this.fetchHistoricalKlinesWS(symbols, interval);
-        }, 50);
+        // Fetch historical data asynchronously for better performance
+        this.fetchHistoricalKlinesWS(symbols, interval).catch(console.error);
       }
     });
     
@@ -1293,6 +1290,56 @@ export class WebSocketService {
     this.binancePublicWs.on('error', (error) => {
       console.error('[BINANCE STREAM] WebSocket error:', error);
     });
+  }
+
+  private async fetchImmediateMarketData(symbols: string[], ws: WebSocket) {
+    // Fetch immediate market data from Binance REST API for faster response
+    try {
+      const { storage } = await import('./storage');
+      const exchanges = await storage.getExchangesByUserId(1);
+      let baseApiUrl = 'https://api.binance.com';
+      
+      if (exchanges.length > 0 && exchanges[0].restApiEndpoint) {
+        baseApiUrl = exchanges[0].restApiEndpoint;
+      }
+      
+      // Fetch ticker data for all symbols in parallel
+      const tickerPromises = symbols.map(async (symbol) => {
+        try {
+          const response = await fetch(`${baseApiUrl}/api/v3/ticker/24hr?symbol=${symbol.toUpperCase()}`);
+          if (response.ok) {
+            const ticker = await response.json();
+            const marketUpdate = {
+              symbol: ticker.symbol,
+              price: ticker.lastPrice,
+              priceChange: ticker.priceChange,
+              priceChangePercent: ticker.priceChangePercent,
+              highPrice: ticker.highPrice,
+              lowPrice: ticker.lowPrice,
+              volume: ticker.volume,
+              quoteVolume: ticker.quoteVolume,
+              timestamp: Date.now()
+            };
+            
+            // Cache the data and send to client
+            this.marketData.set(ticker.symbol, marketUpdate);
+            
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'market_update',
+                data: marketUpdate
+              }));
+            }
+          }
+        } catch (error) {
+          console.error(`[IMMEDIATE DATA] Error fetching ${symbol}:`, error);
+        }
+      });
+      
+      await Promise.all(tickerPromises);
+    } catch (error) {
+      console.error('[IMMEDIATE DATA] Error fetching market data:', error);
+    }
   }
 
   private async connectToBinanceUserStream(userId: number, listenKey: string) {
