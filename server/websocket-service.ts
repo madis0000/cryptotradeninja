@@ -416,8 +416,8 @@ export class WebSocketService {
                 console.log(`[UNIFIED WS SERVER] Failed to establish connection for kline data`);
               }
               
-              // Send historical data for the new interval
-              this.sendHistoricalDataToClients(symbols, newInterval);
+              // Send historical data immediately to this client
+              this.sendHistoricalDataToClient(ws, symbols, newInterval);
               return;
             }
             
@@ -1558,6 +1558,33 @@ export class WebSocketService {
     // Removed verbose WebSocket logging
   }
 
+  private sendHistoricalDataToClient(ws: any, symbols: string[], interval: string) {
+    symbols.forEach(symbol => {
+      const symbolData = this.historicalData.get(symbol.toUpperCase());
+      if (symbolData && symbolData.has(interval)) {
+        const intervalData = symbolData.get(interval)!;
+        
+        const message = JSON.stringify({
+          type: 'historical_klines',
+          data: {
+            symbol: symbol.toUpperCase(),
+            interval: interval,
+            klines: intervalData.slice(-500) // Send last 500 candles as requested
+          }
+        });
+        
+        try {
+          console.log(`[HISTORICAL] Sending ${intervalData.length} historical klines for ${symbol.toUpperCase()} ${interval} to client`);
+          ws.send(message);
+        } catch (error) {
+          console.error(`[HISTORICAL] Failed to send historical data to client:`, error);
+        }
+      } else {
+        console.log(`[HISTORICAL] No historical data available for ${symbol.toUpperCase()} ${interval}`);
+      }
+    });
+  }
+
   private sendHistoricalDataToClients(symbols: string[], interval: string) {
     symbols.forEach(symbol => {
       const symbolData = this.historicalData.get(symbol.toUpperCase());
@@ -1580,7 +1607,7 @@ export class WebSocketService {
                 data: {
                   symbol: symbol.toUpperCase(),
                   interval: interval,
-                  klines: intervalData.slice(-100) // Send last 100 candles
+                  klines: intervalData.slice(-500) // Send last 500 candles as requested
                 }
               });
               
