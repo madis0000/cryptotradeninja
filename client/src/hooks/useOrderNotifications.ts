@@ -144,7 +144,10 @@ export function useOrderNotifications() {
 
   return {
     // Return connection status and methods for manual control
-    isConnected: connectionId ? replitWsService.getConnectionStatus(connectionId).connected : false,
-    getStatus: () => connectionId ? replitWsService.getConnectionStatus(connectionId) : { connected: false, retryCount: 0 }
+    isConnected: wsRef.current?.readyState === WebSocket.OPEN,
+    getStatus: () => ({ 
+      connected: wsRef.current?.readyState === WebSocket.OPEN || false, 
+      retryCount: 0 
+    })
   };
 }
