@@ -7,6 +7,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";
 import { encryptApiCredentials, decryptApiCredentials } from "./encryption";
 import { WebSocketService } from "./websocket-service";
+import { WebSocketRouter } from "./websocket-router";
 import { BotLoggerManager } from "./bot-logger";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -17,8 +18,9 @@ import * as path from "path";
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Initialize WebSocket service
-  const wsService = new WebSocketService(httpServer);
+  // Initialize unified WebSocket router instead of separate service
+  const wsRouter = new WebSocketRouter(httpServer);
+  const wsService = wsRouter.getWebSocketService();
   
   // Start all markets ticker stream for real-time data
   setTimeout(() => {
