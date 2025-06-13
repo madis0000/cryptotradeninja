@@ -746,8 +746,28 @@ export class WebSocketService {
         };
         
         console.log(`[UNIFIED WS SERVER] Subscribing to kline streams: ${klineStreamPaths.join(', ')}`);
-        this.binancePublicWs!.send(JSON.stringify(subscribeMessage));
-        this.currentKlineSubscriptions = klineStreamPaths;
+        
+        // Ensure connection is ready before sending
+        try {
+          if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+            this.binancePublicWs.send(JSON.stringify(subscribeMessage));
+            this.currentKlineSubscriptions = klineStreamPaths;
+          } else {
+            console.error('[UNIFIED WS SERVER] WebSocket not ready for subscription');
+          }
+        } catch (error) {
+          console.error('[UNIFIED WS SERVER] Error sending subscription message:', error);
+        }
+      });
+
+      this.binancePublicWs.on('error', (error) => {
+        console.error('[UNIFIED WS SERVER] WebSocket error:', error);
+      });
+
+      this.binancePublicWs.on('close', (code, reason) => {
+        console.log(`[UNIFIED WS SERVER] WebSocket closed - Code: ${code}, Reason: ${reason}`);
+        this.binancePublicWs = null;
+        this.currentKlineSubscriptions = [];
       });
 
       this.binancePublicWs.on('message', (data) => {
@@ -999,32 +1019,45 @@ export class WebSocketService {
     this.binancePublicWs.on('open', () => {
       console.log(`[UNIFIED WS SERVER] Connected to Binance stream: ${wsUrl}`);
       
-      // First unsubscribe from any existing streams
-      if (this.currentSubscriptions.length > 0) {
-        const unsubscribeMessage = {
-          method: 'UNSUBSCRIBE',
-          params: this.currentSubscriptions,
-          id: 1
-        };
-        console.log(`[UNIFIED WS SERVER] Unsubscribing from old streams:`, this.currentSubscriptions);
-        // Check connection state before sending
-        if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
-          this.binancePublicWs.send(JSON.stringify(unsubscribeMessage));
+      // Add delay to ensure connection is fully established
+      setTimeout(() => {
+        // First unsubscribe from any existing streams
+        if (this.currentSubscriptions.length > 0) {
+          const unsubscribeMessage = {
+            method: 'UNSUBSCRIBE',
+            params: this.currentSubscriptions,
+            id: 1
+          };
+          console.log(`[UNIFIED WS SERVER] Unsubscribing from old streams:`, this.currentSubscriptions);
+          // Check connection state before sending
+          try {
+            if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+              this.binancePublicWs.send(JSON.stringify(unsubscribeMessage));
+            }
+          } catch (error) {
+            console.error('[UNIFIED WS SERVER] Error sending unsubscribe message:', error);
+          }
         }
-      }
-      
-      // Then subscribe to new streams
-      const subscriptionMessage = {
-        method: 'SUBSCRIBE',
-        params: streamPaths,
-        id: 2
-      };
-      
-      console.log(`[UNIFIED WS SERVER] Subscribing to new streams:`, streamPaths);
-      // Check connection state before sending
-      if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
-        this.binancePublicWs.send(JSON.stringify(subscriptionMessage));
-      }
+        
+        // Then subscribe to new streams
+        const subscriptionMessage = {
+          method: 'SUBSCRIBE',
+          params: streamPaths,
+          id: 2
+        };
+        
+        console.log(`[UNIFIED WS SERVER] Subscribing to new streams:`, streamPaths);
+        // Check connection state before sending
+        try {
+          if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+            this.binancePublicWs.send(JSON.stringify(subscriptionMessage));
+          } else {
+            console.error('[UNIFIED WS SERVER] WebSocket not ready for subscription after delay');
+          }
+        } catch (error) {
+          console.error('[UNIFIED WS SERVER] Error sending subscription message:', error);
+        }
+      }, 100);
       
       // Update current subscriptions
       this.currentSubscriptions = [...streamPaths];
