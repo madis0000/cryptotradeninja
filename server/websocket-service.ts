@@ -692,12 +692,15 @@ export class WebSocketService {
       await storage.createCycleOrder({
         cycleId: cycleId,
         exchangeOrderId: orderResult.orderId.toString(),
+        symbol: bot.tradingPair,
+        userId: bot.userId,
+        botId: bot.id,
         orderType: 'base_order',
+        orderCategory: 'MARKET',
         side: 'BUY',
         quantity: orderResult.executedQty,
         price: orderResult.fills?.[0]?.price || currentPrice.toString(),
-        status: 'FILLED',
-        timestamp: new Date()
+        status: 'FILLED'
       });
 
       console.log(`[MARTINGALE] Base order placed successfully: ${orderResult.orderId}`);
@@ -841,12 +844,15 @@ export class WebSocketService {
       await storage.createCycleOrder({
         cycleId: cycleId,
         exchangeOrderId: result.orderId.toString(),
+        symbol: bot.tradingPair,
+        userId: bot.userId,
+        botId: bot.id,
         orderType: 'liquidation',
+        orderCategory: 'LIQUIDATION',
         side: 'SELL',
         quantity: result.executedQty,
         price: result.fills?.[0]?.price || '0',
-        status: 'FILLED',
-        timestamp: new Date()
+        status: 'FILLED'
       });
 
       console.log(`[WEBSOCKET] Liquidation order placed: ${result.orderId}`);
@@ -866,8 +872,8 @@ export class WebSocketService {
       }
 
       const { apiKey } = decryptApiCredentials(
-        exchange.encryptedApiKey,
-        exchange.encryptedApiSecret,
+        exchange.apiKey,
+        exchange.apiSecret,
         exchange.encryptionIv
       );
 
@@ -954,8 +960,8 @@ export class WebSocketService {
       }
 
       const { apiKey, apiSecret } = decryptApiCredentials(
-        exchange.encryptedApiKey,
-        exchange.encryptedApiSecret,
+        exchange.apiKey,
+        exchange.apiSecret,
         exchange.encryptionIv
       );
 
