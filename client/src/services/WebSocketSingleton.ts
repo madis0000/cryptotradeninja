@@ -71,9 +71,21 @@ class WebSocketSingleton {
     
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const wsPort = '8080';
-    const wsUrl = `${protocol}//${hostname}:${wsPort}/api/ws`;
     
+    // In development, use port 8080 for WebSocket
+    // In production/deployment, use the same port as the main application
+    let wsUrl;
+    if (window.location.port && window.location.port !== '80' && window.location.port !== '443') {
+      // Development mode - use current port or 8080 for WebSocket
+      const isDev = window.location.port === '5173' || window.location.port === '3000';
+      const wsPort = isDev ? '8080' : window.location.port;
+      wsUrl = `${protocol}//${hostname}:${wsPort}/api/ws`;
+    } else {
+      // Production mode - use same host without explicit port
+      wsUrl = `${protocol}//${hostname}/api/ws`;
+    }
+    
+    console.log(`[CLIENT WS] Connecting to: ${wsUrl}`);
     this.ws = new WebSocket(wsUrl);
     this.setupEventHandlers(symbolsToUse);
   }
