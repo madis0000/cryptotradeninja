@@ -504,7 +504,7 @@ export function MartingaleStrategy({
                   <div className="flex justify-between items-center">
                     <span className="text-gray-400">Available</span>
                     <span className="text-orange-500 font-medium">
-                      {balanceData ? parseFloat(balanceData.free).toFixed(3) : '0.000'} USDT
+                      {balanceData ? parseFloat(balanceData.free || '0').toFixed(3) : '0.000'} USDT
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
