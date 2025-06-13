@@ -598,13 +598,13 @@ export class WebSocketService {
       }
 
       const { apiKey, apiSecret } = decryptApiCredentials(
-        exchange.encryptedApiKey,
-        exchange.encryptedApiSecret,
+        exchange.apiKey,
+        exchange.apiSecret,
         exchange.encryptionIv
       );
 
       // Get symbol filters for validation
-      const filters = await getBinanceSymbolFilters(botData.tradingPair, exchange.restApiEndpoint);
+      const filters = await getBinanceSymbolFilters(botData.tradingPair, exchange.restApiEndpoint || 'https://testnet.binance.vision');
       
       // Validate base order size
       const baseOrderQty = parseFloat(botData.baseOrderSize);
@@ -642,13 +642,13 @@ export class WebSocketService {
       }
 
       const { apiKey, apiSecret } = decryptApiCredentials(
-        exchange.encryptedApiKey,
-        exchange.encryptedApiSecret,
+        exchange.apiKey,
+        exchange.apiSecret,
         exchange.encryptionIv
       );
 
       // Get current market price for the symbol
-      const tickerResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/ticker/price?symbol=${bot.tradingPair}`);
+      const tickerResponse = await fetch(`${exchange.restApiEndpoint || 'https://testnet.binance.vision'}/api/v3/ticker/price?symbol=${bot.tradingPair}`);
       const tickerData = await tickerResponse.json();
       const currentPrice = parseFloat(tickerData.price);
 

@@ -69,6 +69,7 @@ export interface IStorage {
   // Cycle Order Management
   createCycleOrder(order: InsertCycleOrder): Promise<CycleOrder>;
   getCycleOrders(cycleId: number): Promise<CycleOrder[]>;
+  getCycleOrdersByCycleId(cycleId: number): Promise<CycleOrder[]>;
   updateCycleOrder(orderId: number, updates: Partial<InsertCycleOrder> & { filledAt?: Date }): Promise<CycleOrder>;
   getCycleOrderByExchangeId(exchangeOrderId: string): Promise<CycleOrder | undefined>;
   getPendingCycleOrders(botId: number): Promise<CycleOrder[]>;
@@ -157,6 +158,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(exchanges.id, id))
       .returning();
     return updatedExchange;
+  }
+
+  async getExchange(id: number): Promise<Exchange | undefined> {
+    const [exchange] = await db.select().from(exchanges).where(eq(exchanges.id, id));
+    return exchange;
   }
 
   async deleteExchange(id: number): Promise<void> {
@@ -374,6 +380,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCycleOrders(cycleId: number): Promise<CycleOrder[]> {
+    return await db
+      .select()
+      .from(cycleOrders)
+      .where(eq(cycleOrders.cycleId, cycleId))
+      .orderBy(desc(cycleOrders.createdAt));
+  }
+
+  async getCycleOrdersByCycleId(cycleId: number): Promise<CycleOrder[]> {
     return await db
       .select()
       .from(cycleOrders)
