@@ -59,10 +59,9 @@ function useMarketData() {
       console.log('[MARKET WS] Disconnected from centralized WebSocket service');
     });
 
-    // Auto-connect and subscribe to market symbols
+    // Auto-connect and fetch active bot symbols dynamically
     if (!webSocketSingleton.isConnected()) {
-      const defaultSymbols = ['DOGEUSDT', 'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'SOLUSDT', 'DOTUSDT', 'LINKUSDT', 'AVAXUSDT', 'ICPUSDT', '1INCHUSDT'];
-      webSocketSingleton.connect(defaultSymbols);
+      webSocketSingleton.connect(); // Will fetch active bot symbols automatically
     }
 
     return () => {

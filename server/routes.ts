@@ -697,6 +697,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get active bot symbols for WebSocket optimization - Secured
+  app.get("/api/active-bot-symbols", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Get all active bots for the user
+      const bots = await storage.getTradingBotsByUserId(userId);
+      const activeBots = bots.filter(bot => bot.status === 'running' || bot.status === 'active');
+      
+      // Extract unique trading pairs
+      const tradingPairs = activeBots.map(bot => bot.tradingPair);
+      const uniquePairs = new Set(tradingPairs);
+      const symbols = Array.from(uniquePairs);
+      
+      console.log(`[API] Found ${symbols.length} active symbols for user ${userId}: ${symbols.join(', ')}`);
+      res.json({ symbols });
+    } catch (error) {
+      console.error('Error fetching active bot symbols:', error);
+      res.status(500).json({ error: "Failed to fetch active bot symbols" });
+    }
+  });
+
   // Get bot statistics (cycles completed, total P&L, total invested) - Secured
   app.get("/api/bot-stats", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {

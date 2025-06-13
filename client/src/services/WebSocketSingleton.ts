@@ -20,7 +20,7 @@ class WebSocketSingleton {
     return WebSocketSingleton.instance;
   }
 
-  public connect(symbols?: string[]): void {
+  public async connect(symbols?: string[]): Promise<void> {
     // Comprehensive connection state checking to prevent duplicates
     if (this.ws?.readyState === WebSocket.OPEN) {
       return;
@@ -45,13 +45,37 @@ class WebSocketSingleton {
 
     this.status = 'connecting';
     
+    // If no symbols provided, fetch active bot symbols
+    let symbolsToUse = symbols;
+    if (!symbolsToUse) {
+      try {
+        const response = await fetch('/api/active-bot-symbols', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          symbolsToUse = data.symbols;
+          console.log('[WS SINGLETON] Fetched active bot symbols:', symbolsToUse);
+        } else {
+          // Fallback to basic symbols if API fails
+          symbolsToUse = ['BTCUSDT'];
+          console.log('[WS SINGLETON] Failed to fetch active symbols, using fallback');
+        }
+      } catch (error) {
+        console.error('[WS SINGLETON] Error fetching active symbols:', error);
+        symbolsToUse = ['BTCUSDT'];
+      }
+    }
+    
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
     const wsPort = '8080';
     const wsUrl = `${protocol}//${hostname}:${wsPort}/api/ws`;
     
     this.ws = new WebSocket(wsUrl);
-    this.setupEventHandlers(symbols);
+    this.setupEventHandlers(symbolsToUse);
   }
 
   private setupEventHandlers(symbols?: string[]): void {
