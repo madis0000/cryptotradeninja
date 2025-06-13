@@ -484,7 +484,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (order.exchangeOrderId && order.status === 'placed') {
             try {
               // Cancel order on exchange
-              await wsService.cancelOrder(bot.exchangeId, order.exchangeOrderId, bot.tradingPair);
+              await wsService.cancelOrder(bot.id, order.exchangeOrderId);
               
               // Update order status in database
               await storage.updateCycleOrder(order.id, { 
@@ -508,20 +508,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         try {
           // Place market sell order to liquidate position
-          const liquidationOrder = await wsService.placeLiquidationOrder(
-            bot.exchangeId,
-            bot.tradingPair,
-            totalQuantity,
-            activeCycle.id
-          );
+          await wsService.placeLiquidationOrder(bot.id, activeCycle.id);
+          liquidated = true;
+          console.log(`[BOT STOP] Liquidation order placed for cycle ${activeCycle.id}`);
           
-          if (liquidationOrder) {
-            liquidated = true;
-            console.log(`[BOT STOP] Liquidation order placed: ${liquidationOrder.orderId}`);
-            
-            // Complete the cycle
-            await storage.completeBotCycle(activeCycle.id);
-          }
+          // Complete the cycle
+          await storage.completeBotCycle(activeCycle.id);
         } catch (liquidationError) {
           console.error(`[BOT STOP] Failed to liquidate position:`, liquidationError);
         }

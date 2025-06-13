@@ -848,7 +848,7 @@ export class WebSocketService {
         userId: bot.userId,
         botId: bot.id,
         orderType: 'liquidation',
-        orderCategory: 'LIQUIDATION',
+        orderCategory: 'MARKET',
         side: 'SELL',
         quantity: result.executedQty,
         price: result.fills?.[0]?.price || '0',
