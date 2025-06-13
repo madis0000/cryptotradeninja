@@ -983,7 +983,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid stream configuration" });
       }
 
-      await wsService.connectConfigurableStream(dataType, symbolsArray, interval, depth);
+      await wsService.connectConfigurableStream(1, dataType);
       res.json({ 
         message: "Stream configured successfully",
         configuration: { dataType, symbols: symbolsArray, interval, depth }

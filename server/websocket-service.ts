@@ -626,16 +626,199 @@ export class WebSocketService {
   }
 
   async placeInitialBaseOrder(botId: number, cycleId: number): Promise<void> {
-    console.log(`[MARTINGALE] Placing initial base order for bot ${botId}, cycle ${cycleId}`);
+    console.log(`\n[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====`);
+    console.log(`[MARTINGALE STRATEGY] Bot ID: ${botId}, Cycle ID: ${cycleId}`);
+    
+    let logger: any = null;
     
     try {
-      // Get bot details
       const bot = await storage.getTradingBot(botId);
       if (!bot) {
-        throw new Error('Bot not found');
+        console.error(`[MARTINGALE STRATEGY] ❌ Bot ${botId} not found`);
+        return;
       }
 
-      // Get exchange
+      // Initialize logger
+      logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
+      logger.logStrategyAction('BASE_ORDER_START', {
+        botId,
+        cycleId,
+        strategy: bot.strategy,
+        tradingPair: bot.tradingPair
+      });
+
+      console.log(`[MARTINGALE STRATEGY] ✓ Bot loaded: ${bot.name} (${bot.tradingPair}, ${bot.direction})`);
+
+      const exchange = await storage.getExchange(bot.exchangeId);
+      if (!exchange) {
+        console.error(`[MARTINGALE STRATEGY] ❌ No exchange found for bot ${botId}`);
+        return;
+      }
+
+      console.log(`[MARTINGALE STRATEGY] ✓ Exchange loaded: ${exchange.name}`);
+
+      // Get current market price
+      const symbol = bot.tradingPair;
+      const tickerResponse = await fetch(`${exchange.restApiEndpoint || 'https://testnet.binance.vision'}/api/v3/ticker/price?symbol=${symbol}`);
+      const tickerData = await tickerResponse.json();
+      const currentPrice = parseFloat(tickerData.price);
+      
+      if (!currentPrice || currentPrice <= 0) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Unable to fetch market price for ${symbol}`);
+        return;
+      }
+      
+      console.log(`[MARTINGALE STRATEGY] ✓ Market price for ${symbol}: $${currentPrice.toFixed(6)}`);
+
+      // Calculate base order quantity
+      const baseOrderAmount = parseFloat(bot.baseOrderAmount);
+      const rawQuantity = baseOrderAmount / currentPrice;
+
+      // Fetch dynamic symbol filters from Binance exchange
+      const filters = await getBinanceSymbolFilters(symbol, exchange.restApiEndpoint || 'https://testnet.binance.vision');
+      
+      // Apply Binance LOT_SIZE filter using correct step size
+      const quantity = adjustQuantity(rawQuantity, filters.stepSize, filters.minQty, filters.qtyDecimals);
+
+      console.log(`[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:`);
+      console.log(`[MARTINGALE STRATEGY]    Investment Amount: $${baseOrderAmount}`);
+      console.log(`[MARTINGALE STRATEGY]    Current Price: $${currentPrice.toFixed(6)}`);
+      console.log(`[MARTINGALE STRATEGY]    Raw Quantity: ${rawQuantity.toFixed(8)} ${symbol.replace('USDT', '')}`);
+      console.log(`[MARTINGALE STRATEGY]    Adjusted Quantity: ${quantity.toFixed(filters.qtyDecimals)} ${symbol.replace('USDT', '')} (LOT_SIZE compliant)`);
+
+      // Create the base order record
+      const baseOrder = await storage.createCycleOrder({
+        cycleId: cycleId,
+        botId: botId,
+        userId: bot.userId,
+        orderType: 'base_order',
+        side: bot.direction === 'long' ? 'BUY' : 'SELL',
+        orderCategory: 'MARKET',
+        symbol: symbol,
+        quantity: quantity.toFixed(filters.qtyDecimals),
+        price: currentPrice.toFixed(filters.priceDecimals),
+        status: 'pending'
+      });
+
+      console.log(`[MARTINGALE STRATEGY] ✓ Created base order record in database (ID: ${baseOrder.id})`);
+
+      // Place order on exchange via API
+      try {
+        const { apiKey, apiSecret } = decryptApiCredentials(
+          exchange.apiKey,
+          exchange.apiSecret,
+          exchange.encryptionIv
+        );
+
+        console.log(`[MARTINGALE STRATEGY] 🚀 Placing order on ${exchange.name}...`);
+        console.log(`[MARTINGALE STRATEGY]    Order Type: MARKET ${bot.direction === 'long' ? 'BUY' : 'SELL'}`);
+        console.log(`[MARTINGALE STRATEGY]    Symbol: ${symbol}`);
+        console.log(`[MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(filters.qtyDecimals)}`);
+        
+        // Place market order for base order
+        const orderParams = new URLSearchParams({
+          symbol: bot.tradingPair,
+          side: bot.direction === 'long' ? 'BUY' : 'SELL',
+          type: 'MARKET',
+          quantity: quantity.toString(),
+          timestamp: Date.now().toString()
+        });
+
+        const signature = crypto
+          .createHmac('sha256', apiSecret)
+          .update(orderParams.toString())
+          .digest('hex');
+        
+        orderParams.append('signature', signature);
+
+        const orderResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+          method: 'POST',
+          headers: {
+            'X-MBX-APIKEY': apiKey,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: orderParams
+        });
+
+        const orderResult = await orderResponse.json();
+        
+        if (!orderResponse.ok) {
+          throw new Error(`Order placement failed: ${orderResult.msg || 'Unknown error'}`);
+        }
+
+        if (orderResult && orderResult.orderId) {
+          // Update the order with exchange order ID
+          const filledOrder = await storage.updateCycleOrder(baseOrder.id, {
+            exchangeOrderId: orderResult.orderId.toString(),
+            status: 'filled',
+            filledQuantity: quantity.toFixed(filters.qtyDecimals),
+            filledPrice: currentPrice.toFixed(filters.priceDecimals),
+            filledAt: new Date()
+          });
+
+          // Update cycle with base order info
+          await storage.updateBotCycle(cycleId, {
+            baseOrderId: orderResult.orderId.toString(),
+            baseOrderPrice: currentPrice.toFixed(8),
+            currentAveragePrice: currentPrice.toFixed(8),
+            totalInvested: baseOrderAmount.toFixed(8),
+            totalQuantity: quantity.toFixed(8)
+          });
+
+          console.log(`[MARTINGALE STRATEGY] ✅ BASE ORDER SUCCESSFULLY PLACED!`);
+          console.log(`[MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
+          console.log(`[MARTINGALE STRATEGY]    Filled Price: $${currentPrice.toFixed(6)}`);
+          console.log(`[MARTINGALE STRATEGY]    Filled Quantity: ${quantity.toFixed(8)}`);
+          console.log(`[MARTINGALE STRATEGY]    Total Investment: $${baseOrderAmount}`);
+          
+          // Log the order
+          logger.logBaseOrderExecution(orderResult);
+          
+          // Now place take profit order
+          await this.placeTakeProfitOrder(bot, cycleId, baseOrder, currentPrice);
+          
+          // Get current cycle for safety order placement
+          const currentCycle = await storage.getActiveBotCycle(botId);
+          if (currentCycle) {
+            // Place all initial safety orders
+            const maxSafetyOrders = parseInt(String(bot.maxSafetyOrders || 1));
+            for (let i = 0; i < maxSafetyOrders; i++) {
+              console.log(`[MARTINGALE STRATEGY] 🔄 Placing safety order ${i + 1} of ${maxSafetyOrders}...`);
+              await this.placeNextSafetyOrder(bot, currentCycle, currentPrice, i);
+            }
+          }
+
+        } else {
+          console.error(`[MARTINGALE STRATEGY] ❌ Failed to place base order for bot ${botId} - No order ID returned`);
+          await storage.updateCycleOrder(baseOrder.id, { 
+            status: 'failed',
+            errorMessage: 'Order placement failed - No order ID returned from exchange'
+          });
+        }
+
+      } catch (orderError) {
+        console.error(`[MARTINGALE STRATEGY] ❌ Error placing base order for bot ${botId}:`, orderError);
+        const errorMessage = orderError instanceof Error ? orderError.message : 'Unknown order placement error';
+        await storage.updateCycleOrder(baseOrder.id, { 
+          status: 'failed',
+          errorMessage: errorMessage
+        });
+      }
+
+    } catch (error) {
+      console.error(`[MARTINGALE STRATEGY] ❌ Critical error in placeInitialBaseOrder for bot ${botId}:`, error);
+      if (logger) {
+        logger.logStrategyError('BASE_ORDER_EXECUTION', error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+    
+    console.log(`[MARTINGALE STRATEGY] ===== BASE ORDER EXECUTION COMPLETE =====\n`);
+  }
+
+  async placeTakeProfitOrder(bot: any, cycleId: number, baseOrder: any, entryPrice: number): Promise<void> {
+    console.log(`[MARTINGALE STRATEGY] PLACING TAKE PROFIT ORDER`);
+    
+    try {
       const exchange = await storage.getExchange(bot.exchangeId);
       if (!exchange) {
         throw new Error('Exchange not found');
@@ -647,25 +830,30 @@ export class WebSocketService {
         exchange.encryptionIv
       );
 
-      // Get current market price for the symbol
-      const tickerResponse = await fetch(`${exchange.restApiEndpoint || 'https://testnet.binance.vision'}/api/v3/ticker/price?symbol=${bot.tradingPair}`);
-      const tickerData = await tickerResponse.json();
-      const currentPrice = parseFloat(tickerData.price);
+      // Calculate take profit price
+      const takeProfitPercentage = parseFloat(bot.takeProfitPercentage) || 1.0;
+      const takeProfitPrice = bot.direction === 'long' 
+        ? entryPrice * (1 + takeProfitPercentage / 100)
+        : entryPrice * (1 - takeProfitPercentage / 100);
 
-      // Calculate order details
+      // Get symbol filters for price precision
       const filters = await getBinanceSymbolFilters(bot.tradingPair, exchange.restApiEndpoint || 'https://testnet.binance.vision');
-      const quantity = adjustQuantity(parseFloat(bot.baseOrderAmount), filters.stepSize, filters.minQty, filters.qtyDecimals);
-      
-      // Place market buy order for base order
+      const adjustedPrice = adjustPrice(takeProfitPrice, filters.tickSize, filters.priceDecimals);
+
+      // Calculate quantity from base order
+      const quantity = parseFloat(baseOrder.quantity);
+
+      // Place limit sell order for take profit
       const orderParams = new URLSearchParams({
         symbol: bot.tradingPair,
-        side: 'BUY',
-        type: 'MARKET',
+        side: bot.direction === 'long' ? 'SELL' : 'BUY',
+        type: 'LIMIT',
+        timeInForce: 'GTC',
         quantity: quantity.toString(),
+        price: adjustedPrice.toString(),
         timestamp: Date.now().toString()
       });
 
-      // Sign the request
       const signature = crypto
         .createHmac('sha256', apiSecret)
         .update(orderParams.toString())
@@ -673,7 +861,7 @@ export class WebSocketService {
       
       orderParams.append('signature', signature);
 
-      const orderResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
         method: 'POST',
         headers: {
           'X-MBX-APIKEY': apiKey,
@@ -682,36 +870,118 @@ export class WebSocketService {
         body: orderParams
       });
 
-      const orderResult = await orderResponse.json();
+      const result = await response.json();
       
-      if (!orderResponse.ok) {
-        throw new Error(`Order placement failed: ${orderResult.msg || 'Unknown error'}`);
+      if (!response.ok) {
+        throw new Error(`Take profit order failed: ${result.msg || 'Unknown error'}`);
       }
 
-      // Store the order in database
+      // Store the take profit order
       await storage.createCycleOrder({
         cycleId: cycleId,
-        exchangeOrderId: orderResult.orderId.toString(),
+        exchangeOrderId: result.orderId.toString(),
         symbol: bot.tradingPair,
         userId: bot.userId,
         botId: bot.id,
-        orderType: 'base_order',
-        orderCategory: 'MARKET',
-        side: 'BUY',
-        quantity: orderResult.executedQty,
-        price: orderResult.fills?.[0]?.price || currentPrice.toString(),
-        status: 'FILLED'
+        orderType: 'take_profit',
+        orderCategory: 'LIMIT',
+        side: bot.direction === 'long' ? 'SELL' : 'BUY',
+        quantity: result.origQty,
+        price: result.price,
+        status: 'PENDING'
       });
 
-      console.log(`[MARTINGALE] Base order placed successfully: ${orderResult.orderId}`);
-      
-      // Log the order
-      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
-      logger.logBaseOrderExecution(orderResult);
-
+      console.log(`[MARTINGALE STRATEGY] TAKE PROFIT ORDER PLACED: ${result.orderId} at $${adjustedPrice}`);
     } catch (error) {
-      console.error(`[MARTINGALE] Failed to place base order:`, error);
-      throw error;
+      console.error(`[MARTINGALE STRATEGY] Take profit order failed:`, error);
+    }
+  }
+
+  async placeNextSafetyOrder(bot: any, cycle: any, entryPrice: number, safetyOrderIndex: number): Promise<void> {
+    console.log(`[MARTINGALE STRATEGY] Placing safety order ${safetyOrderIndex + 1} of ${bot.maxSafetyOrders}`);
+    
+    try {
+      const exchange = await storage.getExchange(bot.exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.apiKey,
+        exchange.apiSecret,
+        exchange.encryptionIv
+      );
+
+      // Calculate safety order price using deviation and multiplier
+      const priceDeviation = parseFloat(bot.priceDeviation) || 1.0;
+      const priceDeviationMultiplier = parseFloat(bot.priceDeviationMultiplier) || 2.0;
+      
+      const deviation = priceDeviation * Math.pow(priceDeviationMultiplier, safetyOrderIndex);
+      const safetyOrderPrice = bot.direction === 'long'
+        ? entryPrice * (1 - deviation / 100)
+        : entryPrice * (1 + deviation / 100);
+
+      // Get symbol filters
+      const filters = await getBinanceSymbolFilters(bot.tradingPair, exchange.restApiEndpoint || 'https://testnet.binance.vision');
+      const adjustedPrice = adjustPrice(safetyOrderPrice, filters.tickSize, filters.priceDecimals);
+
+      // Calculate safety order quantity
+      const baseQuantity = parseFloat(bot.safetyOrderAmount);
+      const safetyOrderSizeMultiplier = parseFloat(bot.safetyOrderSizeMultiplier) || 2.0;
+      const multipliedAmount = baseQuantity * Math.pow(safetyOrderSizeMultiplier, safetyOrderIndex);
+      const quantity = adjustQuantity(multipliedAmount / adjustedPrice, filters.stepSize, filters.minQty, filters.qtyDecimals);
+
+      // Place limit buy order for safety order
+      const orderParams = new URLSearchParams({
+        symbol: bot.tradingPair,
+        side: bot.direction === 'long' ? 'BUY' : 'SELL',
+        type: 'LIMIT',
+        timeInForce: 'GTC',
+        quantity: quantity.toString(),
+        price: adjustedPrice.toString(),
+        timestamp: Date.now().toString()
+      });
+
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(orderParams.toString())
+        .digest('hex');
+      
+      orderParams.append('signature', signature);
+
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: orderParams
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`Safety order failed: ${result.msg || 'Unknown error'}`);
+      }
+
+      // Store the safety order
+      await storage.createCycleOrder({
+        cycleId: cycle.id,
+        exchangeOrderId: result.orderId.toString(),
+        symbol: bot.tradingPair,
+        userId: bot.userId,
+        botId: bot.id,
+        orderType: 'safety_order',
+        orderCategory: 'LIMIT',
+        side: bot.direction === 'long' ? 'BUY' : 'SELL',
+        quantity: result.origQty,
+        price: result.price,
+        status: 'PENDING'
+      });
+
+      console.log(`[MARTINGALE STRATEGY] SAFETY ORDER ${safetyOrderIndex + 1} PLACED: ${result.orderId} at $${adjustedPrice} (${deviation.toFixed(2)}% deviation)`);
+    } catch (error) {
+      console.error(`[MARTINGALE STRATEGY] Safety order ${safetyOrderIndex + 1} failed:`, error);
     }
   }
 
