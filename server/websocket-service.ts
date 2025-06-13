@@ -653,8 +653,8 @@ export class WebSocketService {
       const currentPrice = parseFloat(tickerData.price);
 
       // Calculate order details
-      const filters = await getBinanceSymbolFilters(bot.tradingPair, exchange.restApiEndpoint);
-      const quantity = adjustQuantity(parseFloat(bot.baseOrderSize), filters.stepSize, filters.minQty, filters.baseAssetPrecision);
+      const filters = await getBinanceSymbolFilters(bot.tradingPair, exchange.restApiEndpoint || 'https://testnet.binance.vision');
+      const quantity = adjustQuantity(parseFloat(bot.baseOrderAmount), filters.stepSize, filters.minQty, filters.qtyDecimals);
       
       // Place market buy order for base order
       const orderParams = new URLSearchParams({
@@ -691,7 +691,7 @@ export class WebSocketService {
       // Store the order in database
       await storage.createCycleOrder({
         cycleId: cycleId,
-        orderId: orderResult.orderId.toString(),
+        exchangeOrderId: orderResult.orderId.toString(),
         orderType: 'base_order',
         side: 'BUY',
         quantity: orderResult.executedQty,
@@ -734,8 +734,8 @@ export class WebSocketService {
       }
 
       const { apiKey, apiSecret } = decryptApiCredentials(
-        exchange.encryptedApiKey,
-        exchange.encryptedApiSecret,
+        exchange.apiKey,
+        exchange.apiSecret,
         exchange.encryptionIv
       );
 
@@ -797,14 +797,14 @@ export class WebSocketService {
       }
 
       const { apiKey, apiSecret } = decryptApiCredentials(
-        exchange.encryptedApiKey,
-        exchange.encryptedApiSecret,
+        exchange.apiKey,
+        exchange.apiSecret,
         exchange.encryptionIv
       );
 
       // Get symbol filters
-      const filters = await getBinanceSymbolFilters(bot.tradingPair, exchange.restApiEndpoint);
-      const adjustedQuantity = adjustQuantity(totalQuantity, filters.stepSize, filters.minQty, filters.baseAssetPrecision);
+      const filters = await getBinanceSymbolFilters(bot.tradingPair, exchange.restApiEndpoint || 'https://testnet.binance.vision');
+      const adjustedQuantity = adjustQuantity(totalQuantity, filters.stepSize, filters.minQty, filters.qtyDecimals);
 
       // Place market sell order
       const orderParams = new URLSearchParams({
@@ -840,7 +840,7 @@ export class WebSocketService {
       // Store the liquidation order
       await storage.createCycleOrder({
         cycleId: cycleId,
-        orderId: result.orderId.toString(),
+        exchangeOrderId: result.orderId.toString(),
         orderType: 'liquidation',
         side: 'SELL',
         quantity: result.executedQty,
