@@ -27,6 +27,7 @@ export interface IStorage {
 
   // Exchanges
   getExchangesByUserId(userId: number): Promise<Exchange[]>;
+  getExchange(id: number): Promise<Exchange | undefined>;
   createExchange(exchange: InsertExchange): Promise<Exchange>;
   updateExchange(id: number, exchange: Partial<InsertExchange>): Promise<Exchange>;
   deleteExchange(id: number): Promise<void>;

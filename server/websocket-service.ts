@@ -210,15 +210,20 @@ export class WebSocketService {
     this.tickerBinanceWs.on('open', () => {
       console.log('[TICKER STREAM] Connected to Binance ticker stream');
       
-      const tickerStreams = Array.from(allSymbols).map(symbol => `${symbol.toLowerCase()}@ticker`);
-      const subscribeMessage = {
-        method: 'SUBSCRIBE',
-        params: tickerStreams,
-        id: Date.now()
-      };
-      
-      console.log(`[TICKER STREAM] Subscribing to: ${tickerStreams.join(', ')}`);
-      this.tickerBinanceWs!.send(JSON.stringify(subscribeMessage));
+      // Wait for connection to be fully established before subscribing
+      setTimeout(() => {
+        if (this.tickerBinanceWs && this.tickerBinanceWs.readyState === WebSocket.OPEN) {
+          const tickerStreams = Array.from(allSymbols).map(symbol => `${symbol.toLowerCase()}@ticker`);
+          const subscribeMessage = {
+            method: 'SUBSCRIBE',
+            params: tickerStreams,
+            id: Date.now()
+          };
+          
+          console.log(`[TICKER STREAM] Subscribing to: ${tickerStreams.join(', ')}`);
+          this.tickerBinanceWs!.send(JSON.stringify(subscribeMessage));
+        }
+      }, 100);
     });
     
     this.tickerBinanceWs.on('message', (data) => {
@@ -252,7 +257,13 @@ export class WebSocketService {
     
     this.klineBinanceWs.on('open', () => {
       console.log('[KLINE STREAM] Connected to Binance kline stream');
-      this.addKlineSubscription(symbol, interval);
+      
+      // Wait for connection to be fully established before subscribing
+      setTimeout(() => {
+        if (this.klineBinanceWs && this.klineBinanceWs.readyState === WebSocket.OPEN) {
+          this.addKlineSubscription(symbol, interval);
+        }
+      }, 100);
     });
     
     this.klineBinanceWs.on('message', (data) => {
@@ -573,5 +584,410 @@ export class WebSocketService {
   private startStuckCycleRecovery() {
     console.log('[RECOVERY] Starting stuck cycle recovery monitoring');
     // Stuck cycle recovery implementation would go here
+  }
+
+  // Missing methods that are called from routes
+  async validateMartingaleOrderPlacement(botData: any): Promise<void> {
+    console.log('[MARTINGALE] Validating order placement for bot:', botData.name);
+    
+    try {
+      // Get exchange credentials
+      const exchange = await storage.getExchange(botData.exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.encryptedApiKey,
+        exchange.encryptedApiSecret,
+        exchange.encryptionIv
+      );
+
+      // Get symbol filters for validation
+      const filters = await getBinanceSymbolFilters(botData.tradingPair, exchange.restApiEndpoint);
+      
+      // Validate base order size
+      const baseOrderQty = parseFloat(botData.baseOrderSize);
+      if (baseOrderQty < filters.minQty) {
+        throw new Error(`Base order size ${baseOrderQty} is below minimum ${filters.minQty} for ${botData.tradingPair}`);
+      }
+
+      // Validate safety order size
+      const safetyOrderQty = parseFloat(botData.safetyOrderSize);
+      if (safetyOrderQty < filters.minQty) {
+        throw new Error(`Safety order size ${safetyOrderQty} is below minimum ${filters.minQty} for ${botData.tradingPair}`);
+      }
+
+      console.log('[MARTINGALE] Order placement validation passed');
+    } catch (error) {
+      console.error('[MARTINGALE] Validation failed:', error);
+      throw error;
+    }
+  }
+
+  async placeInitialBaseOrder(botId: number, cycleId: number): Promise<void> {
+    console.log(`[MARTINGALE] Placing initial base order for bot ${botId}, cycle ${cycleId}`);
+    
+    try {
+      // Get bot details
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        throw new Error('Bot not found');
+      }
+
+      // Get exchange
+      const exchange = await storage.getExchange(bot.exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.encryptedApiKey,
+        exchange.encryptedApiSecret,
+        exchange.encryptionIv
+      );
+
+      // Get current market price for the symbol
+      const tickerResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/ticker/price?symbol=${bot.tradingPair}`);
+      const tickerData = await tickerResponse.json();
+      const currentPrice = parseFloat(tickerData.price);
+
+      // Calculate order details
+      const filters = await getBinanceSymbolFilters(bot.tradingPair, exchange.restApiEndpoint);
+      const quantity = adjustQuantity(parseFloat(bot.baseOrderSize), filters.stepSize, filters.minQty, filters.baseAssetPrecision);
+      
+      // Place market buy order for base order
+      const orderParams = new URLSearchParams({
+        symbol: bot.tradingPair,
+        side: 'BUY',
+        type: 'MARKET',
+        quantity: quantity.toString(),
+        timestamp: Date.now().toString()
+      });
+
+      // Sign the request
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(orderParams.toString())
+        .digest('hex');
+      
+      orderParams.append('signature', signature);
+
+      const orderResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: orderParams
+      });
+
+      const orderResult = await orderResponse.json();
+      
+      if (!orderResponse.ok) {
+        throw new Error(`Order placement failed: ${orderResult.msg || 'Unknown error'}`);
+      }
+
+      // Store the order in database
+      await storage.createCycleOrder({
+        cycleId: cycleId,
+        orderId: orderResult.orderId.toString(),
+        orderType: 'base_order',
+        side: 'BUY',
+        quantity: orderResult.executedQty,
+        price: orderResult.fills?.[0]?.price || currentPrice.toString(),
+        status: 'FILLED',
+        timestamp: new Date()
+      });
+
+      console.log(`[MARTINGALE] Base order placed successfully: ${orderResult.orderId}`);
+      
+      // Log the order
+      const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
+      logger.logBaseOrderExecution(orderResult);
+
+    } catch (error) {
+      console.error(`[MARTINGALE] Failed to place base order:`, error);
+      throw error;
+    }
+  }
+
+  async updateMarketSubscriptions(symbols: string[]): Promise<void> {
+    console.log(`[WEBSOCKET] Updating market subscriptions for symbols:`, symbols);
+    // This method handles dynamic subscription updates
+    // The unified WebSocket server automatically handles subscriptions based on active connections
+    // No additional action needed as the system is already optimized
+  }
+
+  async cancelOrder(botId: number, orderId: string): Promise<void> {
+    console.log(`[WEBSOCKET] Cancelling order ${orderId} for bot ${botId}`);
+    
+    try {
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        throw new Error('Bot not found');
+      }
+
+      const exchange = await storage.getExchange(bot.exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.encryptedApiKey,
+        exchange.encryptedApiSecret,
+        exchange.encryptionIv
+      );
+
+      const cancelParams = new URLSearchParams({
+        symbol: bot.tradingPair,
+        orderId: orderId,
+        timestamp: Date.now().toString()
+      });
+
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(cancelParams.toString())
+        .digest('hex');
+      
+      cancelParams.append('signature', signature);
+
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order?${cancelParams}`, {
+        method: 'DELETE',
+        headers: {
+          'X-MBX-APIKEY': apiKey
+        }
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`Order cancellation failed: ${result.msg || 'Unknown error'}`);
+      }
+
+      console.log(`[WEBSOCKET] Order ${orderId} cancelled successfully`);
+    } catch (error) {
+      console.error(`[WEBSOCKET] Failed to cancel order ${orderId}:`, error);
+      throw error;
+    }
+  }
+
+  async placeLiquidationOrder(botId: number, cycleId: number): Promise<void> {
+    console.log(`[WEBSOCKET] Placing liquidation order for bot ${botId}, cycle ${cycleId}`);
+    
+    try {
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        throw new Error('Bot not found');
+      }
+
+      // Get all buy orders for this cycle to calculate total quantity
+      const orders = await storage.getCycleOrdersByCycleId(cycleId);
+      const buyOrders = orders.filter(order => order.side === 'BUY' && order.status === 'FILLED');
+      
+      const totalQuantity = buyOrders.reduce((sum, order) => sum + parseFloat(order.quantity), 0);
+      
+      if (totalQuantity <= 0) {
+        throw new Error('No quantity to liquidate');
+      }
+
+      const exchange = await storage.getExchange(bot.exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.encryptedApiKey,
+        exchange.encryptedApiSecret,
+        exchange.encryptionIv
+      );
+
+      // Get symbol filters
+      const filters = await getBinanceSymbolFilters(bot.tradingPair, exchange.restApiEndpoint);
+      const adjustedQuantity = adjustQuantity(totalQuantity, filters.stepSize, filters.minQty, filters.baseAssetPrecision);
+
+      // Place market sell order
+      const orderParams = new URLSearchParams({
+        symbol: bot.tradingPair,
+        side: 'SELL',
+        type: 'MARKET',
+        quantity: adjustedQuantity.toString(),
+        timestamp: Date.now().toString()
+      });
+
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(orderParams.toString())
+        .digest('hex');
+      
+      orderParams.append('signature', signature);
+
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: orderParams
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`Liquidation order failed: ${result.msg || 'Unknown error'}`);
+      }
+
+      // Store the liquidation order
+      await storage.createCycleOrder({
+        cycleId: cycleId,
+        orderId: result.orderId.toString(),
+        orderType: 'liquidation',
+        side: 'SELL',
+        quantity: result.executedQty,
+        price: result.fills?.[0]?.price || '0',
+        status: 'FILLED',
+        timestamp: new Date()
+      });
+
+      console.log(`[WEBSOCKET] Liquidation order placed: ${result.orderId}`);
+    } catch (error) {
+      console.error(`[WEBSOCKET] Liquidation order failed:`, error);
+      throw error;
+    }
+  }
+
+  async generateListenKey(exchangeId: number): Promise<string> {
+    console.log(`[WEBSOCKET] Generating listen key for exchange ${exchangeId}`);
+    
+    try {
+      const exchange = await storage.getExchange(exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+
+      const { apiKey } = decryptApiCredentials(
+        exchange.encryptedApiKey,
+        exchange.encryptedApiSecret,
+        exchange.encryptionIv
+      );
+
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/userDataStream`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey
+        }
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`Failed to generate listen key: ${result.msg || 'Unknown error'}`);
+      }
+
+      console.log(`[WEBSOCKET] Listen key generated successfully`);
+      return result.listenKey;
+    } catch (error) {
+      console.error(`[WEBSOCKET] Failed to generate listen key:`, error);
+      throw error;
+    }
+  }
+
+  async connectConfigurableStream(exchangeId: number, listenKey: string): Promise<void> {
+    console.log(`[WEBSOCKET] Connecting configurable stream for exchange ${exchangeId}`);
+    
+    try {
+      const exchange = await storage.getExchange(exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+
+      // Connect to user data stream
+      const streamUrl = `${exchange.wsStreamEndpoint}/${listenKey}`;
+      const ws = new WebSocket(streamUrl);
+
+      ws.on('open', () => {
+        console.log(`[USER DATA STREAM] Connected to user data stream for exchange ${exchangeId}`);
+      });
+
+      ws.on('message', (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+          this.handleUserDataStreamMessage(message, exchangeId);
+        } catch (error) {
+          console.error('[USER DATA STREAM] Error parsing message:', error);
+        }
+      });
+
+      ws.on('close', () => {
+        console.log(`[USER DATA STREAM] Disconnected from user data stream for exchange ${exchangeId}`);
+      });
+
+      ws.on('error', (error) => {
+        console.error(`[USER DATA STREAM] Error on exchange ${exchangeId}:`, error);
+      });
+
+    } catch (error) {
+      console.error(`[WEBSOCKET] Failed to connect configurable stream:`, error);
+      throw error;
+    }
+  }
+
+  private handleUserDataStreamMessage(message: any, exchangeId: number): void {
+    console.log(`[USER DATA STREAM] Received message for exchange ${exchangeId}:`, message.e);
+    
+    if (message.e === 'executionReport') {
+      // Handle order execution reports
+      console.log(`[USER DATA STREAM] Order update: ${message.i} ${message.X}`);
+    } else if (message.e === 'outboundAccountPosition') {
+      // Handle balance updates
+      console.log(`[USER DATA STREAM] Balance update for ${message.a}: ${message.f}`);
+    }
+  }
+
+  async getAccountBalance(exchangeId: number, asset: string): Promise<any> {
+    console.log(`[WEBSOCKET] Getting account balance for ${asset} on exchange ${exchangeId}`);
+    
+    try {
+      const exchange = await storage.getExchange(exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.encryptedApiKey,
+        exchange.encryptedApiSecret,
+        exchange.encryptionIv
+      );
+
+      const params = new URLSearchParams({
+        timestamp: Date.now().toString()
+      });
+
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(params.toString())
+        .digest('hex');
+      
+      params.append('signature', signature);
+
+      const response = await fetch(`${exchange.restApiEndpoint}/api/v3/account?${params}`, {
+        headers: {
+          'X-MBX-APIKEY': apiKey
+        }
+      });
+
+      const accountData = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get account balance: ${accountData.msg || 'Unknown error'}`);
+      }
+
+      const balance = accountData.balances.find((b: any) => b.asset === asset);
+      return balance || { asset, free: '0', locked: '0' };
+
+    } catch (error) {
+      console.error(`[WEBSOCKET] Failed to get account balance:`, error);
+      throw error;
+    }
   }
 }
