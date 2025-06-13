@@ -25,6 +25,21 @@ interface MarketSubscription {
   clientId?: string;
 }
 
+interface TickerClient {
+  ws: WebSocket;
+  clientId: string;
+  symbols: Set<string>;
+  isActive: boolean;
+}
+
+interface KlineClient {
+  ws: WebSocket;
+  clientId: string;
+  symbol: string;
+  interval: string;
+  isActive: boolean;
+}
+
 interface BalanceSubscription {
   ws: WebSocket;
   userId: number;
@@ -89,6 +104,12 @@ export class WebSocketService {
   private marketDataClients = new Set<WebSocket>(); // WebSocket clients for market data
   private isConnectionInProgress = false; // Prevent concurrent connection attempts
   private connectionLock = false; // Lock to prevent recursive kline setup calls
+  
+  // Dedicated client managers for better data flow
+  private tickerClients = new Map<string, TickerClient>();
+  private klineClients = new Map<string, KlineClient>();
+  private tickerBinanceWs: WebSocket | null = null;
+  private klineBinanceWs: WebSocket | null = null;
   
   // Cycle management optimization for concurrent operations
   private cycleOperationLocks = new Map<number, Promise<void>>(); // botId -> operation promise
@@ -372,143 +393,17 @@ export class WebSocketService {
           if (message.type === 'configure_stream') {
             console.log(`[UNIFIED WS SERVER] Configure stream request: dataType=${message.dataType}, symbols=${JSON.stringify(message.symbols)}, interval=${message.interval}`);
             
-            // Check if this is a duplicate configuration
-            const requestedSymbol = message.symbols?.[0]?.toUpperCase();
-            const requestedInterval = message.interval || '1m';
             const requestedDataType = message.dataType || 'ticker';
+            const requestedSymbols = message.symbols || [];
+            const requestedInterval = message.interval || '1m';
             
-            if (subscription.dataType === requestedDataType && 
-                subscription.symbols.has(requestedSymbol) && 
-                subscription.interval === requestedInterval) {
-              console.log(`[UNIFIED WS SERVER] Duplicate configuration detected for ${requestedSymbol} ${requestedInterval}, skipping`);
-              return;
+            if (requestedDataType === 'ticker') {
+              await this.setupTickerClient(ws, clientId, requestedSymbols);
+            } else if (requestedDataType === 'kline') {
+              await this.setupKlineClient(ws, clientId, requestedSymbols[0], requestedInterval);
             }
             
-            // Update the subscription with the requested configuration
-            subscription.symbols.clear();
-            (message.symbols || []).forEach((symbol: string) => {
-              subscription.symbols.add(symbol.toUpperCase());
-            });
-            subscription.dataType = requestedDataType;
-            subscription.interval = requestedInterval;
-            
-            console.log(`[UNIFIED WS SERVER] Updated subscription: dataType=${subscription.dataType}, symbols=${Array.from(subscription.symbols)}, interval=${subscription.interval}`);
-            
-            // For kline data type, update the current interval and hot-swap subscription
-            if (requestedDataType === 'kline') {
-              const symbols = Array.from(subscription.symbols);
-              
-              console.log(`[UNIFIED WS SERVER] Setting up kline stream for ${symbols.join(',')} at ${requestedInterval} interval`);
-              this.currentInterval = requestedInterval;
-              
-              // Force clean connection reset for reliable symbol/interval switching
-              console.log(`[UNIFIED WS SERVER] Forcing clean connection reset for reliable switching`);
-              
-              // Close existing connection completely
-              if (this.binancePublicWs) {
-                this.binancePublicWs.close();
-                this.binancePublicWs = null;
-              }
-              
-              // Clear all subscription tracking
-              this.currentKlineSubscriptions = [];
-              this.currentSubscriptions = [];
-              this.isStreamsActive = false;
-              
-              // Wait for connection to fully close
-              await new Promise(resolve => setTimeout(resolve, 300));
-              
-              // Create fresh connection specifically for kline data
-              console.log(`[UNIFIED WS SERVER] Creating fresh connection for ${symbols.join(',')} at ${requestedInterval}`);
-              
-              // Create fresh kline connection directly
-              try {
-                await this.createNewKlineConnection(symbols, requestedInterval);
-                console.log(`[UNIFIED WS SERVER] Successfully established fresh kline connection for ${symbols.join(',')} ${requestedInterval}`);
-                this.isStreamsActive = true;
-              } catch (error) {
-                console.error(`[UNIFIED WS SERVER] Error establishing fresh kline connection:`, error);
-                console.log(`[UNIFIED WS SERVER] Failed to establish fresh connection for kline data`);
-              }
-              
-              // Send historical data immediately to this client
-              this.sendHistoricalDataToClient(ws, symbols, requestedInterval);
-              return;
-            }
-            
-            // Get all unique symbols from both ticker and kline clients
-            const allSymbols = new Set<string>();
-            this.marketSubscriptions.forEach(sub => {
-              sub.symbols.forEach(symbol => allSymbols.add(symbol));
-            });
-            const symbolsArray = Array.from(allSymbols);
-            
-            // Check if we need to start streams for different data types
-            const hasKlineClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'kline');
-            const hasTickerClients = Array.from(this.marketSubscriptions).some(sub => sub.dataType === 'ticker');
-            
-            // Removed verbose WebSocket logging
-            
-            // Configure streams based on client type without circular calls
-            if (hasKlineClients && hasTickerClients) {
-              // Removed verbose WebSocket logging
-              
-              // Direct subscription updates without recursive calls
-              if (message.dataType === 'ticker' || !message.dataType) {
-                // Update ticker stream directly
-                if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
-                  const tickerStreams = symbolsArray.map(symbol => `${symbol.toLowerCase()}@ticker`);
-                  const subscribeMessage = {
-                    method: 'SUBSCRIBE',
-                    params: tickerStreams,
-                    id: Date.now()
-                  };
-                  // Removed verbose WebSocket logging
-                  this.binancePublicWs.send(JSON.stringify(subscribeMessage));
-                  this.currentSubscriptions = tickerStreams;
-                }
-              }
-              
-              if (message.dataType === 'kline') {
-                console.log(`[UNIFIED WS SERVER] Kline subscription request received: symbols=${symbolsArray.join(',')}, interval=${message.interval || '1m'}`);
-                // Update kline stream through unified connection only if available
-                if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
-                  await this.setupKlineStream(symbolsArray, message.interval || '1m');
-                } else {
-                  console.log(`[UNIFIED WS SERVER] Kline stream requested but unified connection not ready`);
-                }
-              }
-            } else {
-              // Single client type - use appropriate stream method
-              if (message.dataType === 'kline') {
-                console.log(`[UNIFIED WS SERVER] Single client kline subscription: symbols=${symbolsArray.join(',')}, interval=${message.interval || '1m'}`);
-                // Only setup kline stream if unified connection is available
-                if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
-                  await this.setupKlineStream(symbolsArray, message.interval || '1m');
-                } else {
-                  console.log(`[UNIFIED WS SERVER] Kline stream requested but unified connection not ready, establishing connection first`);
-                  await this.connectWithSubscription('wss://stream.testnet.binance.vision/stream', []);
-                }
-              } else {
-                // Direct ticker subscription for single ticker client
-                if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
-                  await this.connectWithSubscription('wss://stream.testnet.binance.vision/stream', []);
-                }
-                const tickerStreams = symbolsArray.map(symbol => `${symbol.toLowerCase()}@ticker`);
-                const subscribeMessage = {
-                  method: 'SUBSCRIBE',
-                  params: tickerStreams,
-                  id: Date.now()
-                };
-                // Check connection state before sending
-                if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
-                  this.binancePublicWs.send(JSON.stringify(subscribeMessage));
-                }
-                this.currentSubscriptions = tickerStreams;
-              }
-            }
-            
-            // Removed verbose WebSocket logging
+            return;
           }
         } catch (error) {
           console.error('[UNIFIED WS SERVER] Error processing message:', error);
@@ -698,6 +593,39 @@ export class WebSocketService {
       
     } catch (error) {
       console.error(`[WEBSOCKET] Error creating new connection:`, error);
+    }
+  }
+
+  private async setupDedicatedKlineStream(symbols: string[], interval: string) {
+    // Set up a dedicated kline stream that coexists with ticker streams
+    console.log(`[KLINE STREAM] Setting up dedicated kline stream for ${symbols.join(',')} at ${interval}`);
+    
+    // If we don't have a connection or it's closed, create a new one
+    if (!this.binancePublicWs || this.binancePublicWs.readyState !== WebSocket.OPEN) {
+      await this.createNewKlineConnection(symbols, interval);
+      return;
+    }
+    
+    // Add kline subscriptions to existing connection
+    const klineStreamPaths = symbols.map(symbol => `${symbol.toLowerCase()}@kline_${interval}`);
+    const subscribeMessage = {
+      method: 'SUBSCRIBE',
+      params: klineStreamPaths,
+      id: Date.now()
+    };
+    
+    console.log(`[KLINE STREAM] Adding kline subscriptions: ${klineStreamPaths.join(', ')}`);
+    
+    try {
+      if (this.binancePublicWs && this.binancePublicWs.readyState === WebSocket.OPEN) {
+        this.binancePublicWs.send(JSON.stringify(subscribeMessage));
+        this.currentKlineSubscriptions = klineStreamPaths;
+        this.currentInterval = interval;
+      }
+    } catch (error) {
+      console.error('[KLINE STREAM] Error adding kline subscriptions:', error);
+      // Fallback to creating new connection
+      await this.createNewKlineConnection(symbols, interval);
     }
   }
 
