@@ -89,21 +89,20 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
     setStatus('connecting');
     
-    // Smart WebSocket endpoint configuration for deployment compatibility
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
     
-    // In production/deployment, use same port as HTTP server
-    // In development, use dedicated WebSocket port
-    let wsUrl: string;
-    if (import.meta.env.PROD || hostname.includes('.replit.app') || hostname.includes('repl.co')) {
-      // Production deployment - use same port as web server
-      const port = window.location.port || (protocol === 'wss:' ? '443' : '80');
-      wsUrl = `${protocol}//${hostname}${port !== '80' && port !== '443' ? ':' + port : ''}/api/ws`;
-    } else {
-      // Development - use dedicated WebSocket port
-      const wsPort = import.meta.env.VITE_WS_PORT || '8080';
+    // In development, use port 8080 for WebSocket
+    // In production/deployment, use the same port as the main application
+    let wsUrl;
+    if (window.location.port && window.location.port !== '80' && window.location.port !== '443') {
+      // Development mode - use current port or 8080 for WebSocket
+      const isDev = window.location.port === '5173' || window.location.port === '3000';
+      const wsPort = isDev ? '8080' : window.location.port;
       wsUrl = `${protocol}//${hostname}:${wsPort}/api/ws`;
+    } else {
+      // Production mode - use same host without explicit port
+      wsUrl = `${protocol}//${hostname}/api/ws`;
     }
     
     console.log(`[CLIENT WS] Connecting to: ${wsUrl}`);
