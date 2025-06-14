@@ -1,0 +1,30 @@
+{  "ai.context.files": [
+    "docs/project-requirements-document.md",
+    "README.md", 
+    "package.json",
+    "DEPLOYMENT.md",
+    "DEPLOYMENT_SOLUTION.md"
+  ],
+  "ai.context.description": "CryptoTradeNinja - Cryptocurrency trading bot platform with real-time market data, automated trading strategies, and multi-symbol support. Built with React/TypeScript frontend, Node.js backend, WebSocket communication, and Binance API integration. Always reference the PRD in docs/project-requirements-document.md for feature requirements and specifications.",  "copilot.chat.context": {
+    "priority": 1,
+    "files": [
+      "docs/project-requirements-document.md",
+      "README.md",
+      "package.json"
+    ]
+  },
+  "github.copilot.enable": {
+    "*": true,
+    "yaml": true,
+    "plaintext": true,
+    "markdown": true
+  },
+  "copilot.chat.welcomeMessage": "I'm ready to help with your CryptoTradeNinja project! I'll reference your PRD in docs/project-requirements-document.md for all development decisions.",
+  "files.associations": {
+    "*.md": "markdown",
+    "*.prd": "markdown",
+    "PRD*": "markdown"
+  },
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "typescript.preferences.importModuleSpecifier": "relative"
+}
