@@ -25,5 +25,9 @@ export default defineConfig({
     },
     host: true,
     port: 3000,
+    hmr: {
+      port: 3002, // Use a different port for Vite's HMR WebSocket to avoid conflicts
+    },
+    cors: true,
   },
 });

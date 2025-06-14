@@ -102,8 +102,8 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
                   hostname.includes('replit.dev');
     
     if (isDev && !hostname.includes('.replit.app')) {
-      // Development mode - always use port 8080 for WebSocket
-      wsUrl = `${protocol}//${hostname}:8080/api/ws`;
+      // Development mode - use port 3001 for WebSocket (as configured in .env)
+      wsUrl = `${protocol}//${hostname}:3001/api/ws`;
     } else {
       // Production mode - use same host and port as main application
       const port = window.location.port;
@@ -223,11 +223,25 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
 
     setStatus('connecting');
     
-    // Connect to our unified WebSocket service on same port as HTTP server
+    // Connect to our unified WebSocket service
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-    const ws = new WebSocket(`${protocol}//${hostname}:${port}/api/ws`);
+    
+    // Check if we're in development environment
+    const isDev = window.location.port === '5173' || window.location.port === '3000' || 
+                  hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    let wsUrl;
+    if (isDev) {
+      // Development mode - use port 3001 for WebSocket (as configured in .env)
+      wsUrl = `${protocol}//${hostname}:3001/api/ws`;
+    } else {
+      // Production mode - use same host and port as main application
+      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+      wsUrl = `${protocol}//${hostname}:${port}/api/ws`;
+    }
+    
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {

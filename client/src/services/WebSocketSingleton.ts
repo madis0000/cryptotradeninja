@@ -82,8 +82,8 @@ class WebSocketSingleton {
                   hostname.includes('replit.dev');
     
     if (isDev && !hostname.includes('.replit.app')) {
-      // Development mode - always use port 8080 for WebSocket
-      wsUrl = `${protocol}//${hostname}:8080/api/ws`;
+      // Development mode - use port 3001 for WebSocket (as configured in .env)
+      wsUrl = `${protocol}//${hostname}:3001/api/ws`;
     } else {
       // Production mode - use same host and port as main application
       const port = window.location.port;

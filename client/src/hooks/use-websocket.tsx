@@ -16,8 +16,21 @@ export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChang
     if (ws.current?.readyState === WebSocket.OPEN) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-    const wsUrl = `${protocol}//${window.location.hostname}:${port}/ws`;
+    const hostname = window.location.hostname;
+    
+    // Check if we're in development environment
+    const isDev = window.location.port === '5173' || window.location.port === '3000' || 
+                  hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    let wsUrl;
+    if (isDev) {
+      // Development mode - use port 3001 for WebSocket (as configured in .env)
+      wsUrl = `${protocol}//${hostname}:3001/ws`;
+    } else {
+      // Production mode - use same host and port as main application
+      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+      wsUrl = `${protocol}//${hostname}:${port}/ws`;
+    }
 
     ws.current = new WebSocket(wsUrl);
 

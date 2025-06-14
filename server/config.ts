@@ -7,8 +7,8 @@ export const config = {
   port: process.env.PORT ? parseInt(process.env.PORT) : 5000,
   host: process.env.HOST || "0.0.0.0",
   
-  // WebSocket port - only used in development mode
-  wsPort: process.env.WS_PORT ? parseInt(process.env.WS_PORT) : 8080,
+  // WebSocket port - only used in development mode  
+  wsPort: process.env.WS_PORT ? parseInt(process.env.WS_PORT) : 3001,
   
   // Environment detection
   isDevelopment: process.env.NODE_ENV !== 'production',
