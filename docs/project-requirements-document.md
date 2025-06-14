@@ -88,3 +88,6 @@ The purpose of this document is to outline the requirements to transition the de
 ## Additional Notes
 - Ensure thorough documentation of changes during the transition to facilitate onboarding for other developers.
 - Use version control (GitHub) to track all updates and configurations made during the process.
+- **IMPORTANT**: The frontend must be run separately using `npx vite` command in a separate terminal.
+- Development requires two terminal sessions: one for backend (`npm run dev`) and one for frontend (`npx vite`).
+- Frontend runs on port 3000, backend on port 5000, and trading WebSocket on port 3001.

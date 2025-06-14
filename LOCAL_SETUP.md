@@ -73,8 +73,19 @@ npm run db:studio
 
 ### 5. Development Commands
 ```bash
-# Start development server
+# Start backend development server
 npm run dev
+# OR alternatively:
+npm run dev:backend
+
+# Start frontend development server (in a separate terminal)
+npm run dev:frontend
+# OR alternatively:
+npx vite
+
+# Alternative: Start frontend from client directory
+cd client
+npx vite
 
 # Build for production
 npm run build
@@ -85,6 +96,25 @@ npm start
 # Type checking
 npm run check
 ```
+
+### 6. Running Both Frontend and Backend
+For full development, you need to run both servers:
+
+**Terminal 1 - Backend Server:**
+```bash
+npm run dev
+```
+This starts:
+- Express API server on `http://localhost:5000`
+- Trading WebSocket server on `ws://localhost:3001`
+
+**Terminal 2 - Frontend Server:**
+```bash
+npx vite
+```
+This starts:
+- Vite development server on `http://localhost:3000`
+- Vite HMR WebSocket (automatically managed by Vite)
 
 ## Changes from Replit Environment
 
@@ -112,13 +142,25 @@ npm run check
 ## Development Workflow
 
 ### 1. Starting Development
+**Backend Server (Terminal 1):**
 ```bash
 npm run dev
+# OR: npm run dev:backend
+```
+
+**Frontend Server (Terminal 2):**
+```bash
+npm run dev:frontend
+# OR: npx vite
 ```
 This starts:
-- Backend server on `http://localhost:5000`
-- WebSocket server on `ws://localhost:3001`
 - Frontend development server on `http://localhost:3000` (via Vite)
+- Vite HMR WebSocket (automatically managed by Vite)
+
+**Access the Application:**
+- Open your browser to `http://localhost:3000`
+- The frontend will communicate with the backend on `localhost:5000`
+- Trading WebSocket connects to `ws://localhost:3001`
 
 ### 2. Database Management
 - Use `npm run db:studio` to open Drizzle Studio for database visualization
