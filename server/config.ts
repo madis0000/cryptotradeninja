@@ -14,8 +14,8 @@ export const config = {
   isDevelopment: process.env.NODE_ENV !== 'production',
   isProduction: process.env.NODE_ENV === 'production',
   
-  // Deployment detection for Replit
-  isDeployment: !!(process.env.REPL_DEPLOYMENT || process.env.RAILWAY_ENVIRONMENT || process.env.VERCEL),
+  // Deployment detection for local development
+  isDeployment: !!(process.env.RAILWAY_ENVIRONMENT || process.env.VERCEL || process.env.DEPLOYMENT),
   
   // Security
   allowedOrigins: process.env.ALLOWED_ORIGINS ? 
@@ -33,7 +33,7 @@ export const config = {
   websocket: {
     // In production/deployment, use same port as HTTP server
     // In development, use separate port to avoid Vite HMR conflicts
-    useSeparatePort: process.env.NODE_ENV !== 'production' && !process.env.REPL_DEPLOYMENT,
+    useSeparatePort: process.env.NODE_ENV !== 'production' && !process.env.DEPLOYMENT,
     path: '/api/ws'
   }
 };

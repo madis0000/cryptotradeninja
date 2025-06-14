@@ -1,0 +1,49 @@
+name: Local Development CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: cryptotradeninja
+          POSTGRES_PASSWORD: cryptotradeninja
+          POSTGRES_DB: cryptotradeninja
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Setup database
+      env:
+        DATABASE_URL: postgresql://cryptotradeninja:cryptotradeninja@localhost:5432/cryptotradeninja
+      run: npm run db:push
+
+    - name: Build project
+      run: npm run build
+
+    - name: Type check
+      run: npm run check

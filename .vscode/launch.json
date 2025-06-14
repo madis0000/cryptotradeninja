@@ -1,0 +1,46 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch CryptoTradeNinja Server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/server/index.ts",
+      "env": {
+        "NODE_ENV": "development",
+        "DATABASE_URL": "postgresql://cryptotradeninja:cryptotradeninja@localhost:5432/cryptotradeninja",
+        "PORT": "5000",
+        "WS_PORT": "3001"
+      },
+      "runtimeArgs": [
+        "--loader", "tsx/esm"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "name": "Launch Development (Full Stack)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/server/index.ts",
+      "env": {
+        "NODE_ENV": "development",
+        "DATABASE_URL": "postgresql://cryptotradeninja:cryptotradeninja@localhost:5432/cryptotradeninja",
+        "PORT": "5000",
+        "WS_PORT": "3001"
+      },
+      "runtimeArgs": [
+        "--loader", "tsx/esm"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "preLaunchTask": "npm: dev"
+    }
+  ]
+}

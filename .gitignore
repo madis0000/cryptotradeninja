@@ -6,4 +6,6 @@ vite.config.ts.*
 *.tar.gz
 logs/
 .config/
-.env
+.env.local
+.env.production
+.env.*.local
