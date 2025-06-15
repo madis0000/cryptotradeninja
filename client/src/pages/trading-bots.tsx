@@ -83,6 +83,8 @@ export default function TradingBots() {
   // Handle WebSocket messages
   useEffect(() => {
     const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
+      console.log('[BOTS] Received WebSocket message:', data?.type, data);
+      
       if (data && data.type === 'market_update' && data.data) {
         const marketData = data.data;
         setTickerData({
@@ -103,7 +105,23 @@ export default function TradingBots() {
         setKlineData(data.data);
       }
 
-      // Handle historical klines batch (new feature from trading page)
+      // Handle historical klines (from server)
+      if (data && data.type === 'historical_klines' && data.data && data.data.klines) {
+        console.log('[BOTS] Received historical klines:', data.data.klines.length, 'candles for', data.data.symbol);
+        if (Array.isArray(data.data.klines) && data.data.klines.length > 0) {
+          setKlineData(data.data.klines); // Set the klines array as initial kline data
+        }
+      }
+
+      // Handle historical klines (server sends this message type)
+      if (data && data.type === 'historical_klines' && data.data && data.data.klines) {
+        console.log('[BOTS] Received historical klines:', data.data.klines.length, 'candles for', data.data.symbol);
+        if (Array.isArray(data.data.klines) && data.data.klines.length > 0) {
+          setKlineData(data.data.klines); // Set the entire batch as initial kline data
+        }
+      }
+
+      // Handle historical klines batch (fallback for different message formats)
       if (data && data.type === 'historical_klines_batch' && data.data) {
         console.log('[BOTS] Received historical klines batch:', data.data.length, 'candles');
         if (Array.isArray(data.data) && data.data.length > 0) {
