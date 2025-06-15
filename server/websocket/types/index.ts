@@ -106,4 +106,5 @@ export interface WebSocketMessage {
   clientId?: string;
   message?: string;
   exchangeId?: number;
+  asset?: string;
 }

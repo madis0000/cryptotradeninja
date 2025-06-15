@@ -364,9 +364,8 @@ export class TradingOperationsManager {
       throw error;
     }
   }
-
   async getAccountBalance(exchangeId: number, asset: string): Promise<any> {
-    console.log(`[TRADING OPS] Getting account balance for exchange ${exchangeId}, asset ${asset}`);
+    console.log(`[UNIFIED WS BALANCE FETCHING] Getting account balance for exchange ${exchangeId}, asset ${asset}`);
     
     try {
       const exchange = await storage.getExchange(exchangeId);
@@ -374,8 +373,28 @@ export class TradingOperationsManager {
         throw new Error('Exchange not found');
       }
 
-      // Implementation pending - would fetch actual balance from exchange
-      console.log('[TRADING OPS] Account balance fetch - implementation pending');
+      // For testnet, use mock balance data
+      if (exchange.isTestnet) {
+        console.log(`[UNIFIED WS BALANCE FETCHING] Using testnet mock balance for exchange ${exchangeId}`);
+        const mockBalances: Record<string, string> = {
+          'USDT': '127247.18000000',
+          'BTC': '0.05000000',
+          'ETH': '2.50000000',
+          'BNB': '10.00000000'
+        };
+        
+        const availableBalance = mockBalances[asset] || '0.00000000';
+        
+        return {
+          asset,
+          free: availableBalance,
+          locked: '0.00000000',
+          timestamp: Date.now()
+        };
+      }
+
+      // For production exchanges, would fetch actual balance from exchange API
+      console.log(`[UNIFIED WS BALANCE FETCHING] Production balance fetch not implemented for exchange ${exchangeId}`);
       
       return {
         asset,
@@ -385,7 +404,7 @@ export class TradingOperationsManager {
       };
       
     } catch (error) {
-      console.error('[TRADING OPS] Account balance fetch failed:', error);
+      console.error(`[UNIFIED WS BALANCE FETCHING] Account balance fetch failed for exchange ${exchangeId}, asset ${asset}:`, error);
       throw error;
     }
   }

@@ -7,9 +7,9 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { ChevronUp, ChevronDown, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
+import { webSocketSingleton } from "@/services/WebSocketSingleton";
 
 interface MartingaleStrategyProps {
   className?: string;
@@ -73,17 +73,46 @@ export function MartingaleStrategy({
     }
   }, [config, onConfigChange]);
 
-  // Fetch available balance from exchange
-  const { data: balanceData } = useQuery({
-    queryKey: ['balance', selectedExchangeId, 'USDT'],
-    queryFn: async () => {
-      if (!selectedExchangeId) return null;
-      const response = await apiRequest(`/api/exchanges/${selectedExchangeId}/balance/USDT`);
-      return response.json();
-    },
-    enabled: !!selectedExchangeId,
-    refetchInterval: 30000,
-  });
+  const [balanceData, setBalanceData] = useState<any>(null);
+
+  // Ensure WebSocket connection is established
+  useEffect(() => {
+    console.log(`[UNIFIED WS BALANCE FETCHING] Ensuring WebSocket connection is established`);
+    if (webSocketSingleton.getStatus() !== 'connected') {
+      webSocketSingleton.connect();
+    }
+  }, []);
+
+  // Fetch balance via WebSocket
+  useEffect(() => {
+    if (!selectedExchangeId) return;
+
+    console.log(`[UNIFIED WS BALANCE FETCHING] Subscribing to balance for exchange ${selectedExchangeId}`);
+
+    const handleBalanceUpdate = (data: any) => {
+      console.log(`[UNIFIED WS BALANCE FETCHING] Received WebSocket message:`, data);
+      
+      if (data.type === 'balance_update' && data.exchangeId === selectedExchangeId && data.asset === 'USDT') {
+        console.log(`[UNIFIED WS BALANCE FETCHING] Balance update received for exchange ${selectedExchangeId}:`, data.balance);
+        setBalanceData(data.balance);
+      }
+    };
+
+    // Subscribe to WebSocket messages
+    const unsubscribe = webSocketSingleton.subscribe(handleBalanceUpdate);
+
+    // Request initial balance
+    webSocketSingleton.sendMessage({
+      type: 'get_balance',
+      exchangeId: selectedExchangeId,
+      asset: 'USDT'
+    });
+
+    return () => {
+      console.log(`[UNIFIED WS BALANCE FETCHING] Unsubscribing from balance updates`);
+      unsubscribe();
+    };
+  }, [selectedExchangeId]);
 
   const handleInputChange = (field: string, value: string) => {
     setConfig(prev => ({ ...prev, [field]: value }));
