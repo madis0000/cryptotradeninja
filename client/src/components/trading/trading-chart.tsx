@@ -211,6 +211,10 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy, klineDat
         // Legacy handling for historical klines
         console.log('[CHART] Processing historical klines (legacy):', klineData.klines.length);
         handleHistoricalKlinesBatch(klineData.klines);
+      } else if (Array.isArray(klineData)) {
+        // Handle direct array of historical klines (from trading-bots page)
+        console.log('[CHART] Processing historical klines array:', klineData.length);
+        handleHistoricalKlinesBatch(klineData);
       } else {
         // Handle single kline update
         handleKlineUpdate(klineData);

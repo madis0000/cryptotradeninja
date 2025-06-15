@@ -72,6 +72,8 @@ export default function TradingBots() {
   };
 
   const [klineData, setKlineData] = useState<any>(null);
+  const [currentInterval, setCurrentInterval] = useState("4h");
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
 
   const strategies = [
     { id: "grid", name: "Grid", active: true },
@@ -100,19 +102,33 @@ export default function TradingBots() {
         console.log('[BOTS] Received kline data for chart:', data.data);
         setKlineData(data.data);
       }
+
+      // Handle historical klines batch (new feature from trading page)
+      if (data && data.type === 'historical_klines_batch' && data.data) {
+        console.log('[BOTS] Received historical klines batch:', data.data.length, 'candles');
+        if (Array.isArray(data.data) && data.data.length > 0) {
+          setKlineData(data.data); // Set the entire batch as initial kline data
+        }
+      }
     });
 
     const unsubscribeConnect = webSocketSingleton.onConnect(() => {
       console.log(`[BOTS] Connected to unified WebSocket server`);
+      setConnectionStatus('connected');
     });
 
     const unsubscribeDisconnect = webSocketSingleton.onDisconnect(() => {
       console.log('[BOTS] Disconnected from unified WebSocket server');
+      setConnectionStatus('disconnected');
     });
 
     const unsubscribeError = webSocketSingleton.onError(() => {
       console.log('[BOTS] WebSocket error');
+      setConnectionStatus('disconnected');
     });
+
+    // Set initial status
+    setConnectionStatus(webSocketSingleton.getStatus() as any);
 
     return () => {
       unsubscribeData();
@@ -125,28 +141,24 @@ export default function TradingBots() {
   const handleSymbolSelect = (symbol: string) => {
     console.log(`[BOTS] Symbol selected: ${symbol}`);
     setSelectedSymbol(symbol);
-    setTickerData(null);
-    setKlineData(null);
+    setTickerData(null); // Clear previous ticker data
+    setKlineData(null); // Clear previous kline data
     
-    if (webSocketSingleton.isConnected()) {
-      // Subscribe to ticker updates
-      webSocketSingleton.sendMessage({
-        type: 'subscribe',
-        symbols: [symbol]
-      });
-      
-      // Subscribe to kline data for the chart
-      webSocketSingleton.sendMessage({
-        type: 'configure_stream',
-        dataType: 'kline',
-        symbols: [symbol],
-        interval: '4h'
-      });
-    }
+    // Note: Symbol change will be handled by the useEffect below
+  };
+
+  const handleIntervalChange = (interval: string) => {
+    console.log(`[BOTS] Interval changed to: ${interval}`);
+    setCurrentInterval(interval);
+    setKlineData(null); // Clear previous kline data when interval changes
   };
 
   useEffect(() => {
+    // Connect to unified WebSocket server ONCE and add reference
     console.log(`[BOTS] Starting unified WebSocket connection...`);
+    
+    // Add reference for this component instance
+    webSocketSingleton.addReference();
     
     if (!webSocketSingleton.isConnected()) {
       webSocketSingleton.connect();
@@ -155,60 +167,53 @@ export default function TradingBots() {
     // Setup initial subscriptions once connected
     const setupSubscriptions = () => {
       if (webSocketSingleton.isConnected()) {
-        // Subscribe to ticker updates
-        webSocketSingleton.sendMessage({
-          type: 'subscribe',
-          symbols: [selectedSymbol]
-        });
-        
-        // Subscribe to kline data for the chart
-        webSocketSingleton.sendMessage({
-          type: 'configure_stream',
-          dataType: 'kline',
-          symbols: [selectedSymbol],
-          interval: '4h'
-        });
+        console.log(`[BOTS] Setting up initial subscriptions for ${selectedSymbol}`);
+        webSocketSingleton.changeSymbolSubscription(selectedSymbol, currentInterval);
       }
     };
+
+    let unsubscribeConnect: (() => void) | undefined;
 
     // If already connected, setup subscriptions immediately
     if (webSocketSingleton.isConnected()) {
       setupSubscriptions();
     } else {
       // Wait for connection
-      const connectHandler = webSocketSingleton.onConnect(() => {
+      unsubscribeConnect = webSocketSingleton.onConnect(() => {
         setupSubscriptions();
       });
-      
-      return () => {
-        connectHandler();
-      };
     }
 
+    // Cleanup function - ALWAYS executed when component unmounts
     return () => {
-      console.log('[BOTS] Keeping WebSocket alive for other components');
+      console.log('[BOTS] Trading bots page unmounting, cleaning up WebSocket connection');
+      
+      // Clean up connection listener if it exists
+      if (unsubscribeConnect) {
+        unsubscribeConnect();
+      }
+      
+      // Send unsubscribe message if connected
+      if (webSocketSingleton.isConnected()) {
+        console.log('[BOTS] Sending unsubscribe message');
+        webSocketSingleton.unsubscribe();
+      }
+      
+      // Remove reference to allow cleanup
+      console.log('[BOTS] Removing WebSocket reference');
+      webSocketSingleton.removeReference();
     };
-  }, []);
+  }, []); // Empty dependency array - only run once on mount and cleanup on unmount
 
   useEffect(() => {
+    // Change subscription when symbol or interval changes (but not on initial mount)
     if (webSocketSingleton.isConnected()) {
-      console.log(`[BOTS] Changing subscription to ${selectedSymbol}`);
-      
-      // Subscribe to ticker updates
-      webSocketSingleton.sendMessage({
-        type: 'subscribe',
-        symbols: [selectedSymbol]
-      });
-      
-      // Subscribe to kline data for the chart
-      webSocketSingleton.sendMessage({
-        type: 'configure_stream',
-        dataType: 'kline',
-        symbols: [selectedSymbol],
-        interval: '4h'
-      });
+      console.log(`[BOTS] Changing subscription to ${selectedSymbol} at ${currentInterval}`);
+      webSocketSingleton.changeSymbolSubscription(selectedSymbol, currentInterval);
+    } else {
+      console.log(`[BOTS] WebSocket not connected, cannot change subscription to ${selectedSymbol}`);
     }
-  }, [selectedSymbol]);
+  }, [selectedSymbol, currentInterval]);
 
   return (
     <div className="h-screen bg-crypto-darker overflow-hidden">
@@ -261,6 +266,7 @@ export default function TradingBots() {
                     symbol={selectedSymbol} 
                     strategy={selectedStrategy === "martingale" ? martingaleConfig : undefined}
                     klineData={klineData}
+                    onIntervalChange={handleIntervalChange}
                   />
                 </div>
               </div>
