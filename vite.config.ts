@@ -29,5 +29,12 @@ export default defineConfig({
       port: 3002, // Use a different port for Vite's HMR WebSocket to avoid conflicts
     },
     cors: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 });

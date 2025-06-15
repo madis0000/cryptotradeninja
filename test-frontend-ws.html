@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend WebSocket Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: #0f1419;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e293b, #334155);
+            border-radius: 12px;
+            border: 1px solid #475569;
+        }
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .status.connected {
+            background: #10b981;
+            color: #ffffff;
+        }
+        .status.disconnected {
+            background: #ef4444;
+            color: #ffffff;
+        }
+        .status.connecting {
+            background: #f59e0b;
+            color: #ffffff;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #059669;
+        }
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        button:disabled {
+            background: #374151;
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .section {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .section h3 {
+            margin: 0 0 15px 0;
+            color: #f1f5f9;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .messages-container {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .message {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            border-left: 3px solid #3b82f6;
+            background: #1e293b;
+        }
+        .message-timestamp {
+            color: #64748b;
+            font-size: 11px;
+        }
+        .message-content {
+            color: #e2e8f0;
+            margin-top: 4px;
+            word-break: break-all;
+        }
+        .message.error {
+            border-left-color: #ef4444;
+            background: #2d1b20;
+        }
+        .message.success {
+            border-left-color: #10b981;
+            background: #1a2e25;
+        }
+        .message.info {
+            border-left-color: #f59e0b;
+            background: #2d2517;
+        }
+        .clear-btn {
+            float: right;
+            padding: 4px 8px;
+            font-size: 12px;
+            background: #6b7280;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .clear-btn:hover {
+            background: #4b5563;
+        }
+        .log-section {
+            grid-column: 1 / -1;
+        }
+        .placeholder {
+            text-align: center;
+            color: #64748b;
+            font-style: italic;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔌 Frontend WebSocket Connection Test</h1>
+            <span>Status:</span>
+            <span id="status" class="status disconnected">Disconnected</span>
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn" class="btn-primary" onclick="testConnection()">Connect & Test</button>
+            <button id="disconnectBtn" class="btn-danger" onclick="disconnect()" disabled>Disconnect</button>
+            <button id="testBtn" class="btn-success" onclick="sendTest()" disabled>Send Test Message</button>
+            <button id="subscribeBtn" class="btn-success" onclick="subscribe()" disabled>Subscribe BTCUSDT</button>
+            <button class="btn-secondary" onclick="clearAllMessages()">Clear All</button>
+        </div>
+
+        <div class="grid">
+            <div class="section">
+                <h3>
+                    📡 Connection Messages
+                    <button class="clear-btn" onclick="clearConnectionMessages()">Clear</button>
+                </h3>
+                <div id="connectionMessages" class="messages-container">
+                    <div class="placeholder">Connection messages will appear here...</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>
+                    📨 Market Data Messages
+                    <button class="clear-btn" onclick="clearMarketMessages()">Clear</button>
+                </h3>
+                <div id="marketMessages" class="messages-container">
+                    <div class="placeholder">Market data messages will appear here...</div>
+                </div>
+            </div>
+
+            <div class="section log-section">
+                <h3>
+                    📝 All Messages Log
+                    <button class="clear-btn" onclick="clearLog()">Clear</button>
+                </h3>
+                <div id="log" class="messages-container">
+                    <div class="placeholder">All WebSocket messages will appear here...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let connected = false;
+        let connectionMessages = [];
+        let marketMessages = [];
+        let allMessages = [];
+        const MAX_MESSAGES = 50;
+
+        function updateStatus(status, className) {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = status;
+            statusElement.className = `status ${className}`;
+        }
+
+        function updateButtons() {
+            document.getElementById('connectBtn').disabled = connected;
+            document.getElementById('disconnectBtn').disabled = !connected;
+            document.getElementById('testBtn').disabled = !connected;
+            document.getElementById('subscribeBtn').disabled = !connected;
+        }
+
+        function addMessage(container, messages, message, type = 'info') {
+            const messageObj = {
+                timestamp: new Date().toLocaleTimeString(),
+                content: message,
+                type: type
+            };
+
+            messages.unshift(messageObj);
+            if (messages.length > MAX_MESSAGES) {
+                messages.pop();
+            }
+
+            renderMessages(container, messages);
+        }
+
+        function renderMessages(containerId, messages) {
+            const container = document.getElementById(containerId);
+            if (messages.length === 0) {
+                container.innerHTML = '<div class="placeholder">No messages yet...</div>';
+                return;
+            }
+
+            container.innerHTML = messages.map(msg => 
+                `<div class="message ${msg.type}">
+                    <div class="message-timestamp">${msg.timestamp}</div>
+                    <div class="message-content">${msg.content}</div>
+                </div>`
+            ).join('');
+            container.scrollTop = 0;
+        }
+
+        function log(message, type = 'info') {
+            // Add to all messages log
+            addMessage('log', allMessages, message, type);
+            console.log(message);
+        }
+
+        function logConnection(message, type = 'info') {
+            addMessage('connectionMessages', connectionMessages, message, type);
+            log(`[CONNECTION] ${message}`, type);
+        }
+
+        function logMarket(message, type = 'info') {
+            addMessage('marketMessages', marketMessages, message, type);
+            log(`[MARKET] ${message}`, type);
+        }
+
+        function clearConnectionMessages() {
+            connectionMessages = [];
+            renderMessages('connectionMessages', connectionMessages);
+        }
+
+        function clearMarketMessages() {
+            marketMessages = [];
+            renderMessages('marketMessages', marketMessages);
+        }
+
+        function clearLog() {
+            allMessages = [];
+            renderMessages('log', allMessages);
+        }
+
+        function clearAllMessages() {
+            clearConnectionMessages();
+            clearMarketMessages();
+            clearLog();
+        }
+
+        function testConnection() {
+            if (connected) {
+                logConnection('Already connected', 'info');
+                return;
+            }
+
+            logConnection('Starting WebSocket test from frontend...', 'info');
+            updateStatus('Connecting...', 'connecting');
+            
+            // Test the same connection the frontend should be making
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const hostname = window.location.hostname;
+            const wsUrl = `${protocol}//${hostname}:3001/api/ws`;
+            
+            logConnection(`Connecting to: ${wsUrl}`, 'info');
+            
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    connected = true;
+                    logConnection('✅ Connected successfully!', 'success');
+                    updateStatus('Connected', 'connected');
+                    updateButtons();
+                    
+                    // Send initial test message
+                    ws.send(JSON.stringify({type: 'test', message: 'Hello from frontend test'}));
+                    logConnection('📤 Sent initial test message', 'info');
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        const messageStr = JSON.stringify(data, null, 2);
+                        
+                        // Categorize messages
+                        if (data.type === 'connected' || data.type === 'test' || data.type === 'error') {
+                            logConnection(`📨 ${messageStr}`, data.type === 'error' ? 'error' : 'success');
+                        } else if (data.type === 'ticker' || data.type === 'kline' || data.symbol) {
+                            logMarket(`📊 ${messageStr}`, 'success');
+                        } else {
+                            log(`📨 Received: ${messageStr}`, 'info');
+                        }
+                    } catch (e) {
+                        log(`📨 Received (raw): ${event.data}`, 'info');
+                    }
+                };
+                
+                ws.onclose = (event) => {
+                    connected = false;
+                    const message = `🔒 Connection closed: ${event.code} - ${event.reason}`;
+                    logConnection(message, 'error');
+                    updateStatus('Disconnected', 'disconnected');
+                    updateButtons();
+                };
+                
+                ws.onerror = (error) => {
+                    const message = `❌ WebSocket Error: ${error}`;
+                    logConnection(message, 'error');
+                    updateStatus('Error', 'disconnected');
+                    console.error('WebSocket error:', error);
+                };
+            } catch (error) {
+                logConnection(`❌ Connection failed: ${error.message}`, 'error');
+                updateStatus('Error', 'disconnected');
+            }
+        }
+
+        function disconnect() {
+            if (ws && connected) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+                connected = false;
+                logConnection('🔌 Disconnected manually', 'info');
+                updateStatus('Disconnected', 'disconnected');
+                updateButtons();
+            } else {
+                logConnection('❌ No connection to disconnect', 'error');
+            }
+        }
+
+        function sendTest() {
+            if (!connected || !ws) {
+                logConnection('❌ Not connected - cannot send test message', 'error');
+                return;
+            }
+
+            const testMessage = {
+                type: 'test',
+                message: 'Manual test message',
+                timestamp: new Date().toISOString()
+            };
+
+            logConnection(`📤 Sending test: ${JSON.stringify(testMessage)}`, 'info');
+            ws.send(JSON.stringify(testMessage));
+        }
+
+        function subscribe() {
+            if (!connected || !ws) {
+                logConnection('❌ Not connected - cannot subscribe', 'error');
+                return;
+            }
+
+            const subscribeMessage = {
+                type: 'subscribe',
+                symbols: ['BTCUSDT']
+            };
+
+            logConnection(`📤 Subscribing to: ${JSON.stringify(subscribeMessage)}`, 'info');
+            ws.send(JSON.stringify(subscribeMessage));
+        }
+
+        // Initialize the page
+        updateButtons();
+    </script>
+</body>
+</html>

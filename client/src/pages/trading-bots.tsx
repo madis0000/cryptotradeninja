@@ -7,7 +7,7 @@ import { TradingHeader } from "@/components/shared/trading-header";
 import { TradingChart } from "@/components/trading/trading-chart";
 import { GridStrategy } from "@/components/bots/strategies/grid-strategy";
 import { MartingaleStrategy } from "@/components/bots/strategies/martingale-strategy";
-import { usePublicWebSocket } from "@/hooks/useWebSocketService";
+import { webSocketSingleton } from "@/services/WebSocketSingleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface TickerData {
@@ -48,7 +48,7 @@ export default function TradingBots() {
   });
 
   // Fetch bots data for Running tab
-  const { data: bots = [] } = useQuery({
+  const { data: bots = [] } = useQuery<any[]>({
     queryKey: ['/api/bots']
   });
 
@@ -71,13 +71,16 @@ export default function TradingBots() {
     queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
   };
 
+  const [klineData, setKlineData] = useState<any>(null);
+
   const strategies = [
     { id: "grid", name: "Grid", active: true },
     { id: "martingale", name: "Martingale", active: false },
   ];
 
-  const publicWs = usePublicWebSocket({
-    onMessage: (data: any) => {
+  // Handle WebSocket messages
+  useEffect(() => {
+    const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
       if (data && data.type === 'market_update' && data.data) {
         const marketData = data.data;
         setTickerData({
@@ -91,37 +94,121 @@ export default function TradingBots() {
           quoteVolume: marketData.quoteVolume
         });
       }
-    },
-    onConnect: () => {
-      console.log(`[BOTS] Connected to WebSocket for ${selectedSymbol} ticker`);
-    },
-    onDisconnect: () => {
-      console.log('[BOTS] Disconnected from WebSocket');
-    }
-  });
+      
+      // Handle kline data for the chart
+      if (data && data.type === 'kline_update' && data.data) {
+        console.log('[BOTS] Received kline data for chart:', data.data);
+        setKlineData(data.data);
+      }
+    });
+
+    const unsubscribeConnect = webSocketSingleton.onConnect(() => {
+      console.log(`[BOTS] Connected to unified WebSocket server`);
+    });
+
+    const unsubscribeDisconnect = webSocketSingleton.onDisconnect(() => {
+      console.log('[BOTS] Disconnected from unified WebSocket server');
+    });
+
+    const unsubscribeError = webSocketSingleton.onError(() => {
+      console.log('[BOTS] WebSocket error');
+    });
+
+    return () => {
+      unsubscribeData();
+      unsubscribeConnect();
+      unsubscribeDisconnect();
+      unsubscribeError();
+    };
+  }, []);
 
   const handleSymbolSelect = (symbol: string) => {
     console.log(`[BOTS] Symbol selected: ${symbol}`);
     setSelectedSymbol(symbol);
     setTickerData(null);
-    publicWs.subscribe([symbol]);
+    setKlineData(null);
+    
+    if (webSocketSingleton.isConnected()) {
+      // Subscribe to ticker updates
+      webSocketSingleton.sendMessage({
+        type: 'subscribe',
+        symbols: [symbol]
+      });
+      
+      // Subscribe to kline data for the chart
+      webSocketSingleton.sendMessage({
+        type: 'configure_stream',
+        dataType: 'kline',
+        symbols: [symbol],
+        interval: '4h'
+      });
+    }
   };
 
   useEffect(() => {
-    console.log(`[BOTS] Starting WebSocket connection...`);
-    publicWs.connect([selectedSymbol]);
+    console.log(`[BOTS] Starting unified WebSocket connection...`);
+    
+    if (!webSocketSingleton.isConnected()) {
+      webSocketSingleton.connect();
+    }
+    
+    // Setup initial subscriptions once connected
+    const setupSubscriptions = () => {
+      if (webSocketSingleton.isConnected()) {
+        // Subscribe to ticker updates
+        webSocketSingleton.sendMessage({
+          type: 'subscribe',
+          symbols: [selectedSymbol]
+        });
+        
+        // Subscribe to kline data for the chart
+        webSocketSingleton.sendMessage({
+          type: 'configure_stream',
+          dataType: 'kline',
+          symbols: [selectedSymbol],
+          interval: '4h'
+        });
+      }
+    };
+
+    // If already connected, setup subscriptions immediately
+    if (webSocketSingleton.isConnected()) {
+      setupSubscriptions();
+    } else {
+      // Wait for connection
+      const connectHandler = webSocketSingleton.onConnect(() => {
+        setupSubscriptions();
+      });
+      
+      return () => {
+        connectHandler();
+      };
+    }
 
     return () => {
-      publicWs.disconnect();
+      console.log('[BOTS] Keeping WebSocket alive for other components');
     };
   }, []);
 
   useEffect(() => {
-    if (publicWs.status === 'connected') {
+    if (webSocketSingleton.isConnected()) {
       console.log(`[BOTS] Changing subscription to ${selectedSymbol}`);
-      publicWs.subscribe([selectedSymbol]);
+      
+      // Subscribe to ticker updates
+      webSocketSingleton.sendMessage({
+        type: 'subscribe',
+        symbols: [selectedSymbol]
+      });
+      
+      // Subscribe to kline data for the chart
+      webSocketSingleton.sendMessage({
+        type: 'configure_stream',
+        dataType: 'kline',
+        symbols: [selectedSymbol],
+        interval: '4h'
+      });
     }
-  }, [selectedSymbol, publicWs.status]);
+  }, [selectedSymbol]);
 
   return (
     <div className="h-screen bg-crypto-darker overflow-hidden">
@@ -172,7 +259,8 @@ export default function TradingBots() {
                 <div className="flex-1 bg-crypto-dark">
                   <TradingChart 
                     symbol={selectedSymbol} 
-                    strategy={selectedStrategy === "martingale" ? martingaleConfig : undefined} 
+                    strategy={selectedStrategy === "martingale" ? martingaleConfig : undefined}
+                    klineData={klineData}
                   />
                 </div>
               </div>

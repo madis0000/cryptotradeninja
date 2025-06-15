@@ -10,8 +10,17 @@ class WebSocketSingleton {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private messageQueue: any[] = [];
+  private referenceCount = 0; // Track active component references
+  private currentSymbol: string = 'BTCUSDT';
+  private currentInterval: string = '4h';
 
-  private constructor() {}
+  private constructor() {
+    // Add page visibility handler to clean up WebSocket when page is hidden
+    this.setupPageVisibilityHandler();
+    
+    // Add beforeunload handler to clean up WebSocket before page unload
+    this.setupBeforeUnloadHandler();
+  }
 
   public static getInstance(): WebSocketSingleton {
     if (!WebSocketSingleton.instance) {
@@ -21,16 +30,19 @@ class WebSocketSingleton {
   }
 
   public async connect(symbols?: string[]): Promise<void> {
-    // Comprehensive connection state checking to prevent duplicates
+    // Check if already connected or connecting to prevent duplicates
     if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('[WS SINGLETON] Already connected, skipping connect()');
       return;
     }
 
     if (this.ws?.readyState === WebSocket.CONNECTING) {
+      console.log('[WS SINGLETON] Already connecting, skipping connect()');
       return;
     }
 
     if (this.status === 'connecting') {
+      console.log('[WS SINGLETON] Status is connecting, skipping connect()');
       return;
     }
 
@@ -44,29 +56,14 @@ class WebSocketSingleton {
     }
 
     this.status = 'connecting';
+    console.log('[WS SINGLETON] Starting new WebSocket connection...');
     
-    // If no symbols provided, fetch active bot symbols
+    // If no symbols provided, use default symbols for testing
     let symbolsToUse = symbols;
     if (!symbolsToUse) {
-      try {
-        const response = await fetch('/api/active-bot-symbols', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        if (response.ok) {
-          const data = await response.json();
-          symbolsToUse = data.symbols;
-          console.log('[WS SINGLETON] Fetched active bot symbols:', symbolsToUse);
-        } else {
-          // Fallback to basic symbols if API fails
-          symbolsToUse = ['BTCUSDT'];
-          console.log('[WS SINGLETON] Failed to fetch active symbols, using fallback');
-        }
-      } catch (error) {
-        console.error('[WS SINGLETON] Error fetching active symbols:', error);
-        symbolsToUse = ['BTCUSDT'];
-      }
+      // Use default symbols instead of API call for testing
+      symbolsToUse = ['BTCUSDT'];
+      console.log('[WS SINGLETON] Using default symbols for testing:', symbolsToUse);
     }
     
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -82,7 +79,7 @@ class WebSocketSingleton {
                   hostname.includes('replit.dev');
     
     if (isDev && !hostname.includes('.replit.app')) {
-      // Development mode - use port 3001 for WebSocket (as configured in .env)
+      // Development mode - use port 3001 for WebSocket (separate WebSocket server)
       wsUrl = `${protocol}//${hostname}:3001/api/ws`;
     } else {
       // Production mode - use same host and port as main application
@@ -121,14 +118,19 @@ class WebSocketSingleton {
       console.log('[WS SINGLETON] Sending connection test message');
       this.sendMessage({ type: 'test', message: 'connection_test' });
       
-      // Send subscription command with symbols
-      const symbolsToUse = symbols || ['BTCUSDT'];
-      const subscribeMessage = {
+      // Restore previous subscriptions using current symbol
+      console.log(`[WS SINGLETON] Restoring subscriptions for ${this.currentSymbol}`);
+      this.sendMessage({
         type: 'subscribe',
-        symbols: symbolsToUse
-      };
-      console.log('[WS SINGLETON] Sending initial subscription:', subscribeMessage);
-      this.sendMessage(subscribeMessage);
+        symbols: [this.currentSymbol]
+      });
+      
+      this.sendMessage({
+        type: 'configure_stream',
+        dataType: 'kline',
+        symbols: [this.currentSymbol],
+        interval: this.currentInterval
+      });
     };
 
     this.ws.onmessage = (event) => {
@@ -179,18 +181,24 @@ class WebSocketSingleton {
   }
 
   public disconnect(): void {
+    console.log('[WS SINGLETON] Disconnect requested');
+    this.removeReference();
+  }
+
+  private performDisconnect(): void {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
 
     if (this.ws) {
-      this.ws.close(1000);
+      this.ws.close(1000, 'Manual disconnect');
       this.ws = null;
     }
     
     this.status = 'disconnected';
     this.reconnectAttempts = 0;
+    console.log('[WS SINGLETON] Disconnect complete');
   }
 
   public sendMessage(message: any): void {
@@ -230,6 +238,111 @@ class WebSocketSingleton {
 
   public isConnected(): boolean {
     return this.status === 'connected' && this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  public addReference(): void {
+    this.referenceCount++;
+    console.log(`[WS SINGLETON] Reference added, count: ${this.referenceCount}`);
+  }
+
+  public removeReference(): void {
+    this.referenceCount = Math.max(0, this.referenceCount - 1);
+    console.log(`[WS SINGLETON] Reference removed, count: ${this.referenceCount}`);
+    
+    // Only disconnect if no references remain
+    if (this.referenceCount === 0) {
+      console.log('[WS SINGLETON] No references remaining, scheduling disconnect');
+      // Delay disconnect to allow for quick remounts
+      setTimeout(() => {
+        if (this.referenceCount === 0) {
+          console.log('[WS SINGLETON] Still no references, disconnecting');
+          this.performDisconnect();
+        }
+      }, 500); // 500ms delay - shorter than before
+    }
+  }
+
+  public changeSymbolSubscription(symbol: string, interval: string = '4h'): void {
+    if (!this.isConnected()) {
+      console.log('[WS SINGLETON] Cannot change subscription - not connected');
+      // Still update current symbol/interval for when connection is restored
+      this.setCurrentSymbol(symbol, interval);
+      return;
+    }
+    
+    const previousSymbol = this.currentSymbol;
+    const previousInterval = this.currentInterval;
+    
+    // Update current symbol/interval
+    this.setCurrentSymbol(symbol, interval);
+    
+    console.log(`[WS SINGLETON] Changing subscription from ${previousSymbol}@${previousInterval} to ${symbol}@${interval}`);
+    
+    // Use the new efficient change subscription message
+    this.sendMessage({
+      type: 'change_subscription',
+      symbol: symbol,
+      interval: interval
+    });
+  }
+
+  public unsubscribe(): void {
+    if (!this.isConnected()) {
+      console.log('[WS SINGLETON] Cannot unsubscribe - not connected');
+      return;
+    }
+    
+    console.log('[WS SINGLETON] Sending unsubscribe message');
+    this.sendMessage({
+      type: 'unsubscribe'
+    });
+  }
+
+  public setCurrentSymbol(symbol: string, interval: string = '4h'): void {
+    this.currentSymbol = symbol;
+    this.currentInterval = interval;
+  }
+
+  public getCurrentSymbol(): string {
+    return this.currentSymbol;
+  }
+
+  public getCurrentInterval(): string {
+    return this.currentInterval;
+  }
+
+  private setupPageVisibilityHandler(): void {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          console.log('[WS SINGLETON] Page hidden - keeping WebSocket alive for quick return');
+          // Don't disconnect immediately - keep connection alive for quick tab switches
+        } else if (document.visibilityState === 'visible' && this.status === 'disconnected') {
+          console.log('[WS SINGLETON] Page visible - reconnecting WebSocket');
+          // Small delay to ensure page is fully visible
+          setTimeout(() => {
+            this.connect();
+          }, 1000);
+        }
+      });
+    }
+  }
+
+  private setupBeforeUnloadHandler(): void {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => {
+        console.log('[WS SINGLETON] Page unloading - sending unsubscribe message');
+        if (this.ws?.readyState === WebSocket.OPEN) {
+          try {
+            // Send unsubscribe synchronously
+            this.ws.send(JSON.stringify({ type: 'unsubscribe' }));
+          } catch (error) {
+            console.error('[WS SINGLETON] Error sending unsubscribe on unload:', error);
+          }
+        }
+        this.performDisconnect();
+      });
+    }
   }
 }
 

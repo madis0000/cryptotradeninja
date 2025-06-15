@@ -10,8 +10,9 @@ if (!process.env.DATABASE_URL) {
 
 export const pool = new Pool({ 
   connectionString: process.env.DATABASE_URL,
-  // Additional local PostgreSQL configuration
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  // For local PostgreSQL development, explicitly disable SSL
+  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : 
+       process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

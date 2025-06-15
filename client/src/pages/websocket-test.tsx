@@ -1,44 +1,64 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { usePublicWebSocket } from "@/hooks/useWebSocketService";
+import { webSocketSingleton } from "@/services/WebSocketSingleton";
 
 export default function WebSocketTest() {
   const [messages, setMessages] = useState<string[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<string>('disconnected');
 
-  const publicWs = usePublicWebSocket({
-    onMessage: (data) => {
+  useEffect(() => {
+    const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
       const timestamp = new Date().toLocaleTimeString();
       setMessages(prev => [...prev.slice(-9), `${timestamp}: ${JSON.stringify(data)}`]);
-    },
-    onConnect: () => {
+    });
+
+    const unsubscribeConnect = webSocketSingleton.onConnect(() => {
       setConnectionStatus('connected');
       const timestamp = new Date().toLocaleTimeString();
       setMessages(prev => [...prev, `${timestamp}: WebSocket Connected Successfully`]);
-    },
-    onDisconnect: () => {
+    });
+
+    const unsubscribeDisconnect = webSocketSingleton.onDisconnect(() => {
       setConnectionStatus('disconnected');
       const timestamp = new Date().toLocaleTimeString();
       setMessages(prev => [...prev, `${timestamp}: WebSocket Disconnected`]);
-    },
-    onError: (error) => {
+    });
+
+    const unsubscribeError = webSocketSingleton.onError(() => {
       setConnectionStatus('error');
       const timestamp = new Date().toLocaleTimeString();
       setMessages(prev => [...prev, `${timestamp}: WebSocket Error`]);
-    }
-  });
+    });
+
+    // Set initial status
+    setConnectionStatus(webSocketSingleton.getStatus());
+
+    return () => {
+      unsubscribeData();
+      unsubscribeConnect();
+      unsubscribeDisconnect();
+      unsubscribeError();
+    };
+  }, []);
 
   const handleConnect = () => {
-    publicWs.connect(['BTCUSDT']);
+    webSocketSingleton.connect();
+    webSocketSingleton.sendMessage({
+      type: 'subscribe',
+      symbols: ['BTCUSDT']
+    });
   };
 
   const handleDisconnect = () => {
-    publicWs.disconnect();
+    webSocketSingleton.disconnect();
   };
 
   const handleSubscribe = () => {
-    publicWs.subscribe(['ETHUSDT', 'ADAUSDT']);
+    webSocketSingleton.sendMessage({
+      type: 'subscribe',
+      symbols: ['ETHUSDT', 'ADAUSDT']
+    });
   };
 
   return (
@@ -122,10 +142,10 @@ export default function WebSocketTest() {
               <strong>WebSocket URL:</strong> {window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//{window.location.hostname}:{import.meta.env.VITE_WS_PORT || '8080'}/api/ws
             </div>
             <div>
-              <strong>Current Status:</strong> {publicWs.status}
+              <strong>Current Status:</strong> {connectionStatus}
             </div>
             <div>
-              <strong>Last Message:</strong> {publicWs.lastMessage ? JSON.stringify(publicWs.lastMessage).slice(0, 100) + '...' : 'None'}
+              <strong>Last Message:</strong> {messages.length > 0 ? messages[messages.length - 1] : 'None'}
             </div>
           </CardContent>
         </Card>

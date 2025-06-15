@@ -8,15 +8,16 @@ import { CreateBotModal } from "@/components/bots/create-bot-modal";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { usePublicWebSocket } from "@/hooks/useWebSocketService";
+import { webSocketSingleton } from "@/services/WebSocketSingleton";
 import { MarketData } from "@/types";
 
 export default function Dashboard() {
   const [isCreateBotModalOpen, setIsCreateBotModalOpen] = useState(false);
   const [currentMarketData, setCurrentMarketData] = useState<any>(null);
 
-  // WebSocket connection for real-time updates (manual control)
-  const publicWs = usePublicWebSocket({
-    onMessage: (data) => {
+  // Handle WebSocket messages
+  useEffect(() => {
+    const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
       console.log('[DASHBOARD] Received WebSocket data:', data);
       if (data.type === 'market_update') {
         setCurrentMarketData(data.data);
@@ -24,25 +25,26 @@ export default function Dashboard() {
         // Handle kline data for chart updates
         setCurrentMarketData(data.data);
       }
-    },
-    onConnect: () => {
-      console.log('[DASHBOARD] Connected to WebSocket');
-    },
-    onDisconnect: () => {
-      console.log('[DASHBOARD] Disconnected from WebSocket');
-    }
-  });
+    });
+
+    const unsubscribeConnect = webSocketSingleton.onConnect(() => {
+      console.log('[DASHBOARD] Connected to unified WebSocket');
+    });
+
+    const unsubscribeDisconnect = webSocketSingleton.onDisconnect(() => {
+      console.log('[DASHBOARD] Disconnected from unified WebSocket');
+    });
+
+    return () => {
+      unsubscribeData();
+      unsubscribeConnect();
+      unsubscribeDisconnect();
+    };
+  }, []);
 
   // WebSocket connection disabled since dashboard has no chart components
   useEffect(() => {
     console.log('[DASHBOARD] WebSocket connection disabled - no chart components present');
-    
-    return () => {
-      // Cleanup if needed
-      if (publicWs.status === 'connected') {
-        publicWs.disconnect();
-      }
-    };
   }, []);
 
   return (

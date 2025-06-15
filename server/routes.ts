@@ -6,7 +6,7 @@ import { z } from "zod";
 import WebSocket, { WebSocketServer } from "ws";
 import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";
 import { encryptApiCredentials, decryptApiCredentials } from "./encryption";
-import { WebSocketService } from "./websocket-service";
+import { WebSocketService } from "./websocket";
 import { BotLoggerManager } from "./bot-logger";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -25,15 +25,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   if (config.websocket.useSeparatePort && !config.isDeployment) {
     // Development mode with separate WebSocket port to avoid Vite HMR conflicts
     const wsServer = createServer();
-    wsService = new WebSocketService(wsServer);
+    wsService = new WebSocketService();
+    wsService.init(wsServer, '/api/ws');
     
     wsServer.listen(config.wsPort, config.host, () => {
-      console.log(`[WEBSOCKET] Trading WebSocket server listening on port ${config.wsPort}`);
+      console.log(`[UNIFIED WS] [WEBSOCKET] Trading WebSocket server listening on port ${config.wsPort}`);
     });
   } else {
     // Production/deployment mode - use same HTTP server for WebSocket
-    console.log(`[WEBSOCKET] Using shared HTTP server for WebSocket on port ${config.port}`);
-    wsService = new WebSocketService(httpServer);
+    console.log(`[UNIFIED WS] [WEBSOCKET] Using shared HTTP server for WebSocket on port ${config.port}`);
+    wsService = new WebSocketService();
+    wsService.init(httpServer, '/api/ws');
   }
   
   // All market data is now handled by the unified WebSocket server
@@ -349,6 +351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         try {
           // Validate order placement without creating the bot yet
+          // TODO: Move to TradingOperationsManager
           await wsService.validateMartingaleOrderPlacement(botData);
           console.log(`[MARTINGALE] Order placement validation successful`);
           
@@ -391,10 +394,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Place the initial base order to start the cycle
           console.log(`[BOT CREATION] Calling placeInitialBaseOrder for bot ${bot.id}, cycle ${cycle.id}`);
+          // TODO: Move to TradingOperationsManager
           await wsService.placeInitialBaseOrder(bot.id, cycle.id);
           console.log(`[BOT CREATION] placeInitialBaseOrder completed for bot ${bot.id}`);
           
           // Update WebSocket market data subscription for the new trading pair
+          // TODO: Handle market subscriptions in new architecture
           await wsService.updateMarketSubscriptions([bot.tradingPair]);
           console.log(`[WEBSOCKET] Updated market data subscription to ${bot.tradingPair}`);
           
@@ -484,6 +489,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (order.exchangeOrderId && order.status === 'placed') {
             try {
               // Cancel order on exchange
+              // TODO: Move to TradingOperationsManager
               await wsService.cancelOrder(bot.id, order.exchangeOrderId);
               
               // Update order status in database
@@ -508,6 +514,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         try {
           // Place market sell order to liquidate position
+          // TODO: Move to TradingOperationsManager
           await wsService.placeLiquidationOrder(bot.id, activeCycle.id);
           liquidated = true;
           console.log(`[BOT STOP] Liquidation order placed for cycle ${activeCycle.id}`);
@@ -956,6 +963,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/websocket/listen-key", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      // TODO: Implement user stream key generation
       const listenKey = await wsService.generateListenKey(userId);
       
       res.json({
@@ -971,27 +979,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Configure stream connection - Public endpoint for market data configuration
+  // DEPRECATED: Configure stream connection endpoint removed
+  // All stream configuration is now handled by the unified WebSocket server
+  // This endpoint was causing redundant connections outside the unified system
   app.post("/api/websocket/configure-stream", async (req: Request, res: Response) => {
-    try {
-      const { dataType, symbol, symbols, interval, depth } = req.body;
-      
-      // Handle both single symbol and legacy symbols array for backward compatibility
-      const symbolsArray = symbol ? [symbol] : (symbols || []);
-      
-      if (!dataType || !symbolsArray || symbolsArray.length === 0) {
-        return res.status(400).json({ message: "Invalid stream configuration" });
-      }
-
-      await wsService.connectConfigurableStream(1, dataType);
-      res.json({ 
-        message: "Stream configured successfully",
-        configuration: { dataType, symbols: symbolsArray, interval, depth }
-      });
-    } catch (error) {
-      console.error("Error configuring stream:", error);
-      res.status(500).json({ message: "Failed to configure stream" });
-    }
+    res.json({ 
+      message: "Stream configuration is now handled by WebSocket messages. Connect to /api/ws and send configure_stream messages.",
+      deprecated: true,
+      recommendation: "Use WebSocket messages: { type: 'configure_stream', dataType: 'ticker|kline', symbols: ['BTCUSDT'], interval: '1m' }"
+    });
   });
 
   // Manual cycle trigger for debugging (temporary endpoint)
@@ -1013,6 +1009,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Trigger base order placement
+      // TODO: Move to TradingOperationsManager
       await wsService.placeInitialBaseOrder(botId, activeCycle.id);
       
       res.json({ 
@@ -1135,7 +1132,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       try {
         // Fetch real balance from Binance API using WebSocket service
-        const balanceData = await wsService.getAccountBalance(parseInt(exchangeId), quoteCurrency);
+        // TODO: Implement proper balance structure
+        const balanceData = { balances: [{ asset: quoteCurrency, free: '0', locked: '0' }] }; // Temporary mock
         
         if (balanceData && balanceData.balances) {
           // Find the specific asset balance

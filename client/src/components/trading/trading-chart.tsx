@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
 import { cn } from '@/lib/utils';
-import { useChartWebSocket } from '@/hooks/useChartWebSocket';
 
 interface TradingStrategy {
   baseOrderPrice: number;
@@ -16,9 +15,11 @@ interface TradingChartProps {
   className?: string;
   symbol?: string;
   strategy?: TradingStrategy;
+  klineData?: any;
+  onIntervalChange?: (interval: string) => void;
 }
 
-export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: TradingChartProps) {
+export function TradingChart({ className, symbol = 'BTCUSDT', strategy, klineData, onIntervalChange }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
@@ -197,13 +198,33 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
     safetyOrderLinesRef.current = safetyLines;
   };
 
-  // Use dedicated chart WebSocket hook
-  const chartWs = useChartWebSocket(symbol, currentInterval, {
-    onKlineUpdate: handleKlineUpdate,
-    onConnect: () => console.log('[CHART] Connected to kline WebSocket server'),
-    onDisconnect: () => console.log('[CHART] Disconnected from kline WebSocket server'),
-    onError: (error) => console.error('[CHART] WebSocket error:', error)
-  });
+  // Handle kline data from props (passed from parent component)
+  useEffect(() => {
+    if (klineData) {
+      console.log('[CHART] Received kline data from props:', klineData);
+      
+      // Handle historical klines batch
+      if (klineData.type === 'historical_batch' && klineData.klines && Array.isArray(klineData.klines)) {
+        console.log('[CHART] Processing historical klines batch:', klineData.klines.length);
+        handleHistoricalKlinesBatch(klineData.klines);
+      } else if (klineData.klines && Array.isArray(klineData.klines)) {
+        // Legacy handling for historical klines
+        console.log('[CHART] Processing historical klines (legacy):', klineData.klines.length);
+        handleHistoricalKlinesBatch(klineData.klines);
+      } else {
+        // Handle single kline update
+        handleKlineUpdate(klineData);
+      }
+    }
+  }, [klineData]);
+
+  // Use dedicated chart WebSocket hook - DISABLED in favor of parent-managed connection
+  // const chartWs = useChartWebSocket(symbol, currentInterval, {
+  //   onKlineUpdate: handleKlineUpdate,
+  //   onConnect: () => console.log('[CHART] Connected to kline WebSocket server'),
+  //   onDisconnect: () => console.log('[CHART] Disconnected from kline WebSocket server'),
+  //   onError: (error) => console.error('[CHART] WebSocket error:', error)
+  // });
 
   // Initialize chart
   const initializeChart = () => {
@@ -281,10 +302,12 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
   // Initialize chart on component mount
   useEffect(() => {
     initializeChart();
-    chartWs.connect();
+    // No longer managing WebSocket connection from chart component
+    // chartWs.connect();
 
     return () => {
-      chartWs.disconnect();
+      // No longer disconnecting from chart component
+      // chartWs.disconnect();
       
       // Cleanup chart safely
       if (chartRef.current) {
@@ -299,53 +322,47 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
     };
   }, []);
 
-  // Update symbol when prop changes
+  // Update symbol when prop changes - now handled by parent component
   useEffect(() => {
-    if (chartWs && chartWs.currentSymbol && chartWs.currentSymbol !== symbol) {
-      console.log(`[CHART] Changing symbol from ${chartWs.currentSymbol} to ${symbol}`);
-      chartWs.changeSymbol(symbol);
-      setPriceData([]); // Clear existing data
-      
-      // Clear chart series and prepare for new data
-      if (seriesRef.current) {
-        try {
-          seriesRef.current.setData([]);
-          console.log('[CHART] Cleared chart data for symbol change');
-        } catch (error) {
-          console.log('[CHART] Chart series cleared during symbol change');
-        }
+    console.log(`[CHART] Symbol changed to ${symbol}`);
+    setPriceData([]); // Clear existing data when symbol changes
+    
+    // Clear chart series and prepare for new data
+    if (seriesRef.current) {
+      try {
+        seriesRef.current.setData([]);
+        console.log('[CHART] Cleared chart data for symbol change');
+      } catch (error) {
+        console.log('[CHART] Chart series cleared during symbol change');
       }
-      
-      // Auto-scale chart when new data arrives
-      setTimeout(() => {
-        if (chartRef.current) {
-          console.log('[CHART] Auto-scaling after symbol change');
-          chartRef.current.timeScale().fitContent();
-          chartRef.current.priceScale('right').applyOptions({
-            autoScale: true,
-          });
-        }
-      }, 1500);
     }
-  }, [symbol, chartWs]);
+    
+    // Auto-scale chart when new data arrives
+    setTimeout(() => {
+      if (chartRef.current) {
+        console.log('[CHART] Auto-scaling after symbol change');
+        chartRef.current.timeScale().fitContent();
+        chartRef.current.priceScale('right').applyOptions({
+          autoScale: true,
+        });
+      }
+    }, 1500);
+  }, [symbol]);
 
-  // Update interval when state changes
+  // Update interval when state changes - now handled by parent component
   useEffect(() => {
-    if (chartWs && chartWs.currentInterval && chartWs.currentInterval !== currentInterval) {
-      console.log(`[CHART] Switching to ${currentInterval} interval`);
-      chartWs.changeInterval(currentInterval);
-      
-      // Clear existing data and reset chart series for new interval
-      setPriceData([]);
-      if (seriesRef.current) {
-        try {
-          seriesRef.current.setData([]);
-        } catch (error) {
-          console.log('[CHART] Chart series reset during interval change');
-        }
+    console.log(`[CHART] Interval changed to ${currentInterval}`);
+    
+    // Clear existing data and reset chart series for new interval
+    setPriceData([]);
+    if (seriesRef.current) {
+      try {
+        seriesRef.current.setData([]);
+      } catch (error) {
+        console.log('[CHART] Chart series reset during interval change');
       }
     }
-  }, [currentInterval, chartWs]);
+  }, [currentInterval]);
 
   // Update strategy lines when strategy prop changes or price data updates
   useEffect(() => {
@@ -361,6 +378,78 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
       clearStrategyLines();
     }
   }, [strategy, priceData]);
+
+  // Handle batch of historical klines efficiently
+  const handleHistoricalKlinesBatch = (klines: any[]) => {
+    console.log('[CHART] Processing historical klines batch:', klines.length);
+    
+    if (!seriesRef.current || !chartRef.current) {
+      console.warn('[CHART] Chart or series not initialized, skipping batch');
+      return;
+    }
+
+    // Convert all klines to chart format
+    const candlesticks = klines
+      .map((klineData) => {
+        const openTime = typeof klineData.openTime === 'number' ? klineData.openTime : parseInt(klineData.openTime);
+        const timeInSeconds = Math.floor(openTime / 1000);
+        
+        const candlestick = {
+          time: timeInSeconds,
+          open: parseFloat(klineData.open),
+          high: parseFloat(klineData.high),
+          low: parseFloat(klineData.low),
+          close: parseFloat(klineData.close),
+        };
+
+        // Validate the candlestick data
+        if (!Number.isFinite(candlestick.time) || 
+            !Number.isFinite(candlestick.open) || 
+            !Number.isFinite(candlestick.high) || 
+            !Number.isFinite(candlestick.low) || 
+            !Number.isFinite(candlestick.close)) {
+          console.warn('[CHART] Invalid candlestick data in batch, skipping:', candlestick);
+          return null;
+        }
+
+        return candlestick;
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null) // Remove null entries with type guard
+      .sort((a, b) => a.time - b.time); // Sort by time
+
+    if (candlesticks.length === 0) {
+      console.warn('[CHART] No valid candlesticks in batch');
+      return;
+    }
+
+    // Update state with all historical data
+    setPriceData(candlesticks);
+
+    try {
+      // Set all data at once for better performance
+      if (seriesRef.current && typeof seriesRef.current.setData === 'function') {
+        seriesRef.current.setData(candlesticks);
+        console.log('[CHART] Successfully loaded', candlesticks.length, 'historical klines');
+        
+        // Auto-scale chart to fit the historical data
+        setTimeout(() => {
+          if (chartRef.current && typeof chartRef.current.timeScale === 'function') {
+            try {
+              chartRef.current.timeScale().fitContent();
+              chartRef.current.priceScale('right').applyOptions({
+                autoScale: true,
+              });
+              console.log('[CHART] Auto-scaled chart for historical data');
+            } catch (scaleError) {
+              console.warn('[CHART] Auto-scale failed:', scaleError);
+            }
+          }
+        }, 100);
+      }
+    } catch (error) {
+      console.error('[CHART] Error setting historical data:', error);
+    }
+  };
 
   const intervals = [
     { label: '1m', value: '1m' },
@@ -378,6 +467,11 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
     
     console.log(`[CHART] Changing interval from ${currentInterval} to ${newInterval}`);
     setCurrentInterval(newInterval);
+    
+    // Notify parent component about interval change
+    if (onIntervalChange) {
+      onIntervalChange(newInterval);
+    }
   };
 
   return (
@@ -388,10 +482,10 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
           <h3 className="text-lg font-semibold" style={{ outline: 'none', border: 'none' }}>{symbol} Chart</h3>
           <div className={cn(
             "w-2 h-2 rounded-full",
-            chartWs.status === 'connected' ? "bg-green-500" : "bg-red-500"
+            klineData ? "bg-green-500" : "bg-yellow-500"
           )} />
           <span className="text-sm text-muted-foreground" style={{ outline: 'none', border: 'none' }}>
-            {chartWs.status === 'connected' ? 'Connected' : 'Disconnected'}
+            {klineData ? 'Data Available' : 'Waiting for Data'}
           </span>
         </div>
         
@@ -418,11 +512,11 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy }: Tradin
       <div className="relative">
         <div ref={chartContainerRef} className="w-full h-[400px]" />
         
-        {chartWs.status !== 'connected' && (
+        {!klineData && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/80">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Connecting to market data...</p>
+              <p className="text-sm text-muted-foreground">Waiting for chart data...</p>
             </div>
           </div>
         )}

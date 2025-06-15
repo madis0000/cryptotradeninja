@@ -1,4 +1,4 @@
-import { usePublicWebSocket } from "@/hooks/useWebSocketService";
+import { webSocketSingleton } from "@/services/WebSocketSingleton";
 
 interface OrderWebSocketHook {
   lastMessage: MessageEvent | null;
@@ -7,17 +7,16 @@ interface OrderWebSocketHook {
 }
 
 export function useOrderWebSocket(url: string, options?: { onOpen?: () => void }): OrderWebSocketHook {
-  const publicWs = usePublicWebSocket();
-  
   // Mock implementation for now - will use real WebSocket for orders
   const sendMessage = (data: any) => {
     console.log('[ORDER] Placing order:', data);
     // TODO: Implement real order placement via WebSocket
+    webSocketSingleton.sendMessage(data);
   };
 
   return {
-    lastMessage: publicWs.lastMessage,
+    lastMessage: null, // TODO: Implement if needed
     sendMessage,
-    isConnected: publicWs.status === 'connected'
+    isConnected: webSocketSingleton.isConnected()
   };
 }

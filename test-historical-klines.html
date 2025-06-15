@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Historical Klines</title>
+</head>
+<body>
+    <h1>Historical Klines WebSocket Test</h1>
+    <div>
+        <input type="text" id="symbol" value="ETHUSDT" placeholder="Symbol">
+        <select id="interval">
+            <option value="1m">1m</option>
+            <option value="5m">5m</option>
+            <option value="15m">15m</option>
+            <option value="1h">1h</option>
+            <option value="4h" selected>4h</option>
+            <option value="1d">1d</option>
+        </select>
+        <button onclick="connectWebSocket()">Connect</button>
+        <button onclick="changeSymbol()">Change Symbol</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+    <div id="status">Not connected</div>
+    <div id="messages" style="height: 400px; overflow-y: scroll; border: 1px solid #ccc; margin-top: 10px; padding: 10px;">
+    </div>
+
+    <script>
+        let ws = null;
+        let clientId = Math.random().toString(36).substring(7);
+
+        function log(message) {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function connectWebSocket() {
+            if (ws) {
+                ws.close();
+            }
+
+            ws = new WebSocket('ws://localhost:3001/api/ws');
+            
+            ws.onopen = function() {
+                document.getElementById('status').textContent = 'Connected';
+                log('Connected to WebSocket');
+                
+                // Send initial subscription
+                const symbol = document.getElementById('symbol').value;
+                const interval = document.getElementById('interval').value;
+                
+                ws.send(JSON.stringify({
+                    type: 'change_subscription',
+                    symbol: symbol,
+                    interval: interval
+                }));
+                
+                log('Sent change_subscription: ' + symbol + ' ' + interval);
+            };            ws.onmessage = function(event) {
+                try {
+                    log('Raw message received: ' + event.data);
+                    const data = JSON.parse(event.data);
+                    log('Parsed message type: ' + (data.type || 'unknown'));
+                    
+                    if (data.type === 'historical_klines') {
+                        log('*** HISTORICAL KLINES RECEIVED ***');
+                        log('Symbol: ' + (data.data ? data.data.symbol : 'unknown'));
+                        log('Interval: ' + (data.data ? data.data.interval : 'unknown'));
+                        log('Number of klines: ' + (data.data && data.data.klines ? data.data.klines.length : 'unknown'));
+                        if (data.data && data.data.klines && data.data.klines.length > 0) {
+                            log('First kline sample: Open=' + data.data.klines[0].open + ', Close=' + data.data.klines[0].close);
+                        }
+                    } else if (data.type === 'kline_update') {
+                        log('Kline update: ' + data.data.symbol + ' ' + data.data.interval + ' - Close: ' + data.data.close);
+                    } else if (data.type === 'market_update') {
+                        log('Market update: ' + data.data.symbol + ' = $' + data.data.price);
+                    } else {
+                        log('Other message type: ' + data.type + ' - ' + JSON.stringify(data).substring(0, 100));
+                    }
+                } catch (error) {
+                    log('ERROR parsing WebSocket message: ' + error.message);
+                    log('Raw data: ' + event.data);
+                }
+            };
+
+            ws.onclose = function() {
+                document.getElementById('status').textContent = 'Disconnected';
+                log('Disconnected from WebSocket');
+            };
+
+            ws.onerror = function(error) {
+                log('WebSocket error: ' + error);
+            };
+        }
+
+        function changeSymbol() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocket not connected');
+                return;
+            }
+
+            const symbol = document.getElementById('symbol').value;
+            const interval = document.getElementById('interval').value;
+            
+            ws.send(JSON.stringify({
+                type: 'change_subscription',
+                symbol: symbol,
+                interval: interval
+            }));
+            
+            log('Sent change_subscription: ' + symbol + ' ' + interval);
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+    </script>
+</body>
+</html>

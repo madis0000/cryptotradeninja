@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { audioService } from '@/services/audioService';
-import { usePublicWebSocket } from '@/hooks/useWebSocketService';
+import { webSocketSingleton } from '@/services/WebSocketSingleton';
 
 interface OrderNotificationSettings {
   soundNotificationsEnabled: boolean;
@@ -18,13 +18,17 @@ export function useOrderNotifications() {
   const [loading, setLoading] = useState(true);
 
   // Subscribe to WebSocket order fill notifications
-  const { lastMessage } = usePublicWebSocket({
-    onMessage: async (data) => {
+  useEffect(() => {
+    const unsubscribe = webSocketSingleton.subscribe(async (data: any) => {
       if (data.type === 'order_fill_notification' && settings) {
         await handleOrderFillNotification(data.data);
       }
-    }
-  });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [settings]);
 
   // Load user notification settings
   useEffect(() => {

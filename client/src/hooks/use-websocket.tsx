@@ -1,5 +1,10 @@
-import { useEffect, useRef, useCallback } from 'react';
-import type { MarketData, WebSocketMessage } from '@/types';
+// DEPRECATED: This hook has been replaced by WebSocketSingleton
+// All WebSocket connections should now go through the unified WebSocketSingleton service
+// This prevents multiple connections and ensures proper resource management
+
+import { useEffect } from 'react';
+import { webSocketSingleton } from '@/services/WebSocketSingleton';
+import type { MarketData } from '@/types';
 
 interface UseWebSocketProps {
   onMarketUpdate?: (data: MarketData) => void;
@@ -9,136 +14,60 @@ interface UseWebSocketProps {
 }
 
 export function useWebSocket({ onMarketUpdate, onTradeExecuted, onBotStatusChange, onBalanceUpdate }: UseWebSocketProps) {
-  const ws = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const connect = useCallback(() => {
-    if (ws.current?.readyState === WebSocket.OPEN) return;
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const hostname = window.location.hostname;
+  console.warn('[DEPRECATED] useWebSocket hook is deprecated. Use webSocketSingleton directly instead.');
+  
+  useEffect(() => {
+    console.log('[DEPRECATED HOOK] Redirecting to WebSocketSingleton');
     
-    // Check if we're in development environment
-    const isDev = window.location.port === '5173' || window.location.port === '3000' || 
-                  hostname === 'localhost' || hostname === '127.0.0.1';
-    
-    let wsUrl;
-    if (isDev) {
-      // Development mode - use port 3001 for WebSocket (as configured in .env)
-      wsUrl = `${protocol}//${hostname}:3001/ws`;
-    } else {
-      // Production mode - use same host and port as main application
-      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-      wsUrl = `${protocol}//${hostname}:${port}/ws`;
+    // Subscribe to WebSocketSingleton instead of creating new connection
+    const unsubscribe = webSocketSingleton.subscribe((data) => {
+      if (data.type === 'market_update' && onMarketUpdate) {
+        onMarketUpdate(data.data);
+      } else if (data.type === 'trade_executed' && onTradeExecuted) {
+        onTradeExecuted(data.data);
+      } else if (data.type === 'bot_status_change' && onBotStatusChange) {
+        onBotStatusChange(data.data);
+      } else if (data.type === 'balance_update' && onBalanceUpdate) {
+        onBalanceUpdate(data.data);
+      }
+    });
+
+    // Connect if not already connected
+    if (!webSocketSingleton.isConnected()) {
+      webSocketSingleton.connect();
     }
 
-    ws.current = new WebSocket(wsUrl);
-
-    ws.current.onopen = () => {
-      console.log('[CLIENT WS] WebSocket connected');
-      
-      // Subscribe to all major trading pairs to receive market data
-      const subscribeMessage = {
-        type: 'subscribe',
-        symbols: [
-          'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'SOLUSDT', 'DOGEUSDT', 'AVAXUSDT',
-          'DOTUSDT', 'LINKUSDT', 'LTCUSDT', 'UNIUSDT', 'ATOMUSDT', 'ICPUSDT', 'APTUSDT',
-          'BTCUSDC', 'ETHUSDC', 'ADAUSDC', 'SOLUSDC', 'AVAXUSDC',
-          'ETHBTC', 'ADABTC', 'XRPBTC', 'LTCBTC', 'BNBBTC', 'DOGEBTC'
-        ]
-      };
-      
-      if (ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify(subscribeMessage));
-        console.log('[CLIENT WS] Sent market subscription message');
-      }
-    };
-
-    ws.current.onmessage = (event) => {
-      try {
-        const message: WebSocketMessage = JSON.parse(event.data);
-        // Removed verbose WebSocket logging
-        
-        switch (message.type) {
-          case 'connected':
-            // Connection confirmed
-            break;
-          case 'market_update':
-            onMarketUpdate?.(message.data);
-            break;
-          case 'balance_update':
-            onBalanceUpdate?.(message.data);
-            break;
-          case 'balance_subscribed':
-            // Balance subscription confirmed
-            break;
-          case 'trade_executed':
-            onTradeExecuted?.(message.data);
-            break;
-          case 'bot_status':
-            onBotStatusChange?.(message.data);
-            break;
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    };
-
-    ws.current.onclose = () => {
-      console.log('WebSocket disconnected');
-      // Reconnect after 3 seconds
-      reconnectTimeoutRef.current = setTimeout(connect, 3000);
-    };
-
-    ws.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-  }, [onMarketUpdate, onTradeExecuted, onBotStatusChange]);
-
-  useEffect(() => {
-    connect();
-
     return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (ws.current) {
-        ws.current.close();
-      }
+      unsubscribe();
     };
-  }, [connect]);
+  }, [onMarketUpdate, onTradeExecuted, onBotStatusChange, onBalanceUpdate]);
 
-  const subscribeToBalance = useCallback((userId: number, exchangeId: number, symbol: string) => {
-    const sendMessage = () => {
-      if (ws.current?.readyState === WebSocket.OPEN) {
-        const message = {
-          type: 'subscribe_balance',
-          userId,
-          exchangeId,
-          symbol
-        };
-        ws.current.send(JSON.stringify(message));
-        console.log('[CLIENT WS] Subscribed to balance updates:', message);
-      } else if (ws.current?.readyState === WebSocket.CONNECTING) {
-        // Wait for connection to open
-        setTimeout(sendMessage, 100);
-      }
-    };
-    sendMessage();
-  }, []);
-
-  const unsubscribeFromBalance = useCallback((userId: number, exchangeId: number, symbol: string) => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      const message = {
+  return {
+    connect: () => {
+      console.warn('[DEPRECATED] Use webSocketSingleton.connect() instead');
+      webSocketSingleton.connect();
+    },
+    disconnect: () => {
+      console.warn('[DEPRECATED] Use webSocketSingleton.disconnect() instead');
+      webSocketSingleton.disconnect();
+    },
+    subscribeToBalance: (userId: number, exchangeId: number, symbol: string) => {
+      console.warn('[DEPRECATED] Use webSocketSingleton.sendMessage() with balance subscription instead');
+      webSocketSingleton.sendMessage({
+        type: 'subscribe_balance',
+        userId,
+        exchangeId,
+        symbol
+      });
+    },
+    unsubscribeFromBalance: (userId: number, exchangeId: number, symbol: string) => {
+      console.warn('[DEPRECATED] Use webSocketSingleton.sendMessage() with balance unsubscription instead');
+      webSocketSingleton.sendMessage({
         type: 'unsubscribe_balance',
         userId,
         exchangeId,
         symbol
-      };
-      ws.current.send(JSON.stringify(message));
-      console.log('[CLIENT WS] Unsubscribed from balance updates:', message);
+      });
     }
-  }, []);
-
-  return { connect, subscribeToBalance, unsubscribeFromBalance };
+  };
 }

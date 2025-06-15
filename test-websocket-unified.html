@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test - Unified Trading Server</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: white; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #0f5132; color: #d1e7dd; }
+        .disconnected { background: #842029; color: #f8d7da; }
+        .connecting { background: #664d03; color: #fff3cd; }
+        .error { background: #721c24; color: #f8d7da; }
+        .log { background: #212529; border: 1px solid #495057; padding: 10px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        button { padding: 8px 16px; margin: 5px; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        input { padding: 8px; margin: 5px; background: #495057; color: white; border: 1px solid #6c757d; border-radius: 4px; width: 200px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 WebSocket Test - Unified Trading Server</h1>
+        
+        <div id="status" class="status disconnected">
+            Status: Disconnected
+        </div>
+
+        <div>
+            <input type="text" id="wsUrl" value="ws://localhost:3001/api/ws" placeholder="WebSocket URL">
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+            <button onclick="sendTest()">Send Test</button>
+            <button onclick="subscribe()">Subscribe BTCUSDT</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+
+        <div>
+            <h3>📝 Log</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(status, className) {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = `Status: ${status}`;
+            statusElement.className = `status ${className}`;
+        }
+
+        function connect() {
+            const url = document.getElementById('wsUrl').value;
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('❌ Already connected');
+                return;
+            }
+
+            log(`🔌 Connecting to: ${url}`);
+            updateStatus('Connecting...', 'connecting');
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = function(event) {
+                    connected = true;
+                    log('✅ Connected successfully');
+                    updateStatus('Connected', 'connected');
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log(`📨 Received: ${JSON.stringify(data, null, 2)}`);
+                    } catch (e) {
+                        log(`📨 Received (raw): ${event.data}`);
+                    }
+                };
+
+                ws.onclose = function(event) {
+                    connected = false;
+                    log(`🔒 Connection closed - Code: ${event.code}, Reason: ${event.reason}`);
+                    updateStatus('Disconnected', 'disconnected');
+                };
+
+                ws.onerror = function(error) {
+                    log(`❌ Error: ${error}`);
+                    updateStatus('Error', 'error');
+                };
+
+            } catch (error) {
+                log(`❌ Connection failed: ${error.message}`);
+                updateStatus('Error', 'error');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+                connected = false;
+                log('🔌 Disconnected manually');
+                updateStatus('Disconnected', 'disconnected');
+            } else {
+                log('❌ No connection to disconnect');
+            }
+        }
+
+        function sendTest() {
+            if (!connected || !ws) {
+                log('❌ Not connected');
+                return;
+            }
+
+            const testMessage = {
+                type: 'test',
+                message: 'Hello from test page',
+                timestamp: new Date().toISOString()
+            };
+
+            log(`📤 Sending test: ${JSON.stringify(testMessage)}`);
+            ws.send(JSON.stringify(testMessage));
+        }
+
+        function subscribe() {
+            if (!connected || !ws) {
+                log('❌ Not connected');
+                return;
+            }
+
+            const subscribeMessage = {
+                type: 'subscribe',
+                symbols: ['BTCUSDT']
+            };
+
+            log(`📤 Sending subscribe: ${JSON.stringify(subscribeMessage)}`);
+            ws.send(JSON.stringify(subscribeMessage));
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

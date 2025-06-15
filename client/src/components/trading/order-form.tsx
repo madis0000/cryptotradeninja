@@ -28,10 +28,12 @@ export function OrderForm({ symbol, className }: OrderFormProps) {
   // Market price from real data
   const marketPrice = "106800.00";
 
-  // Fetch balance data
+  // Fetch balance data (only when needed, not polling)
   const { data: balances = {} } = useQuery({
     queryKey: ['/api/exchanges/1/balance'],
-    refetchInterval: 5000,
+    staleTime: 30000, // Consider data fresh for 30 seconds
+    refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    refetchOnMount: true, // Only refetch when component mounts
   });
 
   const typedBalances = balances as Record<string, { free: string; locked: string }>;

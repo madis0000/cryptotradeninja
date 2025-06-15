@@ -125,15 +125,37 @@ export default function Settings() {
   const selectedExchange = exchanges.find(ex => ex.id.toString() === selectedExchangeId);
 
   // Use the unified WebSocket singleton to prevent multiple connections
-  const [wsConnected, setWsConnected] = useState(false);
+  const [wsConnected, setWsConnected] = useState(webSocketSingleton.isConnected());
+  const [wsConnecting, setWsConnecting] = useState(false);
+  const [currentSubscription, setCurrentSubscription] = useState<StreamConfig | null>(null);
+  const [receivedMessages, setReceivedMessages] = useState<any[]>([]);
+  const [userMessages, setUserMessages] = useState<any[]>([]);
 
   useEffect(() => {
+    // Set initial connection status
+    setWsConnected(webSocketSingleton.isConnected());
+    
     const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
       console.log('[SETTINGS WS] Received data:', data);
+      
+      // Add message to the appropriate list based on type
+      const timestamp = new Date().toLocaleTimeString();
+      const messageWithTimestamp = { ...data, timestamp };
+      
+      if (data.type === 'authenticated' || data.type === 'user_stream_connected' || 
+          data.type === 'user_stream_error' || data.type === 'account_balance') {
+        // User/authenticated messages
+        setUserMessages(prev => [messageWithTimestamp, ...prev].slice(0, 20)); // Keep last 20 messages
+      } else {
+        // Public stream messages (ticker, kline, etc.)
+        setReceivedMessages(prev => [messageWithTimestamp, ...prev].slice(0, 20)); // Keep last 20 messages
+      }
     });
 
     const unsubscribeConnect = webSocketSingleton.onConnect(() => {
+      console.log('[SETTINGS WS] WebSocket connected');
       setWsConnected(true);
+      setWsConnecting(false);
       toast({
         title: "WebSocket Connected",
         description: "Successfully connected to unified trading stream",
@@ -141,10 +163,26 @@ export default function Settings() {
     });
 
     const unsubscribeDisconnect = webSocketSingleton.onDisconnect(() => {
+      console.log('[SETTINGS WS] WebSocket disconnected');
       setWsConnected(false);
+      setWsConnecting(false);
+      setCurrentSubscription(null);
+      setReceivedMessages([]);
+      setUserMessages([]);
       toast({
         title: "WebSocket Disconnected",
         description: "Trading stream connection closed",
+      });
+    });
+
+    const unsubscribeError = webSocketSingleton.onError((error) => {
+      console.error('[SETTINGS WS] WebSocket error:', error);
+      setWsConnected(false);
+      setWsConnecting(false);
+      toast({
+        title: "WebSocket Error",
+        description: "Connection failed or encountered an error",
+        variant: "destructive",
       });
     });
 
@@ -152,6 +190,7 @@ export default function Settings() {
       unsubscribeData();
       unsubscribeConnect();
       unsubscribeDisconnect();
+      unsubscribeError();
     };
   }, []);
 
@@ -177,6 +216,124 @@ export default function Settings() {
     
     // Test connection using unified WebSocket singleton
     webSocketSingleton.connect(['BTCUSDT']);
+  };
+
+  // Handle stream configuration changes
+  const handleStreamConfigChange = async (newConfig: Partial<StreamConfig>) => {
+    const updatedConfig = { ...streamConfig, ...newConfig };
+    setStreamConfig(updatedConfig);
+
+    // If we have an active subscription and connection, update it
+    if (wsConnected && currentSubscription) {
+      console.log('[SETTINGS WS] Stream config changed, updating subscription...');
+      
+      try {
+        // Configure the stream via backend API endpoint
+        const response = await fetch('/api/websocket/configure-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dataType: updatedConfig.dataType,
+            symbol: updatedConfig.symbol,
+            interval: updatedConfig.interval,
+            depth: updatedConfig.depth
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Configuration failed');
+        }
+
+        // Update subscription with new symbol
+        webSocketSingleton.sendMessage({
+          type: 'subscribe',
+          symbols: [updatedConfig.symbol]
+        });
+
+        setCurrentSubscription(updatedConfig);
+        
+        toast({
+          title: "Stream Updated",
+          description: `Updated to ${updatedConfig.dataType} stream for ${updatedConfig.symbol}`,
+        });
+      } catch (error) {
+        console.error('[SETTINGS WS] Failed to update stream config:', error);
+        toast({
+          title: "Update Failed",
+          description: "Failed to update stream configuration",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // Connect to public stream
+  const connectPublicStream = async () => {
+    if (!streamConfig.symbol) {
+      toast({
+        title: "No Symbol",
+        description: "Please select a trading symbol first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setWsConnecting(true);
+    
+    try {
+      // First configure the stream via backend API endpoint
+      const response = await fetch('/api/websocket/configure-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dataType: streamConfig.dataType,
+          symbol: streamConfig.symbol,
+          interval: streamConfig.interval,
+          depth: streamConfig.depth
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Configuration failed');
+      }
+
+      // Then connect using unified WebSocket singleton
+      await webSocketSingleton.connect([streamConfig.symbol]);
+      setCurrentSubscription({ ...streamConfig });
+
+    } catch (error) {
+      console.error('[SETTINGS WS] Connection failed:', error);
+      setWsConnecting(false);
+      toast({
+        title: "Connection Failed",
+        description: "Failed to configure and connect to stream",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Disconnect from stream
+  const disconnectStream = () => {
+    webSocketSingleton.disconnect();
+    setCurrentSubscription(null);
+    setWsConnecting(false);
+  };
+
+  // Clear message logs
+  const clearPublicMessages = () => {
+    setReceivedMessages([]);
+    toast({
+      title: "Messages Cleared",
+      description: "Public stream message log cleared",
+    });
+  };
+
+  const clearUserMessages = () => {
+    setUserMessages([]);
+    toast({
+      title: "Messages Cleared", 
+      description: "User stream message log cleared",
+    });
   };
 
   const sidebarItems = [
@@ -297,7 +454,10 @@ export default function Settings() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <Label htmlFor="stream-type">Data Type</Label>
-              <Select value={streamConfig.dataType} onValueChange={(value) => setStreamConfig({...streamConfig, dataType: value})}>
+              <Select 
+                value={streamConfig.dataType} 
+                onValueChange={(value) => handleStreamConfigChange({ dataType: value })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select data type" />
                 </SelectTrigger>
@@ -316,7 +476,10 @@ export default function Settings() {
             {streamConfig.dataType === 'kline' && (
               <div>
                 <Label htmlFor="interval">Kline Interval</Label>
-                <Select value={streamConfig.interval} onValueChange={(value) => setStreamConfig({...streamConfig, interval: value})}>
+                <Select 
+                  value={streamConfig.interval} 
+                  onValueChange={(value) => handleStreamConfigChange({ interval: value })}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select interval" />
                   </SelectTrigger>
@@ -344,7 +507,10 @@ export default function Settings() {
             {streamConfig.dataType === 'depth' && (
               <div>
                 <Label htmlFor="depth-level">Depth Level</Label>
-                <Select value={streamConfig.depth} onValueChange={(value) => setStreamConfig({...streamConfig, depth: value})}>
+                <Select 
+                  value={streamConfig.depth} 
+                  onValueChange={(value) => handleStreamConfigChange({ depth: value })}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select depth" />
                   </SelectTrigger>
@@ -359,7 +525,10 @@ export default function Settings() {
             
             <div className="md:col-span-2 lg:col-span-1">
               <Label htmlFor="symbol">Trading Symbol</Label>
-              <Select value={streamConfig.symbol} onValueChange={(value) => setStreamConfig({...streamConfig, symbol: value})}>
+              <Select 
+                value={streamConfig.symbol} 
+                onValueChange={(value) => handleStreamConfigChange({ symbol: value })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select trading pair" />
                 </SelectTrigger>
@@ -397,6 +566,9 @@ export default function Settings() {
             <h4 className="text-md font-medium text-white mb-3">Public Data Stream</h4>
             <p className="text-sm text-crypto-light mb-4">
               Test public market data streams. This will automatically configure and connect to the stream using the parameters above.
+              <span className="block mt-2 text-xs text-yellow-400">
+                ⚠️ Requires an exchange account to be selected and a trading symbol to be chosen.
+              </span>
             </p>
             
             <div className="space-y-3">
@@ -404,58 +576,18 @@ export default function Settings() {
                 <Button 
                   size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
-                  onClick={async () => {
-                    if (streamConfig.symbol) {
-                      try {
-                        // First configure the stream via backend API endpoint
-                        const response = await fetch('/api/websocket/configure-stream', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            dataType: streamConfig.dataType,
-                            symbol: streamConfig.symbol,
-                            interval: streamConfig.interval,
-                            depth: streamConfig.depth
-                          })
-                        });
-                        
-                        if (!response.ok) {
-                          throw new Error('Configuration failed');
-                        }
-
-                        // Then connect using unified WebSocket singleton
-                        webSocketSingleton.connect([streamConfig.symbol]);
-
-                        toast({
-                          title: "Stream Connected",
-                          description: `Connected to ${streamConfig.dataType} stream for ${streamConfig.symbol}`,
-                        });
-                      } catch (error) {
-                        toast({
-                          title: "Connection Failed",
-                          description: "Failed to configure and connect to stream",
-                          variant: "destructive",
-                        });
-                      }
-                    } else {
-                      toast({
-                        title: "No Symbol",
-                        description: "Please select a trading symbol first",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                  disabled={!wsConnected || !streamConfig.symbol}
+                  onClick={connectPublicStream}
+                  disabled={wsConnecting || wsConnected || !streamConfig.symbol || !selectedExchangeId}
                 >
-                  <i className={`${!wsConnected ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
-                  {!wsConnected ? 'Connecting...' : 'Test Connection'}
+                  <i className={`${wsConnecting ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
+                  {wsConnecting ? 'Connecting...' : 'Test Connection'}
                 </Button>
                 <Button 
                   size="sm" 
                   variant="outline" 
                   className="border-gray-700 text-crypto-light hover:bg-gray-800"
-                  onClick={() => webSocketSingleton.disconnect()}
-                  disabled={!wsConnected}
+                  onClick={disconnectStream}
+                  disabled={!wsConnected && !wsConnecting}
                 >
                   <i className="fas fa-stop mr-2"></i>
                   Disconnect
@@ -467,17 +599,66 @@ export default function Settings() {
                   <span className="text-xs font-medium text-crypto-light">Connection Status</span>
                   <div className="flex items-center space-x-1">
                     <div className={`w-2 h-2 rounded-full ${
-                      wsConnected ? 'bg-crypto-success animate-pulse' : 'bg-gray-500'
+                      wsConnected ? 'bg-crypto-success animate-pulse' : 
+                      wsConnecting ? 'bg-yellow-500 animate-pulse' : 
+                      'bg-gray-500'
                     }`}></div>
                     <span className={`text-xs ${
-                      wsConnected ? 'text-crypto-success' : 'text-gray-500'
+                      wsConnected ? 'text-crypto-success' : 
+                      wsConnecting ? 'text-yellow-500' : 
+                      'text-gray-500'
                     }`}>
-                      {wsConnected ? 'Connected' : 'Disconnected'}
+                      {wsConnected ? 'Connected' : wsConnecting ? 'Connecting...' : 'Disconnected'}
                     </span>
                   </div>
                 </div>
                 <div className="text-xs text-crypto-light/70 font-mono bg-black/30 p-2 rounded max-h-24 overflow-y-auto">
-                  {wsConnected ? 'Connected to unified trading stream' : 'Select an exchange account and test connection to receive live market data...'}
+                  {wsConnected ? `Connected to ${currentSubscription?.dataType || 'ticker'} stream for ${currentSubscription?.symbol || 'N/A'}` :
+                   wsConnecting ? 'Connecting to unified trading stream...' :
+                   !selectedExchangeId ? 'Please select an exchange account first' :
+                   !streamConfig.symbol ? 'Please select a trading symbol first' :
+                   'Ready to connect - click Test Connection'}
+                </div>
+              </div>
+
+              {/* Message Log for Public Stream */}
+              <div className="bg-crypto-dark p-3 rounded border border-gray-700 mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    <i className="fas fa-chart-line text-crypto-success text-xs"></i>
+                    <span className="text-xs font-medium text-crypto-light">Live Market Data ({receivedMessages.length})</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={clearPublicMessages}
+                    className="h-6 px-2 text-xs text-crypto-light hover:bg-gray-800"
+                    disabled={receivedMessages.length === 0}
+                  >
+                    <i className="fas fa-trash mr-1"></i>
+                    Clear
+                  </Button>
+                </div>
+                <div className="text-xs text-crypto-light/70 font-mono bg-black/30 p-2 rounded max-h-32 overflow-y-auto">
+                  {receivedMessages.length === 0 ? (
+                    <div className="text-gray-500 italic text-center py-2">
+                      📊 No market data received yet<br />
+                      <span className="text-xs">Connect to see live ticker updates, kline data, and more...</span>
+                    </div>
+                  ) : (
+                    receivedMessages.map((msg, index) => (
+                      <div key={index} className="mb-1 pb-1 border-b border-gray-800 last:border-b-0">
+                        <div className="flex justify-between items-center">
+                          <span className="text-yellow-400 text-xs">[{msg.timestamp}]</span>
+                          <span className="text-xs text-gray-400">{msg.type}</span>
+                        </div>
+                        <div className="text-green-400 text-xs mt-1 break-all">
+                          {JSON.stringify(msg, null, 1).slice(0, 200)}
+                          {JSON.stringify(msg).length > 200 && '...'}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -488,6 +669,9 @@ export default function Settings() {
             <h4 className="text-md font-medium text-white mb-3">User Data Stream</h4>
             <p className="text-sm text-crypto-light mb-4">
               Test authenticated user data streams using the selected exchange's WebSocket API endpoint and stored API credentials.
+              <span className="block mt-2 text-xs text-yellow-400">
+                ⚠️ Requires an exchange account to be selected with properly configured API credentials.
+              </span>
             </p>
             
             <div className="space-y-3">
@@ -497,10 +681,10 @@ export default function Settings() {
                   size="sm" 
                   className="bg-crypto-success hover:bg-crypto-success/80 text-white"
                   onClick={testUserWebSocket}
-                  disabled={!wsConnected || !selectedExchangeId}
+                  disabled={wsConnecting || wsConnected || !selectedExchangeId}
                 >
-                  <i className={`${!wsConnected ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
-                  {!wsConnected ? 'Connecting...' : 'Test Connection'}
+                  <i className={`${wsConnecting ? 'fas fa-spinner fa-spin' : 'fas fa-play'} mr-2`}></i>
+                  {wsConnecting ? 'Connecting...' : 'Test Connection'}
                 </Button>
               </div>
               
@@ -510,19 +694,66 @@ export default function Settings() {
                   <div className="flex items-center space-x-1">
                     <div className={`w-2 h-2 rounded-full ${
                       wsConnected ? 'bg-crypto-success animate-pulse' :
+                      wsConnecting ? 'bg-yellow-500 animate-pulse' :
                       selectedExchangeId ? 'bg-yellow-500' : 'bg-gray-500'
                     }`}></div>
                     <span className={`text-xs ${
                       wsConnected ? 'text-crypto-success' :
+                      wsConnecting ? 'text-yellow-500' :
                       selectedExchangeId ? 'text-yellow-500' : 'text-gray-500'
                     }`}>
                       {wsConnected ? 'Connected' :
+                       wsConnecting ? 'Connecting...' :
                        selectedExchangeId ? 'Ready to Connect' : 'Select Exchange Account'}
                     </span>
                   </div>
                 </div>
                 <div className="text-xs text-crypto-light/70 font-mono bg-black/30 p-2 rounded max-h-24 overflow-y-auto">
-                  {wsConnected ? 'Connected to unified trading stream' : 'Select an exchange account and test connection to receive authenticated data...'}
+                  {wsConnected ? 'Connected to unified trading stream with user authentication' : 
+                   wsConnecting ? 'Connecting to authenticated stream...' :
+                   !selectedExchangeId ? 'Please select an exchange account first' :
+                   'Ready to connect - click Test Connection for authenticated data...'}
+                </div>
+              </div>
+
+              {/* Message Log for User Stream */}
+              <div className="bg-crypto-dark p-3 rounded border border-gray-700 mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    <i className="fas fa-user-shield text-crypto-accent text-xs"></i>
+                    <span className="text-xs font-medium text-crypto-light">Authenticated Data ({userMessages.length})</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={clearUserMessages}
+                    className="h-6 px-2 text-xs text-crypto-light hover:bg-gray-800"
+                    disabled={userMessages.length === 0}
+                  >
+                    <i className="fas fa-trash mr-1"></i>
+                    Clear
+                  </Button>
+                </div>
+                <div className="text-xs text-crypto-light/70 font-mono bg-black/30 p-2 rounded max-h-32 overflow-y-auto">
+                  {userMessages.length === 0 ? (
+                    <div className="text-gray-500 italic text-center py-2">
+                      🔐 No authenticated data received yet<br />
+                      <span className="text-xs">Connect with exchange account to see balances, orders, and account updates...</span>
+                    </div>
+                  ) : (
+                    userMessages.map((msg, index) => (
+                      <div key={index} className="mb-1 pb-1 border-b border-gray-800 last:border-b-0">
+                        <div className="flex justify-between items-center">
+                          <span className="text-yellow-400 text-xs">[{msg.timestamp}]</span>
+                          <span className="text-xs text-gray-400">{msg.type}</span>
+                        </div>
+                        <div className="text-blue-400 text-xs mt-1 break-all">
+                          {JSON.stringify(msg, null, 1).slice(0, 200)}
+                          {JSON.stringify(msg).length > 200 && '...'}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
