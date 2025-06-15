@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -65,7 +65,12 @@ function Router() {
             <Route path="/" component={Dashboard} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/trading" component={Trading} />
+            {/* Trading Bots - Main route */}
             <Route path="/bots" component={TradingBots} />
+            {/* Redirect /trading-bots to /bots to avoid duplicate routes and WebSocket connections */}
+            <Route path="/trading-bots">
+              <Redirect to="/bots" />
+            </Route>
             <Route path="/my-bots" component={MyBotsPage} />
             <Route path="/bot-logs" component={BotLogsPage} />
             <Route path="/api-keys" component={ApiKeys} />
