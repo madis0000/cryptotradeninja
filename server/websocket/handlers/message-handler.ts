@@ -3,12 +3,12 @@ import { WebSocketMessage } from '../types';
 import { TickerStreamManager } from '../streams/ticker-stream-manager';
 import { KlineStreamManager } from '../streams/kline-stream-manager';
 import { TradingOperationsManager } from '../managers/trading-operations-manager';
+import { storage } from '../../storage';
 
 export class MessageHandler {
   private tickerStreamManager: TickerStreamManager;
   private klineStreamManager: KlineStreamManager;
   private tradingOperationsManager: TradingOperationsManager;
-  private readonly DEFAULT_EXCHANGE_ID = 1; // Default to exchange ID 1 for backward compatibility
 
   constructor(
     tickerStreamManager: TickerStreamManager,
@@ -19,6 +19,41 @@ export class MessageHandler {
     this.klineStreamManager = klineStreamManager;
     this.tradingOperationsManager = tradingOperationsManager;
     console.log('[UNIFIED WS] [MESSAGE HANDLER] Initialized');
+  }
+
+  /**
+   * Get the first available active exchange ID for a user
+   * Falls back to any active exchange if user-specific exchange not found
+   */
+  private async getDefaultExchangeId(userId: number = 1): Promise<number | null> {
+    try {
+      // First try to get exchanges for the specific user
+      const userExchanges = await storage.getExchangesByUserId(userId);
+      const activeUserExchange = userExchanges.find(ex => ex.isActive);
+      
+      if (activeUserExchange) {
+        console.log(`[MESSAGE HANDLER] Using user ${userId} exchange: ${activeUserExchange.id} (${activeUserExchange.name})`);
+        return activeUserExchange.id;
+      }
+
+      // If no user-specific exchange found, get any active exchange as fallback
+      console.log(`[MESSAGE HANDLER] No active exchanges found for user ${userId}, trying global fallback`);
+      
+      // Get all exchanges and find the first active one
+      const allExchanges = await storage.getExchangesByUserId(1); // Try user ID 1 as fallback
+      const activeExchange = allExchanges.find(ex => ex.isActive);
+      
+      if (activeExchange) {
+        console.log(`[MESSAGE HANDLER] Using fallback exchange: ${activeExchange.id} (${activeExchange.name})`);
+        return activeExchange.id;
+      }
+
+      console.error(`[MESSAGE HANDLER] No active exchanges found in the system`);
+      return null;
+    } catch (error) {
+      console.error(`[MESSAGE HANDLER] Error getting default exchange ID:`, error);
+      return null;
+    }
   }
 
   // Handle incoming WebSocket messages
@@ -76,13 +111,16 @@ export class MessageHandler {
   // Handle change subscription (symbol and interval change)
   private async handleChangeSubscription(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
     const { symbol, interval, exchangeId } = message;
-    
-    if (!symbol || !interval) {
+      if (!symbol || !interval) {
       console.error('[MESSAGE HANDLER] Change subscription missing symbol or interval');
       return;
     }
 
-    const targetExchangeId = exchangeId || this.DEFAULT_EXCHANGE_ID;
+    const targetExchangeId = exchangeId || await this.getDefaultExchangeId();
+    if (!targetExchangeId) {
+      console.error('[MESSAGE HANDLER] No available exchange found');
+      return;
+    }
     console.log(`[UNIFIED WS SERVER] Change subscription request: symbol=${symbol}, interval=${interval}, exchangeId=${targetExchangeId}`);
 
     // Setup ticker client
@@ -96,13 +134,16 @@ export class MessageHandler {
   // Handle subscribe (ticker subscription)
   private async handleSubscribe(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
     const { symbols, exchangeId } = message;
-    
-    if (!symbols || !Array.isArray(symbols)) {
+      if (!symbols || !Array.isArray(symbols)) {
       console.error('[MESSAGE HANDLER] Subscribe missing symbols array');
       return;
     }
 
-    const targetExchangeId = exchangeId || this.DEFAULT_EXCHANGE_ID;
+    const targetExchangeId = exchangeId || await this.getDefaultExchangeId();
+    if (!targetExchangeId) {
+      console.error('[MESSAGE HANDLER] No available exchange found');
+      return;
+    }
     console.log(`[UNIFIED WS SERVER] Subscribe request: symbols=${symbols.join(', ')}, exchangeId=${targetExchangeId}`);
 
     // Setup ticker client
@@ -114,13 +155,16 @@ export class MessageHandler {
   // Handle configure stream (kline configuration)
   private async handleConfigureStream(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
     const { dataType, symbols, interval, exchangeId } = message;
-    
-    if (!dataType || !symbols || !Array.isArray(symbols) || !interval) {
+      if (!dataType || !symbols || !Array.isArray(symbols) || !interval) {
       console.error('[MESSAGE HANDLER] Configure stream missing required parameters');
       return;
     }
 
-    const targetExchangeId = exchangeId || this.DEFAULT_EXCHANGE_ID;
+    const targetExchangeId = exchangeId || await this.getDefaultExchangeId();
+    if (!targetExchangeId) {
+      console.error('[MESSAGE HANDLER] No available exchange found');
+      return;
+    }
     console.log(`[UNIFIED WS SERVER] Configure stream request: dataType=${dataType}, symbols=[${symbols.join(', ')}], interval=${interval}, exchangeId=${targetExchangeId}`);
 
     if (dataType === 'kline') {
@@ -170,38 +214,56 @@ export class MessageHandler {
         clientId
       }));
     }
-  }
-
-  // Handle balance request
+  }  // Handle balance request
   private async handleGetBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
     const { exchangeId, asset } = message;
     
-    console.log(`[UNIFIED WS BALANCE FETCHING] Get balance request from client ${clientId}: exchangeId=${exchangeId || this.DEFAULT_EXCHANGE_ID}, asset=${asset || 'USDT'}`);
+    const defaultExchangeId = await this.getDefaultExchangeId();
+    const targetExchangeId = exchangeId || defaultExchangeId;
+    
+    if (!targetExchangeId) {
+      console.error(`[UNIFIED WS BALANCE FETCHING] No available exchange found for balance request`);
+      ws.send(JSON.stringify({
+        type: 'balance_error',
+        error: 'No available exchange found',
+        exchangeId: exchangeId
+      }));
+      return;
+    }
+    
+    console.log(`[UNIFIED WS BALANCE FETCHING] Get balance request from client ${clientId}: exchangeId=${targetExchangeId}, asset=${asset || 'USDT'}`);
     
     try {
-      const targetExchangeId = exchangeId || this.DEFAULT_EXCHANGE_ID;
       const targetAsset = asset || 'USDT';
       
-      const balance = await this.tradingOperationsManager.getAccountBalance(targetExchangeId, targetAsset);
+      const balanceResult = await this.tradingOperationsManager.getAccountBalance(targetExchangeId, targetAsset);
       
-      console.log(`[UNIFIED WS BALANCE FETCHING] Retrieved balance for exchange ${targetExchangeId}, asset ${targetAsset}:`, balance);
+      console.log(`[UNIFIED WS BALANCE FETCHING] Retrieved balance for exchange ${targetExchangeId}:`, balanceResult);
       
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
           type: 'balance_update',
           exchangeId: targetExchangeId,
           asset: targetAsset,
-          balance: balance,
-          timestamp: Date.now(),
+          data: balanceResult.data,
+          timestamp: balanceResult.timestamp || Date.now(),
           clientId
         }));
       }
     } catch (error) {
       console.error(`[UNIFIED WS BALANCE FETCHING] Error getting balance:`, error);
-      if (ws.readyState === WebSocket.OPEN) {        ws.send(JSON.stringify({
+      
+      // Send detailed error information
+      if (ws.readyState === WebSocket.OPEN) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isDecryptionError = errorMessage.includes('decrypt') || errorMessage.includes('Decryption failed');
+          ws.send(JSON.stringify({
           type: 'balance_error',
-          message: 'Failed to fetch balance',
-          error: error instanceof Error ? error.message : String(error),
+          message: isDecryptionError ? 'Failed to decrypt API credentials. Please check your exchange configuration.' : 'Failed to fetch balance',
+          error: errorMessage,
+          exchangeId: targetExchangeId,
+          asset: asset || 'USDT',
+          errorType: isDecryptionError ? 'DECRYPTION_ERROR' : 'API_ERROR',
           clientId
         }));
       }
@@ -209,19 +271,25 @@ export class MessageHandler {
   }
 
   // Handle balance subscription (for real-time updates)
-  private async handleSubscribeBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
-    const { exchangeId, asset } = message;
+  private async handleSubscribeBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {    const { exchangeId, asset } = message;
     
-    console.log(`[UNIFIED WS BALANCE FETCHING] Subscribe balance request from client ${clientId}: exchangeId=${exchangeId || this.DEFAULT_EXCHANGE_ID}, asset=${asset || 'USDT'}`);
+    const defaultExchangeId = await this.getDefaultExchangeId();
+    const targetExchangeId = exchangeId || defaultExchangeId;
+    
+    if (!targetExchangeId) {
+      console.error(`[UNIFIED WS BALANCE FETCHING] No available exchange found for balance subscription`);
+      return;
+    }
+    
+    console.log(`[UNIFIED WS BALANCE FETCHING] Subscribe balance request from client ${clientId}: exchangeId=${targetExchangeId}, asset=${asset || 'USDT'}`);
     
     // For now, we'll send the current balance and mark the client as subscribed
     // In the future, this could be extended to listen to real-time balance updates from exchanges
     await this.handleGetBalance(ws, message, clientId);
     
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
+    if (ws.readyState === WebSocket.OPEN) {      ws.send(JSON.stringify({
         type: 'balance_subscription_confirmed',
-        exchangeId: exchangeId || this.DEFAULT_EXCHANGE_ID,
+        exchangeId: targetExchangeId,
         asset: asset || 'USDT',
         message: 'Subscribed to balance updates',
         clientId

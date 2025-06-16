@@ -1,3 +1,5 @@
+import { ExchangeSelector } from "./exchange-selector";
+
 interface TickerData {
   symbol: string;
   price: string;
@@ -12,10 +14,18 @@ interface TickerData {
 interface TradingHeaderProps {
   selectedSymbol: string;
   tickerData: TickerData | null;
+  selectedExchangeId?: number;
+  onExchangeChange?: (exchangeId: number) => void;
   className?: string;
 }
 
-export function TradingHeader({ selectedSymbol, tickerData, className = "" }: TradingHeaderProps) {
+export function TradingHeader({ 
+  selectedSymbol, 
+  tickerData, 
+  selectedExchangeId, 
+  onExchangeChange, 
+  className = "" 
+}: TradingHeaderProps) {
   return (
     <div className={`bg-crypto-dark px-4 py-3 border-b border-gray-800 ${className}`}>
       <div className="flex items-center justify-between">
@@ -64,6 +74,18 @@ export function TradingHeader({ selectedSymbol, tickerData, className = "" }: Tr
             </div>
           </div>
         </div>
+        
+        {/* Exchange Selector on the right */}
+        {onExchangeChange && (
+          <div className="flex items-center">
+            <ExchangeSelector
+              selectedExchangeId={selectedExchangeId}
+              onExchangeChange={onExchangeChange}
+              className="w-64"
+              placeholder="Select trading exchange"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

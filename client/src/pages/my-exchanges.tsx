@@ -14,6 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Loader2, Plus, Trash2, Settings, RefreshCw, AlertCircle } from "lucide-react";
 import { useUserWebSocket } from "@/hooks/useWebSocketService";
 import { EXCHANGE_OPTIONS } from "@/lib/mock-data";
+import { calculateTotalUsdtValue, calculateUsdtBalance, formatBalance } from "@/utils/balance-utils";
 
 interface Exchange {
   id: number;
@@ -66,40 +67,12 @@ export default function MyExchanges() {
   });
 
   // Helper functions for balance calculations
-  const calculateTotalUsdtBalance = (balances: any[]): string => {
-    // Calculate total of all balances (free + locked) converted to USDT
-    // For now, we'll sum all balances since we don't have real-time price conversion
-    // In production, each asset would be converted to USDT using current market prices
-    let total = 0;
-    balances.forEach(balance => {
-      const assetTotal = parseFloat(balance.free || 0) + parseFloat(balance.locked || 0);
-      total += assetTotal;
-    });
-    return total.toFixed(2);
-  };
-
-  const calculateUsdtOnly = (balances: any[]): string => {
-    const usdtBalance = balances.find(balance => balance.asset === 'USDT');
-    if (usdtBalance) {
-      return (parseFloat(usdtBalance.free || 0) + parseFloat(usdtBalance.locked || 0)).toFixed(2);
-    }
-    return '0.00';
-  };
-
-  const calculateTotalFree = (balances: any[]): string => {
-    let total = 0;
-    balances.forEach(balance => {
-      total += parseFloat(balance.free || 0);
-    });
-    return total.toFixed(2);
-  };
-
-  const calculateTotalLocked = (balances: any[]): string => {
-    let total = 0;
-    balances.forEach(balance => {
-      total += parseFloat(balance.locked || 0);
-    });
-    return total.toFixed(2);
+  const calculateTotalBalanceForDisplay = (balances: any[]): string => {
+    // This shows the count of assets with non-zero balances
+    const totalAssets = balances.filter(balance => 
+      (parseFloat(balance.free || 0) + parseFloat(balance.locked || 0)) > 0
+    ).length;
+    return `${totalAssets} assets`;
   };
 
   // WebSocket for balance fetching
@@ -118,24 +91,41 @@ export default function MyExchanges() {
         });
         
         if (targetExchangeId) {
-          const totalUsdtValue = calculateTotalUsdtBalance(data.data.balances);
-          const usdtOnly = calculateUsdtOnly(data.data.balances);
-          const totalFree = calculateTotalFree(data.data.balances);
-          const totalLocked = calculateTotalLocked(data.data.balances);
+          // Calculate USDT balance and other metrics
+          const usdtOnly = calculateUsdtBalance(data.data.balances);
+          const totalFree = calculateTotalBalanceForDisplay(data.data.balances.filter((b: any) => parseFloat(b.free || '0') > 0));
+          const totalLocked = calculateTotalBalanceForDisplay(data.data.balances.filter((b: any) => parseFloat(b.locked || '0') > 0));
           
-          console.log('✅ Balance fetched via WebSocket API:', totalUsdtValue, 'USDT');
-          
-          setExchangeBalances(prev => ({
-            ...prev,
-            [targetExchangeId]: { 
-              balance: totalUsdtValue, 
-              loading: false,
-              balances: data.data.balances,
-              usdtOnly,
-              totalFree,
-              totalLocked
-            }
-          }));
+          // Calculate total USDT value with price conversion (async)
+          calculateTotalUsdtValue(data.data.balances, targetExchangeId).then(totalUsdtValue => {
+            console.log('✅ Balance fetched via WebSocket API:', totalUsdtValue, 'USDT');
+            
+            setExchangeBalances(prev => ({
+              ...prev,
+              [targetExchangeId]: { 
+                balance: totalUsdtValue, 
+                loading: false,
+                balances: data.data.balances,
+                usdtOnly,
+                totalFree,
+                totalLocked
+              }
+            }));
+          }).catch(error => {
+            console.error('Error calculating total USDT value:', error);
+            // Fallback to USDT-only value if price conversion fails
+            setExchangeBalances(prev => ({
+              ...prev,
+              [targetExchangeId]: { 
+                balance: usdtOnly, 
+                loading: false,
+                balances: data.data.balances,
+                usdtOnly,
+                totalFree,
+                totalLocked
+              }
+            }));
+          });
         } else {
           console.log('❌ No target exchange ID found for balance update');
         }
@@ -171,8 +161,17 @@ export default function MyExchanges() {
     // Set current exchange for message handling
     setCurrentExchangeId(exchange.id);
     
-    // Connect using WebSocket API
-    userWs.connect(exchange.apiKey);
+    // Connect and authenticate using WebSocket API
+    userWs.connect();
+    
+    // Send balance request after a brief delay to ensure connection is established
+    setTimeout(() => {
+      userWs.sendMessage({
+        type: 'get_balance',
+        exchangeId: exchange.id,
+        asset: 'USDT'
+      });
+    }, 500);
   };
 
   // Auto-fetch balances when page loads (once only)
@@ -409,7 +408,7 @@ export default function MyExchanges() {
                   </div>
                 ) : (
                   <span className="text-lg font-semibold">
-                    ${balanceState?.balance || '0.00'}
+                    ${formatBalance(balanceState?.balance || '0.00')}
                   </span>
                 )}
               </div>
@@ -424,19 +423,19 @@ export default function MyExchanges() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">USDT Balance</p>
                   <p className="text-base font-semibold mt-1">
-                    ${balanceState.usdtOnly || '0.00'}
+                    ${formatBalance(balanceState.usdtOnly || '0.00')}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Free</p>
+                  <p className="text-sm font-medium text-muted-foreground">Assets with Free Balance</p>
                   <p className="text-base font-semibold mt-1">
-                    {balanceState.totalFree || '0.00'}
+                    {balanceState.totalFree || '0 assets'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Locked</p>
+                  <p className="text-sm font-medium text-muted-foreground">Assets with Locked Balance</p>
                   <p className="text-base font-semibold mt-1">
-                    {balanceState.totalLocked || '0.00'}
+                    {balanceState.totalLocked || '0 assets'}
                   </p>
                 </div>
               </div>

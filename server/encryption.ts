@@ -53,13 +53,22 @@ export const decrypt = (encryptedText: string, ivHex: string): string => {
 };
 
 export const encryptApiCredentials = (apiKey: string, apiSecret: string) => {
-  const encryptedApiKey = encrypt(apiKey);
-  const encryptedApiSecret = encrypt(apiSecret);
+  // Use the same IV for both credentials to ensure consistent decryption
+  const iv = crypto.randomBytes(16);
+  const ivHex = iv.toString('hex');
+  
+  const cipher1 = crypto.createCipheriv(ALGORITHM, getEncryptionKey(), iv);
+  let encryptedApiKey = cipher1.update(apiKey, 'utf8', 'hex');
+  encryptedApiKey += cipher1.final('hex');
+  
+  const cipher2 = crypto.createCipheriv(ALGORITHM, getEncryptionKey(), iv);
+  let encryptedApiSecret = cipher2.update(apiSecret, 'utf8', 'hex');
+  encryptedApiSecret += cipher2.final('hex');
   
   return {
-    apiKey: encryptedApiKey.encryptedText,
-    apiSecret: encryptedApiSecret.encryptedText,
-    encryptionIv: encryptedApiKey.iv, // Using same IV for both (in production, use separate IVs)
+    apiKey: encryptedApiKey,
+    apiSecret: encryptedApiSecret,
+    encryptionIv: ivHex, // Same IV for both credentials
   };
 };
 

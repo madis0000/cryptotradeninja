@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { audioService } from '../services/audioService';
+import { createSubscriptionMessage } from '../utils/websocket-helpers';
 
 interface WebSocketHookOptions {
   onMessage?: (data: any) => void;
@@ -34,6 +35,24 @@ let globalWsSubscribers = new Set<(data: any) => void>();
 let globalWsConnectedCallbacks = new Set<() => void>();
 let globalWsDisconnectedCallbacks = new Set<() => void>();
 let globalWsErrorCallbacks = new Set<(error: Event) => void>();
+
+// Helper function to get first active exchange ID (fallback method)
+async function getFirstActiveExchangeId(): Promise<number | null> {
+  try {
+    const response = await fetch('/api/exchanges');
+    if (!response.ok) return null;
+    
+    const exchanges = await response.json();
+    if (Array.isArray(exchanges) && exchanges.length > 0) {
+      const activeExchange = exchanges.find((ex: any) => ex.isActive);
+      return activeExchange?.id || exchanges[0].id;
+    }
+    return null;
+  } catch (error) {
+    console.error('[WS HOOK] Error fetching exchanges:', error);
+    return null;
+  }
+}
 
 export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWebSocketService {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>(globalWsStatus);
@@ -126,12 +145,21 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
       
       // Send subscription command to backend with configured symbols
       const symbolsToUse = symbols || ['BTCUSDT'];
-      const subscribeMessage = {
-        type: 'subscribe',
-        symbols: symbolsToUse
-      };
-      console.log('[CLIENT WS] Sending configured symbols to backend:', subscribeMessage);
-      ws.send(JSON.stringify(subscribeMessage));
+      
+      // Try to include exchangeId for better compatibility
+      getFirstActiveExchangeId().then(exchangeId => {
+        const subscribeMessage = exchangeId 
+          ? createSubscriptionMessage(symbolsToUse, exchangeId)
+          : { type: 'subscribe', symbols: symbolsToUse }; // Fallback for backward compatibility
+        
+        console.log('[CLIENT WS] Sending configured symbols to backend:', subscribeMessage);
+        ws.send(JSON.stringify(subscribeMessage));
+      }).catch(() => {
+        // Fallback to basic subscription without exchangeId
+        const subscribeMessage = { type: 'subscribe', symbols: symbolsToUse };
+        console.log('[CLIENT WS] Using fallback subscription without exchangeId:', subscribeMessage);
+        ws.send(JSON.stringify(subscribeMessage));
+      });
     };
 
     ws.onmessage = (event) => {
@@ -179,10 +207,19 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
 
   const subscribe = useCallback((symbols: string[]) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        type: 'subscribe',
-        symbols
-      }));
+      // Try to include exchangeId for better compatibility
+      getFirstActiveExchangeId().then(exchangeId => {
+        const message = exchangeId 
+          ? createSubscriptionMessage(symbols, exchangeId)
+          : { type: 'subscribe', symbols }; // Fallback for backward compatibility
+        
+        console.log('[CLIENT WS] Sending subscription message:', message);
+        wsRef.current?.send(JSON.stringify(message));
+      }).catch(() => {
+        // Fallback to basic subscription without exchangeId
+        console.log('[CLIENT WS] Using fallback subscription without exchangeId');
+        wsRef.current?.send(JSON.stringify({ type: 'subscribe', symbols }));
+      });
     }
   }, []);
 

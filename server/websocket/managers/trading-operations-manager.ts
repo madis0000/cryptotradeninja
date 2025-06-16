@@ -363,8 +363,7 @@ export class TradingOperationsManager {
       console.error('[TRADING OPS] Listen key generation failed:', error);
       throw error;
     }
-  }
-  async getAccountBalance(exchangeId: number, asset: string): Promise<any> {
+  }  async getAccountBalance(exchangeId: number, asset: string): Promise<any> {
     console.log(`[UNIFIED WS BALANCE FETCHING] Getting account balance for exchange ${exchangeId}, asset ${asset}`);
     
     try {
@@ -373,35 +372,80 @@ export class TradingOperationsManager {
         throw new Error('Exchange not found');
       }
 
-      // For testnet, use mock balance data
-      if (exchange.isTestnet) {
-        console.log(`[UNIFIED WS BALANCE FETCHING] Using testnet mock balance for exchange ${exchangeId}`);
-        const mockBalances: Record<string, string> = {
-          'USDT': '127247.18000000',
-          'BTC': '0.05000000',
-          'ETH': '2.50000000',
-          'BNB': '10.00000000'
-        };
+      console.log(`[UNIFIED WS BALANCE FETCHING] Found exchange: ${exchange.name} (${exchange.exchangeType})`);
+
+      // Decrypt API credentials with better error handling
+      let apiKey: string, apiSecret: string;
+      try {
+        const credentials = decryptApiCredentials(
+          exchange.apiKey,
+          exchange.apiSecret,
+          exchange.encryptionIv
+        );
+        apiKey = credentials.apiKey;
+        apiSecret = credentials.apiSecret;
         
-        const availableBalance = mockBalances[asset] || '0.00000000';
+        console.log(`[UNIFIED WS BALANCE FETCHING] Credentials decrypted successfully for exchange ${exchangeId}`);
+        console.log(`[UNIFIED WS BALANCE FETCHING] API Key length: ${apiKey.length}, API Secret length: ${apiSecret.length}`);
+      } catch (decryptError) {
+        console.error(`[UNIFIED WS BALANCE FETCHING] Failed to decrypt credentials for exchange ${exchangeId}:`, decryptError);
+        throw new Error(`Failed to decrypt API credentials: ${decryptError instanceof Error ? decryptError.message : String(decryptError)}`);      }
+
+      // Fetch actual balance from exchange API (works for both testnet and live)
+      // The REST API endpoint determines whether it's testnet or live
+      const environmentType = exchange.isTestnet ? 'Testnet' : 'Live';
+      try {
+        console.log(`[UNIFIED WS BALANCE FETCHING] Fetching real ${environmentType} balance from ${exchange.name}`);
+        
+        const baseUrl = exchange.restApiEndpoint || (exchange.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com');
+        const timestamp = Date.now();
+        
+        // Create query parameters
+        const params = new URLSearchParams({
+          timestamp: timestamp.toString()
+        });
+
+        // Create signature
+        const signature = crypto
+          .createHmac('sha256', apiSecret)
+          .update(params.toString())
+          .digest('hex');
+        
+        params.append('signature', signature);
+
+        console.log(`[UNIFIED WS BALANCE FETCHING] Making API request to: ${baseUrl}/api/v3/account`);
+        console.log(`[UNIFIED WS BALANCE FETCHING] Request params: ${params.toString().replace(/signature=[^&]+/, 'signature=***')}`);
+
+        // Make API request
+        const response = await fetch(`${baseUrl}/api/v3/account?${params.toString()}`, {
+          method: 'GET',
+          headers: {
+            'X-MBX-APIKEY': apiKey,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[UNIFIED WS BALANCE FETCHING] API request failed: ${response.status} ${response.statusText}`);
+          console.error(`[UNIFIED WS BALANCE FETCHING] Error response: ${errorText}`);
+          throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
+        }        const accountData = await response.json();
+        
+        console.log(`[UNIFIED WS BALANCE FETCHING] Successfully fetched real ${environmentType} balance from ${exchange.name}`);
+        console.log(`[UNIFIED WS BALANCE FETCHING] Balance data contains ${accountData.balances?.length || 0} assets`);
         
         return {
-          asset,
-          free: availableBalance,
-          locked: '0.00000000',
+          data: {
+            balances: accountData.balances || []
+          },
           timestamp: Date.now()
         };
+        
+      } catch (apiError) {
+        console.error(`[UNIFIED WS BALANCE FETCHING] API request failed for exchange ${exchangeId}:`, apiError);
+        throw new Error(`Failed to fetch balance from exchange: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
       }
-
-      // For production exchanges, would fetch actual balance from exchange API
-      console.log(`[UNIFIED WS BALANCE FETCHING] Production balance fetch not implemented for exchange ${exchangeId}`);
-      
-      return {
-        asset,
-        free: '0.0',
-        locked: '0.0',
-        timestamp: Date.now()
-      };
       
     } catch (error) {
       console.error(`[UNIFIED WS BALANCE FETCHING] Account balance fetch failed for exchange ${exchangeId}, asset ${asset}:`, error);

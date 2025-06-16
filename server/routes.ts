@@ -805,7 +805,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/bot-logs/:botId/download", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/bot-logs/:botId/download", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const userId = req.user!.id;
       const botId = parseInt(req.params.botId);
@@ -1183,221 +1183,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Market Data API - REMOVED: Using WebSocket-only communication
-
-  // Markets API - Fetch trading pairs from Binance
-  app.get("/api/markets", async (req, res) => {
-    const { quote } = req.query;
-    
+  // Ticker API - Get current price for a symbol from a specific exchange
+  app.get("/api/ticker/:symbol", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // Use alternative endpoints or generate market data based on common trading pairs
-      const commonMarkets = [
-        // USDT pairs
-        { symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'ETHUSDT', baseAsset: 'ETH', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'ADAUSDT', baseAsset: 'ADA', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'BNBUSDT', baseAsset: 'BNB', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'DOGEUSDT', baseAsset: 'DOGE', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'SOLUSDT', baseAsset: 'SOL', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'XRPUSDT', baseAsset: 'XRP', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'AVAXUSDT', baseAsset: 'AVAX', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'DOTUSDT', baseAsset: 'DOT', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'MATICUSDT', baseAsset: 'MATIC', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'LINKUSDT', baseAsset: 'LINK', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'LTCUSDT', baseAsset: 'LTC', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'UNIUSDT', baseAsset: 'UNI', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'ATOMUSDT', baseAsset: 'ATOM', quoteAsset: 'USDT', status: 'TRADING' },
-        { symbol: 'ICPUSDT', baseAsset: 'ICP', quoteAsset: 'USDT', status: 'TRADING' },
-        
-        // USDC pairs
-        { symbol: 'BTCUSDC', baseAsset: 'BTC', quoteAsset: 'USDC', status: 'TRADING' },
-        { symbol: 'ETHUSDC', baseAsset: 'ETH', quoteAsset: 'USDC', status: 'TRADING' },
-        { symbol: 'ADAUSDC', baseAsset: 'ADA', quoteAsset: 'USDC', status: 'TRADING' },
-        { symbol: 'BNBUSDC', baseAsset: 'BNB', quoteAsset: 'USDC', status: 'TRADING' },
-        { symbol: 'SOLUSDC', baseAsset: 'SOL', quoteAsset: 'USDC', status: 'TRADING' },
-        { symbol: 'AVAXUSDC', baseAsset: 'AVAX', quoteAsset: 'USDC', status: 'TRADING' },
-        
-        // BTC pairs
-        { symbol: 'ETHBTC', baseAsset: 'ETH', quoteAsset: 'BTC', status: 'TRADING' },
-        { symbol: 'ADABTC', baseAsset: 'ADA', quoteAsset: 'BTC', status: 'TRADING' },
-        { symbol: 'BNBBTC', baseAsset: 'BNB', quoteAsset: 'BTC', status: 'TRADING' },
-        { symbol: 'DOGEBTC', baseAsset: 'DOGE', quoteAsset: 'BTC', status: 'TRADING' },
-        { symbol: 'LTCBTC', baseAsset: 'LTC', quoteAsset: 'BTC', status: 'TRADING' },
-        { symbol: 'XRPBTC', baseAsset: 'XRP', quoteAsset: 'BTC', status: 'TRADING' }
-      ];
+      const { symbol } = req.params;
+      const { exchangeId } = req.query;
       
-      let markets = commonMarkets;
-      
-      // Filter by quote currency if specified
-      if (quote && typeof quote === 'string') {
-        markets = markets.filter((market: any) => 
-          market.quoteAsset === quote.toUpperCase()
-        );
+      if (!symbol) {
+        return res.status(400).json({ error: "Symbol is required" });
       }
+
+      // Get default exchange if not specified
+      let targetExchangeId = exchangeId ? parseInt(exchangeId as string) : null;
+      if (!targetExchangeId) {
+        const userId = req.user!.id;
+        const exchanges = await storage.getExchangesByUserId(userId);
+        const activeExchange = exchanges.find(ex => ex.isActive);
+        if (!activeExchange) {
+          return res.status(400).json({ error: "No active exchange found" });
+        }
+        targetExchangeId = activeExchange.id;
+      }
+
+      const exchange = await storage.getExchange(targetExchangeId);
+      if (!exchange) {
+        return res.status(404).json({ error: "Exchange not found" });
+      }
+
+      // Fetch current price from exchange API
+      const baseUrl = exchange.restApiEndpoint || (exchange.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com');
+      const priceResponse = await fetch(`${baseUrl}/api/v3/ticker/price?symbol=${symbol.toUpperCase()}`);
       
-      // Format for frontend with additional market data
-      const formattedMarkets = markets.map((market: any) => ({
-        symbol: market.symbol,
-        baseAsset: market.baseAsset,
-        quoteAsset: market.quoteAsset,
-        status: market.status,
-        baseAssetPrecision: 8,
-        quotePrecision: 8,
-        quoteAssetPrecision: 8,
-        orderTypes: ['LIMIT', 'MARKET'],
-        icebergAllowed: true,
-        ocoAllowed: true,
-        isSpotTradingAllowed: true,
-        isMarginTradingAllowed: false,
-        displayName: `${market.baseAsset}/${market.quoteAsset}`
-      }));
-      
-      // Sort by symbol name for consistent display
-      formattedMarkets.sort((a: any, b: any) => a.symbol.localeCompare(b.symbol));
-      
+      if (!priceResponse.ok) {
+        return res.status(400).json({ error: `Failed to fetch price for ${symbol}` });
+      }
+
+      const priceData = await priceResponse.json();
       res.json({
-        quote: quote || 'ALL',
-        count: formattedMarkets.length,
-        markets: formattedMarkets
+        symbol: priceData.symbol,
+        price: priceData.price,
+        exchangeId: targetExchangeId,
+        timestamp: Date.now()
       });
     } catch (error) {
-      console.error("Error fetching markets:", error);
-      res.status(500).json({ 
-        error: "Failed to fetch markets data",
-        quote: quote || 'ALL',
-        count: 0,
-        markets: []
-      });
-    }
-  });
-
-  // Historical klines data endpoint
-  app.get("/api/klines", async (req, res) => {
-    try {
-      const { symbol = 'BTCUSDT', interval = '1m', limit = 100 } = req.query;
-      
-      // Fetch historical data from Binance testnet
-      const binanceUrl = `https://testnet.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-      
-      const response = await fetch(binanceUrl);
-      if (!response.ok) {
-        throw new Error(`Binance API error: ${response.status}`);
-      }
-      
-      const rawData = await response.json();
-      
-      // Transform to match expected format
-      const klineData = rawData.map((item: any[]) => ({
-        openTime: parseInt(item[0]),
-        closeTime: parseInt(item[6]),
-        open: item[1],
-        high: item[2],
-        low: item[3],
-        close: item[4],
-        volume: item[5],
-        trades: parseInt(item[8]),
-        quoteVolume: item[7],
-        isFinal: true
-      }));
-      
-      res.json(klineData);
-    } catch (error) {
-      console.error("Failed to fetch klines:", error);
-      res.status(500).json({ error: "Failed to fetch historical data" });
-    }
-  });
-
-  // Demo Martingale Strategy Logging - No auth required for demonstration
-  app.get("/api/demo-martingale", async (req: Request, res: Response) => {
-    try {
-      // Use hardcoded bot configuration for demonstration
-      const bot = {
-        id: 1,
-        name: "Demo Martingale Bot - ETHUSDT",
-        tradingPair: "ETHUSDT",
-        direction: "long",
-        baseOrderAmount: "7.5",
-        takeProfitPercentage: "2.0",
-        maxSafetyOrders: "3",
-        priceDeviation: "1.5",
-        priceDeviationMultiplier: "1.5"
-      };
-      
-      console.log(`[MARTINGALE STRATEGY] ===== STARTING BOT EXECUTION DEMO =====`);
-      console.log(`[MARTINGALE STRATEGY] Bot ID: ${bot.id}, User ID: 1`);
-      console.log(`[MARTINGALE STRATEGY] ✓ Bot loaded: ${bot.name} (${bot.tradingPair}, ${bot.direction})`);
-      
-      // Get current market price
-      const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${bot.tradingPair}`);
-      const priceData = await response.json();
-      const currentPrice = parseFloat(priceData.price);
-      
-      console.log(`[MARTINGALE STRATEGY] ===== STARTING BASE ORDER EXECUTION =====`);
-      console.log(`[MARTINGALE STRATEGY] Bot ID: ${bot.id}, Cycle ID: 1`);
-      console.log(`[MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:`);
-      console.log(`[MARTINGALE STRATEGY]    Investment Amount: $${bot.baseOrderAmount}`);
-      console.log(`[MARTINGALE STRATEGY]    Current Price: $${currentPrice}`);
-      
-      const baseQuantity = parseFloat(bot.baseOrderAmount) / currentPrice;
-      console.log(`[MARTINGALE STRATEGY]    Calculated Quantity: ${baseQuantity.toFixed(8)} ${bot.tradingPair.replace('USDT', '')}`);
-      
-      console.log(`[MARTINGALE STRATEGY] ✅ BASE ORDER SUCCESSFULLY PLACED!`);
-      console.log(`[MARTINGALE STRATEGY]    Order ID: DEMO_${Date.now()}`);
-      console.log(`[MARTINGALE STRATEGY]    Quantity: ${baseQuantity.toFixed(8)}`);
-      console.log(`[MARTINGALE STRATEGY]    Price: $${currentPrice}`);
-      
-      // Calculate and display take profit order
-      console.log(`[MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====`);
-      
-      const takeProfitPercentage = parseFloat(bot.takeProfitPercentage);
-      const takeProfitPrice = bot.direction === 'long' 
-        ? currentPrice * (1 + takeProfitPercentage / 100)
-        : currentPrice * (1 - takeProfitPercentage / 100);
-      
-      console.log(`[MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:`);
-      console.log(`[MARTINGALE STRATEGY]    Take Profit %: ${takeProfitPercentage}%`);
-      console.log(`[MARTINGALE STRATEGY]    Target Price: $${takeProfitPrice.toFixed(4)}`);
-      console.log(`[MARTINGALE STRATEGY]    Expected Profit: $${(baseQuantity * (takeProfitPrice - currentPrice)).toFixed(4)}`);
-      
-      console.log(`[MARTINGALE STRATEGY] ✅ TAKE PROFIT ORDER PLACED!`);
-      console.log(`[MARTINGALE STRATEGY]    Order ID: DEMO_TP_${Date.now()}`);
-      
-      // Set up safety orders demonstration
-      console.log(`[MARTINGALE STRATEGY] ===== SETTING UP SAFETY ORDER MONITORING =====`);
-      
-      const maxSafetyOrders = parseInt(bot.maxSafetyOrders);
-      const priceDeviation = parseFloat(bot.priceDeviation);
-      const deviationMultiplier = parseFloat(bot.priceDeviationMultiplier);
-      
-      console.log(`[MARTINGALE STRATEGY] 📊 SAFETY ORDER CONFIGURATION:`);
-      console.log(`[MARTINGALE STRATEGY]    Max Safety Orders: ${maxSafetyOrders}`);
-      console.log(`[MARTINGALE STRATEGY]    Price Deviation: ${priceDeviation}%`);
-      console.log(`[MARTINGALE STRATEGY]    Deviation Multiplier: ${deviationMultiplier}x`);
-      
-      for (let i = 1; i <= maxSafetyOrders; i++) {
-        const deviationPercent = priceDeviation * Math.pow(deviationMultiplier, i - 1);
-        const triggerPrice = bot.direction === 'long' 
-          ? currentPrice * (1 - deviationPercent / 100)
-          : currentPrice * (1 + deviationPercent / 100);
-        
-        console.log(`[MARTINGALE STRATEGY]    Safety Order ${i}: Trigger at $${triggerPrice.toFixed(4)} (${deviationPercent.toFixed(2)}% deviation)`);
-      }
-      
-      console.log(`[MARTINGALE STRATEGY] ===== STRATEGY EXECUTION COMPLETE =====`);
-      console.log(`[MARTINGALE STRATEGY] Bot is now monitoring market conditions for order execution`);
-      
-      res.json({
-        success: true,
-        botId: bot.id,
-        symbol: bot.tradingPair,
-        basePrice: currentPrice,
-        takeProfitPrice: takeProfitPrice,
-        message: 'Martingale strategy demonstration completed - check server logs'
-      });
-      
-    } catch (error) {
-      console.error('Error testing Martingale strategy:', error);
-      res.status(500).json({ error: 'Failed to test Martingale strategy' });
+      console.error('Error fetching ticker price:', error);
+      res.status(500).json({ error: "Failed to fetch ticker price" });
     }
   });
 

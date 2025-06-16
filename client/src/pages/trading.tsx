@@ -7,6 +7,8 @@ import { OrderForm } from "@/components/trading/order-form";
 import { MarketTrades } from "@/components/trading/market-trades";
 import { OrdersHistory } from "@/components/trading/orders-history";
 import { webSocketSingleton } from "@/services/WebSocketSingleton";
+import { useQuery } from "@tanstack/react-query";
+import { createSubscriptionMessage, createChangeSubscriptionMessage } from "@/utils/websocket-helpers";
 
 interface TickerData {
   symbol: string;
@@ -25,6 +27,26 @@ export default function Trading() {
   const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSDT');
   const [currentInterval, setCurrentInterval] = useState<string>('4h');
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [selectedExchangeId, setSelectedExchangeId] = useState<number | undefined>();
+
+  // Fetch exchanges for trading
+  const { data: exchanges } = useQuery({
+    queryKey: ['/api/exchanges']
+  });
+
+  // Auto-select first exchange if available
+  useEffect(() => {
+    if (exchanges && Array.isArray(exchanges) && exchanges.length > 0 && !selectedExchangeId) {
+      const activeExchange = exchanges.find((ex: any) => ex.isActive);
+      setSelectedExchangeId(activeExchange?.id || exchanges[0].id);
+    }
+  }, [exchanges, selectedExchangeId]);
+
+  const handleExchangeChange = (exchangeId: number) => {
+    setSelectedExchangeId(exchangeId);
+    // TODO: Update WebSocket subscriptions for the new exchange
+    console.log(`[TRADING] Exchange changed to: ${exchangeId}`);
+  };
 
   // Handle WebSocket messages
   useEffect(() => {
@@ -116,9 +138,9 @@ export default function Trading() {
     
     // Setup initial subscriptions once connected
     const setupSubscriptions = () => {
-      if (webSocketSingleton.isConnected()) {
-        console.log(`[TRADING] Setting up initial subscriptions for ${selectedSymbol}`);
-        webSocketSingleton.changeSymbolSubscription(selectedSymbol, currentInterval);
+      if (webSocketSingleton.isConnected() && selectedExchangeId) {
+        console.log(`[TRADING] Setting up initial subscriptions for ${selectedSymbol} on exchange ${selectedExchangeId}`);
+        webSocketSingleton.sendMessage(createChangeSubscriptionMessage(selectedSymbol, currentInterval, selectedExchangeId));
       }
     };
 
@@ -157,13 +179,13 @@ export default function Trading() {
 
   useEffect(() => {
     // Change subscription when symbol changes (but not on initial mount)
-    if (webSocketSingleton.isConnected()) {
-      console.log(`[TRADING] Changing subscription to ${selectedSymbol} at ${currentInterval}`);
-      webSocketSingleton.changeSymbolSubscription(selectedSymbol, currentInterval);
+    if (webSocketSingleton.isConnected() && selectedExchangeId) {
+      console.log(`[TRADING] Changing subscription to ${selectedSymbol} at ${currentInterval} on exchange ${selectedExchangeId}`);
+      webSocketSingleton.sendMessage(createChangeSubscriptionMessage(selectedSymbol, currentInterval, selectedExchangeId));
     } else {
-      console.log(`[TRADING] WebSocket not connected, cannot change subscription to ${selectedSymbol}`);
+      console.log(`[TRADING] WebSocket not connected or no exchange selected, cannot change subscription to ${selectedSymbol}`);
     }
-  }, [selectedSymbol, currentInterval]);
+  }, [selectedSymbol, currentInterval, selectedExchangeId]);
   return (
     <div className="min-h-screen bg-crypto-darker">
       <div className="flex h-screen overflow-hidden">
@@ -173,6 +195,8 @@ export default function Trading() {
           <TradingHeader 
             selectedSymbol={selectedSymbol}
             tickerData={tickerData}
+            selectedExchangeId={selectedExchangeId}
+            onExchangeChange={handleExchangeChange}
           />
 
           {/* Main Content Row */}
@@ -192,7 +216,7 @@ export default function Trading() {
 
               {/* Order Form Section - Fixed Height */}
               <div className="h-64 border-b border-gray-800">
-                <OrderForm className="h-full" symbol={selectedSymbol} />
+                <OrderForm className="h-full" symbol={selectedSymbol} exchangeId={selectedExchangeId} />
               </div>
             </div>
           </div>

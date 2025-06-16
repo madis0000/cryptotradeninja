@@ -2,10 +2,26 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { webSocketSingleton } from "@/services/WebSocketSingleton";
+import { useQuery } from "@tanstack/react-query";
+import { createSubscriptionMessage } from "@/utils/websocket-helpers";
 
 export default function WebSocketTest() {
   const [messages, setMessages] = useState<string[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<string>('disconnected');
+
+  // Fetch exchanges to get the first active exchange ID
+  const { data: exchanges } = useQuery({
+    queryKey: ['/api/exchanges']
+  });
+
+  // Get the first active exchange ID
+  const getExchangeId = () => {
+    if (exchanges && Array.isArray(exchanges) && exchanges.length > 0) {
+      const activeExchange = exchanges.find((ex: any) => ex.isActive);
+      return activeExchange?.id || exchanges[0].id;
+    }
+    return null;
+  };
 
   useEffect(() => {
     const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
@@ -43,11 +59,15 @@ export default function WebSocketTest() {
   }, []);
 
   const handleConnect = () => {
+    const exchangeId = getExchangeId();
+    if (!exchangeId) {
+      const timestamp = new Date().toLocaleTimeString();
+      setMessages(prev => [...prev, `${timestamp}: No active exchange found. Please add an exchange first.`]);
+      return;
+    }
+
     webSocketSingleton.connect();
-    webSocketSingleton.sendMessage({
-      type: 'subscribe',
-      symbols: ['BTCUSDT']
-    });
+    webSocketSingleton.sendMessage(createSubscriptionMessage(['BTCUSDT'], exchangeId));
   };
 
   const handleDisconnect = () => {
@@ -55,10 +75,14 @@ export default function WebSocketTest() {
   };
 
   const handleSubscribe = () => {
-    webSocketSingleton.sendMessage({
-      type: 'subscribe',
-      symbols: ['ETHUSDT', 'ADAUSDT']
-    });
+    const exchangeId = getExchangeId();
+    if (!exchangeId) {
+      const timestamp = new Date().toLocaleTimeString();
+      setMessages(prev => [...prev, `${timestamp}: No active exchange found. Please add an exchange first.`]);
+      return;
+    }
+
+    webSocketSingleton.sendMessage(createSubscriptionMessage(['ETHUSDT', 'ADAUSDT'], exchangeId));
   };
 
   return (

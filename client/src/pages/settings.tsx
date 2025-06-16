@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { audioService } from "@/services/audioService";
 import { Volume2, VolumeX, Bell, Settings2 } from "lucide-react";
+import { createSubscriptionMessage, createConfigureStreamMessage } from "@/utils/websocket-helpers";
 
 interface Exchange {
   id: number;
@@ -236,7 +237,8 @@ export default function Settings() {
             dataType: updatedConfig.dataType,
             symbol: updatedConfig.symbol,
             interval: updatedConfig.interval,
-            depth: updatedConfig.depth
+            depth: updatedConfig.depth,
+            exchangeId: selectedExchangeId ? parseInt(selectedExchangeId) : undefined
           })
         });
         
@@ -244,11 +246,9 @@ export default function Settings() {
           throw new Error('Configuration failed');
         }
 
-        // Update subscription with new symbol
-        webSocketSingleton.sendMessage({
-          type: 'subscribe',
-          symbols: [updatedConfig.symbol]
-        });
+        // Update subscription with new symbol and exchange ID
+        const subscriptionMessage = createSubscriptionMessage([updatedConfig.symbol], selectedExchangeId);
+        webSocketSingleton.sendMessage(subscriptionMessage);
 
         setCurrentSubscription(updatedConfig);
         
@@ -278,6 +278,15 @@ export default function Settings() {
       return;
     }
 
+    if (!selectedExchangeId) {
+      toast({
+        title: "No Exchange Selected",
+        description: "Please select an exchange first",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setWsConnecting(true);
     
     try {
@@ -289,7 +298,8 @@ export default function Settings() {
           dataType: streamConfig.dataType,
           symbol: streamConfig.symbol,
           interval: streamConfig.interval,
-          depth: streamConfig.depth
+          depth: streamConfig.depth,
+          exchangeId: parseInt(selectedExchangeId)
         })
       });
       
@@ -299,6 +309,11 @@ export default function Settings() {
 
       // Then connect using unified WebSocket singleton
       await webSocketSingleton.connect([streamConfig.symbol]);
+      
+      // Send exchange-specific subscription message after connection
+      const subscriptionMessage = createSubscriptionMessage([streamConfig.symbol], selectedExchangeId);
+      webSocketSingleton.sendMessage(subscriptionMessage);
+      
       setCurrentSubscription({ ...streamConfig });
 
     } catch (error) {

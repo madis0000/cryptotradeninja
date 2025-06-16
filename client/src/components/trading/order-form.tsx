@@ -9,10 +9,11 @@ import { useQuery } from "@tanstack/react-query";
 
 interface OrderFormProps {
   symbol: string;
+  exchangeId?: number;
   className?: string;
 }
 
-export function OrderForm({ symbol, className }: OrderFormProps) {
+export function OrderForm({ symbol, exchangeId, className }: OrderFormProps) {
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [amount, setAmount] = useState("");
