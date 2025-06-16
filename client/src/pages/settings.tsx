@@ -14,6 +14,8 @@ import { Slider } from "@/components/ui/slider";
 import { audioService } from "@/services/audioService";
 import { Volume2, VolumeX, Bell, Settings2 } from "lucide-react";
 import { createSubscriptionMessage, createConfigureStreamMessage } from "@/utils/websocket-helpers";
+import { useMarketData } from "@/hooks/useMarketData";
+import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 
 interface Exchange {
   id: number;
@@ -132,7 +134,17 @@ export default function Settings() {
   const [receivedMessages, setReceivedMessages] = useState<any[]>([]);
   const [userMessages, setUserMessages] = useState<any[]>([]);
 
+  // WebSocket Monitor state
+  const [referenceCount, setReferenceCount] = useState(0);
+  const [testHookActive, setTestHookActive] = useState(false);
+  const [monitorMessages, setMonitorMessages] = useState<string[]>([]);
+
   useEffect(() => {
+    console.log('[SETTINGS] Setting up WebSocket subscription and listeners');
+    
+    // Add reference for this component instance
+    webSocketSingleton.addReference();
+    
     // Set initial connection status
     setWsConnected(webSocketSingleton.isConnected());
     
@@ -188,12 +200,75 @@ export default function Settings() {
     });
 
     return () => {
+      console.log('[SETTINGS] Cleaning up WebSocket subscription and reference');
       unsubscribeData();
       unsubscribeConnect();
       unsubscribeDisconnect();
       unsubscribeError();
+      
+      // Remove reference to allow proper cleanup
+      webSocketSingleton.removeReference();
     };
   }, []);
+
+  // WebSocket Monitor Logic
+  const TestHookComponent = () => {
+    const marketData = useMarketData();
+    useOrderNotifications();
+    
+    useEffect(() => {
+      console.log('[TEST HOOK] Test hook component mounted');
+      addMonitorMessage('Test hook component mounted');
+      
+      return () => {
+        console.log('[TEST HOOK] Test hook component unmounted');
+        addMonitorMessage('Test hook component unmounted');
+      };
+    }, []);
+    
+    return (
+      <div className="p-4 bg-green-900/20 border border-green-500/20 rounded">
+        <p className="text-green-400">Test Hook Active - Using useMarketData and useOrderNotifications</p>
+        <p className="text-crypto-light">Market Data Items: {marketData.marketData.length}</p>
+        <p className="text-crypto-light">Connected: {marketData.isConnected ? 'Yes' : 'No'}</p>
+      </div>
+    );
+  };
+
+  const addMonitorMessage = (msg: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setMonitorMessages(prev => [`${timestamp}: ${msg}`, ...prev.slice(0, 19)]);
+  };
+
+  // Monitor WebSocket reference count
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const refCount = webSocketSingleton.getReferenceCount();
+      setReferenceCount(refCount);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleToggleTestHook = () => {
+    setTestHookActive(!testHookActive);
+    addMonitorMessage(`Test hook ${!testHookActive ? 'activated' : 'deactivated'}`);
+  };
+
+  const handleForceConnect = () => {
+    webSocketSingleton.addReference();
+    webSocketSingleton.connect();
+    addMonitorMessage('Forced WebSocket connection');
+  };
+
+  const handleForceDisconnect = () => {
+    webSocketSingleton.removeReference();
+    addMonitorMessage('Removed WebSocket reference');
+  };
+
+  const handleClearMonitorMessages = () => {
+    setMonitorMessages([]);
+  };
 
   // WebSocket testing functions using WebSocket API approach
   const testUserWebSocket = () => {
@@ -354,6 +429,7 @@ export default function Settings() {
   const sidebarItems = [
     { id: 'general', label: 'General Settings', icon: 'fas fa-cog' },
     { id: 'websocket', label: 'WebSocket Configuration', icon: 'fas fa-wifi' },
+    { id: 'websocket-monitor', label: 'WebSocket Monitor', icon: 'fas fa-chart-line' },
     { id: 'notifications', label: 'Notifications', icon: 'fas fa-bell' },
     { id: 'security', label: 'Security', icon: 'fas fa-shield-alt' },
   ];
@@ -864,6 +940,107 @@ export default function Settings() {
     </div>
   );
 
+  const renderWebSocketMonitor = () => (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-medium text-white mb-4">WebSocket Connection Monitor</h3>
+        <p className="text-sm text-crypto-light mb-6">
+          Monitor and debug WebSocket connection lifecycle and reference counting.
+        </p>
+        
+        <div className="grid md:grid-cols-3 gap-6 mb-6">
+          {/* Connection Status */}
+          <Card className="bg-crypto-darker border-gray-800">
+            <CardHeader>
+              <CardTitle className="text-white text-sm">Connection Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                <p><strong className="text-crypto-light">Status:</strong> <span className={wsConnected ? 'text-green-400' : 'text-red-400'}>{wsConnected ? 'connected' : 'disconnected'}</span></p>
+                <p><strong className="text-crypto-light">Reference Count:</strong> <span className="text-yellow-400">{referenceCount}</span></p>
+                <p><strong className="text-crypto-light">Test Hook:</strong> <span className={testHookActive ? 'text-green-400' : 'text-gray-400'}>{testHookActive ? 'Active' : 'Inactive'}</span></p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Controls */}
+          <Card className="bg-crypto-darker border-gray-800">
+            <CardHeader>
+              <CardTitle className="text-white text-sm">Controls</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button onClick={handleToggleTestHook} className="w-full text-sm" size="sm">
+                {testHookActive ? 'Deactivate' : 'Activate'} Test Hook
+              </Button>
+              <Button onClick={handleForceConnect} variant="outline" className="w-full text-sm" size="sm">
+                Force Connect
+              </Button>
+              <Button onClick={handleForceDisconnect} variant="outline" className="w-full text-sm" size="sm">
+                Remove Reference
+              </Button>
+              <Button onClick={handleClearMonitorMessages} variant="secondary" className="w-full text-sm" size="sm">
+                Clear Messages
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Test Component */}
+          <Card className="bg-crypto-darker border-gray-800">
+            <CardHeader>
+              <CardTitle className="text-white text-sm">Test Component</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {testHookActive ? <TestHookComponent /> : (
+                <div className="p-4 bg-gray-800/20 border border-gray-600/20 rounded">
+                  <p className="text-gray-400 text-sm">Test hook inactive</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Activity Log */}
+        <Card className="bg-crypto-darker border-gray-800">
+          <CardHeader>
+            <CardTitle className="text-white text-sm">Activity Log</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-96 overflow-y-auto space-y-1">
+              {monitorMessages.length === 0 ? (
+                <p className="text-gray-500 text-sm">No messages yet...</p>
+              ) : (
+                monitorMessages.map((msg, index) => (
+                  <div key={index} className="text-xs font-mono p-2 bg-gray-800/30 rounded">
+                    {msg}
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Instructions */}
+        <Card className="bg-crypto-darker border-gray-800">
+          <CardHeader>
+            <CardTitle className="text-white text-sm">Instructions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm space-y-2 text-crypto-light">
+              <p><strong>Testing WebSocket Cleanup:</strong></p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                <li>Click "Activate Test Hook" to mount a component that uses WebSocket hooks</li>
+                <li>Watch the Reference Count increase</li>
+                <li>Click "Deactivate Test Hook" to unmount the component</li>
+                <li>Verify that the Reference Count decreases back to the original value</li>
+                <li>If Reference Count doesn't decrease, there's a cleanup issue</li>
+              </ol>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+
   const renderNotificationSettings = () => (
     <div className="space-y-6">
       <div>
@@ -1127,6 +1304,8 @@ export default function Settings() {
         return renderGeneralSettings();
       case 'websocket':
         return renderWebSocketSettings();
+      case 'websocket-monitor':
+        return renderWebSocketMonitor();
       case 'notifications':
         return renderNotificationSettings();
       case 'security':

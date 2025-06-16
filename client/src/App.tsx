@@ -17,6 +17,7 @@ import MyExchanges from "@/pages/my-exchanges";
 import Settings from "@/pages/settings";
 import NotificationSettings from "@/pages/notification-settings";
 import WebSocketTest from "@/pages/websocket-test";
+import WebSocketMonitor from "@/pages/websocket-monitor";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth";
 import BotLogsPage from "@/pages/bot-logs";
@@ -79,6 +80,7 @@ function Router() {
             <Route path="/settings" component={Settings} />
             <Route path="/settings/notifications" component={NotificationSettings} />
             <Route path="/websocket-test" component={WebSocketTest} />
+            <Route path="/websocket-monitor" component={WebSocketMonitor} />
             <Route component={NotFound} />
           </Switch>
         </AuthenticatedLayout>

@@ -24,6 +24,11 @@ export default function WebSocketTest() {
   };
 
   useEffect(() => {
+    console.log('[WEBSOCKET TEST] Setting up WebSocket subscription and listeners');
+    
+    // Add reference for this component instance
+    webSocketSingleton.addReference();
+    
     const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
       const timestamp = new Date().toLocaleTimeString();
       setMessages(prev => [...prev.slice(-9), `${timestamp}: ${JSON.stringify(data)}`]);
@@ -51,10 +56,14 @@ export default function WebSocketTest() {
     setConnectionStatus(webSocketSingleton.getStatus());
 
     return () => {
+      console.log('[WEBSOCKET TEST] Cleaning up WebSocket subscription and reference');
       unsubscribeData();
       unsubscribeConnect();
       unsubscribeDisconnect();
       unsubscribeError();
+      
+      // Remove reference to allow proper cleanup
+      webSocketSingleton.removeReference();
     };
   }, []);
 

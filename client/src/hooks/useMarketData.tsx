@@ -18,6 +18,11 @@ function useMarketData() {
   
   // Use singleton WebSocket service to prevent multiple connections
   useEffect(() => {
+    console.log('[MARKET DATA HOOK] Setting up WebSocket connection and subscription');
+    
+    // Add reference for this hook instance
+    webSocketSingleton.addReference();
+    
     const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
       try {
         if (data.type === 'market_update' || data.type === 'ticker_update') {
@@ -59,15 +64,19 @@ function useMarketData() {
       console.log('[MARKET WS] Disconnected from centralized WebSocket service');
     });
 
-    // Auto-connect and fetch active bot symbols dynamically
+    // Auto-connect if not already connected
     if (!webSocketSingleton.isConnected()) {
       webSocketSingleton.connect(); // Will fetch active bot symbols automatically
     }
 
     return () => {
+      console.log('[MARKET DATA HOOK] Cleaning up WebSocket subscription and reference');
       unsubscribeData();
       unsubscribeConnect();
       unsubscribeDisconnect();
+      
+      // Remove reference to allow proper cleanup
+      webSocketSingleton.removeReference();
     };
   }, []);
 

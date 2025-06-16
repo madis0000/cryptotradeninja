@@ -89,9 +89,12 @@ export class MessageHandler {
         case 'subscribe_balance':
           await this.handleSubscribeBalance(ws, message, clientId);
           break;
-        
-        case 'unsubscribe_balance':
+          case 'unsubscribe_balance':
           await this.handleUnsubscribeBalance(ws, message, clientId);
+          break;
+        
+        case 'subscribe_ticker':
+          await this.handleSubscribeTicker(ws, message, clientId);
           break;
         
         default:
@@ -213,8 +216,9 @@ export class MessageHandler {
         message: 'Successfully unsubscribed from all streams',
         clientId
       }));
-    }
-  }  // Handle balance request
+    }  }
+
+  // Handle balance request
   private async handleGetBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
     const { exchangeId, asset } = message;
     
@@ -231,47 +235,67 @@ export class MessageHandler {
       return;
     }
     
-    console.log(`[UNIFIED WS BALANCE FETCHING] Get balance request from client ${clientId}: exchangeId=${targetExchangeId}, asset=${asset || 'USDT'}`);
-    
-    try {
-      const targetAsset = asset || 'USDT';
-      
-      const balanceResult = await this.tradingOperationsManager.getAccountBalance(targetExchangeId, targetAsset);
-      
+    const isAllBalancesRequest = !asset || asset === 'ALL';
+    console.log(`[UNIFIED WS BALANCE FETCHING] Get balance request from client ${clientId}: exchangeId=${targetExchangeId}, asset=${asset || 'ALL'}, requestType=${isAllBalancesRequest ? 'ALL_BALANCES' : 'SINGLE_ASSET'}`);
+      try {
+      const balanceResult = await this.tradingOperationsManager.getAccountBalance(targetExchangeId, asset || 'ALL');
       console.log(`[UNIFIED WS BALANCE FETCHING] Retrieved balance for exchange ${targetExchangeId}:`, balanceResult);
       
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'balance_update',
-          exchangeId: targetExchangeId,
-          asset: targetAsset,
-          data: balanceResult.data,
-          timestamp: balanceResult.timestamp || Date.now(),
-          clientId
-        }));
+      if (isAllBalancesRequest) {
+        // Return ALL balances (for My Exchange page)
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'balance_update',
+            exchangeId: targetExchangeId,
+            data: {
+              balances: balanceResult.data?.balances || []
+            },
+            timestamp: balanceResult.timestamp || Date.now(),
+            clientId
+          }));
+        }
+      } else {
+        // Return single asset balance (for Martingale bot)
+        const targetAsset = asset;
+        let assetBalance = null;
+        if (balanceResult.data && balanceResult.data.balances) {
+          assetBalance = balanceResult.data.balances.find((balance: any) => balance.asset === targetAsset);
+        }
+        
+        console.log(`[UNIFIED WS BALANCE FETCHING] Found ${targetAsset} balance:`, assetBalance);
+        
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'balance_update',
+            exchangeId: targetExchangeId,
+            asset: targetAsset,
+            balance: assetBalance || { asset: targetAsset, free: '0.00000000', locked: '0.00000000' },
+            timestamp: balanceResult.timestamp || Date.now(),
+            clientId
+          }));
+        }
       }
     } catch (error) {
       console.error(`[UNIFIED WS BALANCE FETCHING] Error getting balance:`, error);
       
       // Send detailed error information
-      if (ws.readyState === WebSocket.OPEN) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+      if (ws.readyState === WebSocket.OPEN) {        const errorMessage = error instanceof Error ? error.message : String(error);
         const isDecryptionError = errorMessage.includes('decrypt') || errorMessage.includes('Decryption failed');
-          ws.send(JSON.stringify({
+        ws.send(JSON.stringify({
           type: 'balance_error',
           message: isDecryptionError ? 'Failed to decrypt API credentials. Please check your exchange configuration.' : 'Failed to fetch balance',
           error: errorMessage,
           exchangeId: targetExchangeId,
-          asset: asset || 'USDT',
+          asset: asset || 'ALL',
           errorType: isDecryptionError ? 'DECRYPTION_ERROR' : 'API_ERROR',
           clientId
-        }));
-      }
+        }));      }
     }
   }
 
   // Handle balance subscription (for real-time updates)
-  private async handleSubscribeBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {    const { exchangeId, asset } = message;
+  private async handleSubscribeBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
+    const { exchangeId, asset } = message;
     
     const defaultExchangeId = await this.getDefaultExchangeId();
     const targetExchangeId = exchangeId || defaultExchangeId;
@@ -287,15 +311,15 @@ export class MessageHandler {
     // In the future, this could be extended to listen to real-time balance updates from exchanges
     await this.handleGetBalance(ws, message, clientId);
     
-    if (ws.readyState === WebSocket.OPEN) {      ws.send(JSON.stringify({
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
         type: 'balance_subscription_confirmed',
         exchangeId: targetExchangeId,
         asset: asset || 'USDT',
         message: 'Subscribed to balance updates',
         clientId
       }));
-    }
-  }
+    }  }
 
   // Handle balance unsubscription
   private async handleUnsubscribeBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
@@ -307,7 +331,41 @@ export class MessageHandler {
         message: 'Unsubscribed from balance updates',
         clientId
       }));
+    }  }
+
+  // Handle ticker subscription (dedicated ticker-only subscription)
+  private async handleSubscribeTicker(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
+    const { symbols, exchangeId } = message;
+    
+    if (!symbols || !Array.isArray(symbols)) {
+      console.error('[MESSAGE HANDLER] Subscribe ticker missing symbols array');
+      return;
     }
+
+    const targetExchangeId = exchangeId || await this.getDefaultExchangeId();
+    if (!targetExchangeId) {
+      console.error('[MESSAGE HANDLER] No available exchange found');
+      return;
+    }
+
+    console.log(`[UNIFIED WS SERVER] Subscribe ticker request: symbols=${symbols.join(', ')}, exchangeId=${targetExchangeId}`);
+
+    // Setup ticker client (dedicated ticker subscription)
+    await this.tickerStreamManager.setupTickerClient(ws, clientId, symbols, targetExchangeId);
+
+    // Send confirmation
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'ticker_subscription_confirmed',
+        symbols,
+        exchangeId: targetExchangeId,
+        message: 'Subscribed to ticker updates',
+        clientId
+      }));
+    }
+
+    // Send initial market data
+    this.tickerStreamManager.sendCurrentMarketData(ws, symbols);
   }
 
   // Get status information

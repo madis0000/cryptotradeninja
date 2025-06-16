@@ -240,6 +240,11 @@ class WebSocketSingleton {
     return this.status === 'connected' && this.ws?.readyState === WebSocket.OPEN;
   }
 
+  // Debug method to get current reference count
+  public getReferenceCount(): number {
+    return this.referenceCount;
+  }
+
   public addReference(): void {
     this.referenceCount++;
     console.log(`[WS SINGLETON] Reference added, count: ${this.referenceCount}`);

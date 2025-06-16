@@ -15,6 +15,7 @@ import { Loader2, Plus, Trash2, Settings, RefreshCw, AlertCircle } from "lucide-
 import { useUserWebSocket } from "@/hooks/useWebSocketService";
 import { EXCHANGE_OPTIONS } from "@/lib/mock-data";
 import { calculateTotalUsdtValue, calculateUsdtBalance, formatBalance } from "@/utils/balance-utils";
+import { tickerPriceService } from "@/services/TickerPriceService";
 
 interface Exchange {
   id: number;
@@ -62,9 +63,20 @@ export default function MyExchanges() {
   const [restApiEndpoint, setRestApiEndpoint] = useState("");
 
   // Fetch exchanges
-  const { data: exchanges, isLoading: exchangesLoading } = useQuery<Exchange[]>({
+  const { data: exchanges, isLoading: exchangesLoading, error: exchangesError } = useQuery<Exchange[]>({
     queryKey: ['/api/exchanges'],
+    retry: 2,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  // Debug logging for exchanges query
+  useEffect(() => {
+    console.log('[MY EXCHANGES] Query state:', {
+      exchanges: exchanges?.length || 0,
+      exchangesLoading,
+      exchangesError: exchangesError?.message
+    });
+  }, [exchanges, exchangesLoading, exchangesError]);
 
   // Helper functions for balance calculations
   const calculateTotalBalanceForDisplay = (balances: any[]): string => {
@@ -152,6 +164,9 @@ export default function MyExchanges() {
     
     console.log(`Fetching balance for exchange: ${exchange.name}`);
     
+    // Disconnect any existing connection first
+    userWs.disconnect();
+    
     // Set loading state
     setExchangeBalances(prev => ({
       ...prev,
@@ -161,6 +176,19 @@ export default function MyExchanges() {
     // Set current exchange for message handling
     setCurrentExchangeId(exchange.id);
     
+    // Set a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.log(`Timeout fetching balance for exchange ${exchange.name}`);
+      setExchangeBalances(prev => ({
+        ...prev,
+        [exchange.id]: { 
+          balance: '0.00', 
+          loading: false, 
+          error: 'Request timeout'
+        }
+      }));
+    }, 10000); // 10 second timeout
+    
     // Connect and authenticate using WebSocket API
     userWs.connect();
     
@@ -168,9 +196,12 @@ export default function MyExchanges() {
     setTimeout(() => {
       userWs.sendMessage({
         type: 'get_balance',
-        exchangeId: exchange.id,
-        asset: 'USDT'
+        exchangeId: exchange.id
+        // No asset parameter - this will request ALL balances
       });
+      
+      // Clear timeout once request is sent
+      clearTimeout(timeoutId);
     }, 500);
   };
 
@@ -184,6 +215,57 @@ export default function MyExchanges() {
       });
     }
   }, [exchanges?.length]); // Only depend on length to prevent loops
+
+  // Cleanup WebSocket connections when component unmounts
+  useEffect(() => {
+    return () => {
+      console.log('[MY EXCHANGES] Component unmounting - disconnecting WebSocket');
+      userWs.disconnect();
+    };
+  }, []);
+
+  // Subscribe to ticker prices for major assets used in balance calculations
+  useEffect(() => {
+    console.log('[MY EXCHANGES] Setting up ticker price subscription for balance calculations');
+    
+    // Subscribe to major assets that are used in balance calculations
+    const MAJOR_ASSETS = ['BTC', 'ETH', 'BNB', 'SOL', 'ADA', 'DOT', 'LINK', 'UNI', 'DOGE', 'AVAX'];
+    
+    const unsubscribe = tickerPriceService.subscribeToSymbols(MAJOR_ASSETS, (prices) => {
+      console.log('[MY EXCHANGES] Received ticker price updates:', Object.keys(prices).length, 'symbols');
+      
+      // Recalculate balances for all exchanges when prices update
+      setExchangeBalances(prevBalances => {
+        const updatedBalances = { ...prevBalances };
+        
+        Object.keys(updatedBalances).forEach(exchangeId => {
+          const exchangeData = updatedBalances[Number(exchangeId)];
+          if (exchangeData.balances && !exchangeData.loading) {
+            // Recalculate total USDT value with new prices
+            calculateTotalUsdtValue(exchangeData.balances, Number(exchangeId)).then(totalUsdtValue => {
+              setExchangeBalances(prev => ({
+                ...prev,
+                [Number(exchangeId)]: {
+                  ...prev[Number(exchangeId)],
+                  balance: totalUsdtValue
+                }
+              }));
+            }).catch(error => {
+              console.warn(`Failed to recalculate balance for exchange ${exchangeId}:`, error);
+            });
+          }
+        });
+        
+        return updatedBalances;
+      });
+    });
+
+    // Cleanup subscription when component unmounts
+    return () => {
+      console.log('[MY EXCHANGES] Cleaning up ticker price subscription');
+      unsubscribe();
+    };
+  }, []); // Empty dependency array - run once on mount
 
   // Mutations for CRUD operations
   const createExchangeMutation = useMutation({
@@ -485,7 +567,28 @@ export default function MyExchanges() {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="h-8 w-8 animate-spin" />
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading exchanges...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (exchangesError) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Failed to load exchanges</h3>
+            <p className="text-muted-foreground mb-4">{exchangesError.message}</p>
+            <Button onClick={() => window.location.reload()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </div>
         </div>
       </div>
     );
