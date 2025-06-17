@@ -45,8 +45,17 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    // Log the error with more context
+    console.error('[ERROR HANDLER]', {
+      status,
+      message,
+      stack: err.stack,
+      url: _req.url,
+      method: _req.method
+    });
+
     res.status(status).json({ message });
-    throw err;
+    // Don't throw the error here, it's already handled
   });
 
   // Setup Vite in development or serve static files in production

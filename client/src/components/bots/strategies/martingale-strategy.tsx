@@ -60,6 +60,7 @@ export function MartingaleStrategy({
     priceDeviationMultiplier: [2.0],
     safetyOrderSizeMultiplier: [2.0],
     cooldownBetweenRounds: "60",
+    cooldownEnabled: false,
     
     // Risk Management
     lowerPrice: "",
@@ -256,7 +257,8 @@ export function MartingaleStrategy({
       triggerPrice: config.triggerPrice || null,
       priceDeviationMultiplier: config.priceDeviationMultiplier[0].toString(),
       safetyOrderSizeMultiplier: config.safetyOrderSizeMultiplier[0].toString(),
-      cooldownBetweenRounds: parseInt(config.cooldownBetweenRounds),
+      cooldownBetweenRounds: config.cooldownEnabled ? parseInt(config.cooldownBetweenRounds) : 0,
+      cooldownEnabled: config.cooldownEnabled,
       
       // Risk Management
       lowerPriceLimit: config.lowerPrice || null,
@@ -658,16 +660,32 @@ export function MartingaleStrategy({
                 </div>
               </div>
 
-              <div className="bg-crypto-dark rounded border border-gray-700 p-3 flex justify-between items-center">
-                <Label className="text-sm text-gray-400">Cooldown between rounds</Label>
-                <div className="flex items-center space-x-2">
-                  <Input
-                    value={config.cooldownBetweenRounds}
-                    onChange={(e) => handleInputChange('cooldownBetweenRounds', e.target.value)}
-                    className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+              <div className="bg-crypto-dark rounded border border-gray-700 p-3">
+                <div className="flex justify-between items-center mb-3">
+                  <Label className="text-sm text-gray-400">Cooldown between rounds</Label>
+                  <Switch
+                    checked={config.cooldownEnabled}
+                    onCheckedChange={(checked) => setConfig(prev => ({
+                      ...prev,
+                      cooldownEnabled: checked,
+                      cooldownBetweenRounds: checked ? prev.cooldownBetweenRounds : "0"
+                    }))}
                   />
-                  <span className="text-sm text-gray-400">Sec</span>
                 </div>
+                {config.cooldownEnabled && (
+                  <div className="flex justify-between items-center">
+                    <Label className="text-xs text-gray-500">Duration</Label>
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        value={config.cooldownBetweenRounds}
+                        onChange={(e) => handleInputChange('cooldownBetweenRounds', e.target.value)}
+                        className="w-16 h-7 bg-crypto-darker border-gray-600 text-white text-xs text-right"
+                        disabled={!config.cooldownEnabled}
+                      />
+                      <span className="text-sm text-gray-400">Sec</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

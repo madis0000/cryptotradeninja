@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Ticker Subscription</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #4caf50;
+        }
+        .ticker {
+            background: #0a0a0a;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border-left: 3px solid #2196f3;
+        }
+        .price {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        .change-positive {
+            color: #4caf50;
+        }
+        .change-negative {
+            color: #f44336;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 5px 0;
+        }
+        .status.connected {
+            background: #4caf50;
+        }
+        .status.disconnected {
+            background: #f44336;
+        }
+        button {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .log {
+            background: #0a0a0a;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Ticker Subscription Test</h1>
+        
+        <div class="section">
+            <h3>WebSocket Connection</h3>
+            <div id="connectionStatus" class="status disconnected">Disconnected</div>
+            <button id="connectBtn" onclick="connectAndSubscribe()">Connect & Subscribe</button>
+            <button onclick="disconnect()">Disconnect</button>
+        </div>
+
+        <div class="section">
+            <h3>Market Data</h3>
+            <div id="marketData">No market data received yet...</div>
+        </div>
+
+        <div class="section">
+            <h3>WebSocket Log</h3>
+            <div id="log" class="log">Ready to connect...</div>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let marketPrices = {};
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('log');
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.className = `status ${status}`;
+            statusElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        }
+
+        function connectAndSubscribe() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('⚠️ Already connected');
+                return;
+            }
+
+            updateConnectionStatus('connecting');
+            log('🔌 Connecting to WebSocket...');
+
+            try {
+                ws = new WebSocket('ws://localhost:3000/api/ws');
+
+                ws.onopen = function(event) {
+                    log('✅ WebSocket connected successfully');
+                    updateConnectionStatus('connected');
+                    
+                    // Subscribe to ticker data for test symbols
+                    const testSymbols = ['ICPUSDT', 'BTCUSDT', 'ETHUSDT'];
+                    log(`📊 Subscribing to ticker data for: ${testSymbols.join(', ')}`);
+                    
+                    ws.send(JSON.stringify({
+                        type: 'subscribe_ticker',
+                        symbols: testSymbols
+                    }));
+                };
+
+                ws.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    log(`📨 Received: ${JSON.stringify(data)}`);
+                    
+                    if (data.type === 'market_update') {
+                        handleMarketUpdate(data.data);
+                    } else if (data.type === 'ticker_subscription_confirmed') {
+                        log(`✅ Ticker subscription confirmed for: ${data.symbols.join(', ')}`);
+                    }
+                };
+
+                ws.onclose = function(event) {
+                    log(`🔌 WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`);
+                    updateConnectionStatus('disconnected');
+                };
+
+                ws.onerror = function(error) {
+                    log(`❌ WebSocket error: ${error}`);
+                    updateConnectionStatus('disconnected');
+                };
+
+            } catch (error) {
+                log(`❌ Failed to create WebSocket connection: ${error}`);
+                updateConnectionStatus('disconnected');
+            }
+        }
+
+        function handleMarketUpdate(data) {
+            marketPrices[data.symbol] = data;
+            updateMarketDisplay();
+            
+            log(`💹 ${data.symbol}: $${data.price} (${data.priceChangePercent > 0 ? '+' : ''}${data.priceChangePercent}%)`);
+        }
+
+        function updateMarketDisplay() {
+            const marketDataElement = document.getElementById('marketData');
+            let html = '';
+            
+            for (const [symbol, data] of Object.entries(marketPrices)) {
+                const changeClass = data.priceChangePercent >= 0 ? 'change-positive' : 'change-negative';
+                const changeSign = data.priceChangePercent >= 0 ? '+' : '';
+                
+                html += `
+                    <div class="ticker">
+                        <strong>${symbol}</strong>
+                        <div class="price">$${parseFloat(data.price).toFixed(4)}</div>
+                        <div class="${changeClass}">
+                            ${changeSign}${data.priceChangePercent}% 
+                            (${changeSign}$${data.priceChange})
+                        </div>
+                        <small>Vol: ${parseFloat(data.volume).toLocaleString()}</small>
+                    </div>
+                `;
+            }
+            
+            marketDataElement.innerHTML = html || 'No market data received yet...';
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+            }
+            updateConnectionStatus('disconnected');
+            log('🔌 WebSocket disconnected manually');
+        }
+
+        function clearLog() {
+            document.getElementById('log').textContent = 'Log cleared...\n';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 Page loaded. Ready to test ticker subscription.');
+            
+            // Auto-connect after 1 second
+            setTimeout(() => {
+                connectAndSubscribe();
+            }, 1000);
+        };
+
+        // Clean up on page unload
+        window.onbeforeunload = function() {
+            if (ws) {
+                ws.close();
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticker Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: #fff; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #2d5a27; }
+        .disconnected { background: #5a2727; }
+        .log-entry { background: #2a2a2a; padding: 8px; margin: 5px 0; border-radius: 3px; font-family: monospace; font-size: 12px; }
+        .ticker-data { background: #1e3a5f; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        button { background: #4CAF50; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #45a049; }
+        button.danger { background: #f44336; }
+        button.danger:hover { background: #da190b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ticker Subscription Debug</h1>
+        
+        <div id="status" class="status disconnected">
+            Status: Disconnected
+        </div>
+        
+        <button onclick="connectWS()">Connect</button>
+        <button onclick="subscribeToICP()">Subscribe to ICPUSDT</button>
+        <button onclick="subscribeToBTC()">Subscribe to BTCUSDT</button>
+        <button onclick="unsubscribeAll()" class="danger">Unsubscribe All</button>
+        <button onclick="clearLogs()" class="danger">Clear Logs</button>
+        
+        <div id="ticker-data" class="ticker-data">
+            <h3>Current Ticker Data:</h3>
+            <div id="ticker-list">No ticker data received</div>
+        </div>
+        
+        <div id="logs">
+            <h3>WebSocket Logs:</h3>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let tickerData = {};
+        
+        function log(message) {
+            const logDiv = document.getElementById('logs');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function updateStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            if (connected) {
+                statusDiv.textContent = 'Status: Connected';
+                statusDiv.className = 'status connected';
+            } else {
+                statusDiv.textContent = 'Status: Disconnected';
+                statusDiv.className = 'status disconnected';
+            }
+        }
+        
+        function updateTickerDisplay() {
+            const tickerList = document.getElementById('ticker-list');
+            if (Object.keys(tickerData).length === 0) {
+                tickerList.textContent = 'No ticker data received';
+            } else {
+                tickerList.innerHTML = Object.entries(tickerData).map(([symbol, data]) => 
+                    `<div><strong>${symbol}:</strong> $${data.price} (${data.priceChangePercent}%)</div>`
+                ).join('');
+            }
+        }
+        
+        function connectWS() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('Already connected');
+                return;
+            }
+            
+            ws = new WebSocket('ws://localhost:3000');
+            
+            ws.onopen = function() {
+                log('Connected to WebSocket server');
+                updateStatus(true);
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`Received: ${JSON.stringify(data)}`);
+                    
+                    if (data.type === 'market_update' || data.type === 'ticker_update') {
+                        const update = data.data || data;
+                        if (update.symbol) {
+                            tickerData[update.symbol] = update;
+                            updateTickerDisplay();
+                            log(`Ticker update for ${update.symbol}: $${update.price}`);
+                        }
+                    }
+                } catch (error) {
+                    log(`Error parsing message: ${error.message}`);
+                }
+            };
+            
+            ws.onclose = function() {
+                log('Disconnected from WebSocket server');
+                updateStatus(false);
+            };
+            
+            ws.onerror = function(error) {
+                log(`WebSocket error: ${error}`);
+            };
+        }
+        
+        function subscribeToICP() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('Not connected to WebSocket');
+                return;
+            }
+            
+            const message = {
+                type: 'subscribe_ticker',
+                symbols: ['ICPUSDT']
+            };
+            
+            ws.send(JSON.stringify(message));
+            log('Sent subscription request for ICPUSDT');
+        }
+        
+        function subscribeToBTC() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('Not connected to WebSocket');
+                return;
+            }
+            
+            const message = {
+                type: 'subscribe_ticker',
+                symbols: ['BTCUSDT']
+            };
+            
+            ws.send(JSON.stringify(message));
+            log('Sent subscription request for BTCUSDT');
+        }
+        
+        function unsubscribeAll() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('Not connected to WebSocket');
+                return;
+            }
+            
+            const message = {
+                type: 'unsubscribe_ticker'
+            };
+            
+            ws.send(JSON.stringify(message));
+            log('Sent unsubscribe request for all tickers');
+            tickerData = {};
+            updateTickerDisplay();
+        }
+        
+        function clearLogs() {
+            const logDiv = document.getElementById('logs');
+            logDiv.innerHTML = '<h3>WebSocket Logs:</h3>';
+        }
+        
+        // Auto-connect on page load
+        connectWS();
+    </script>
+</body>
+</html>

@@ -223,49 +223,62 @@ export default function MyExchanges() {
       userWs.disconnect();
     };
   }, []);
-
-  // Subscribe to ticker prices for major assets used in balance calculations
+  // Conditional ticker price subscription - only when we have balances that need price conversion
   useEffect(() => {
-    console.log('[MY EXCHANGES] Setting up ticker price subscription for balance calculations');
+    console.log('[MY EXCHANGES] Checking if ticker price subscription is needed...');
     
-    // Subscribe to major assets that are used in balance calculations
-    const MAJOR_ASSETS = ['BTC', 'ETH', 'BNB', 'SOL', 'ADA', 'DOT', 'LINK', 'UNI', 'DOGE', 'AVAX'];
-    
-    const unsubscribe = tickerPriceService.subscribeToSymbols(MAJOR_ASSETS, (prices) => {
-      console.log('[MY EXCHANGES] Received ticker price updates:', Object.keys(prices).length, 'symbols');
-      
-      // Recalculate balances for all exchanges when prices update
-      setExchangeBalances(prevBalances => {
-        const updatedBalances = { ...prevBalances };
-        
-        Object.keys(updatedBalances).forEach(exchangeId => {
-          const exchangeData = updatedBalances[Number(exchangeId)];
-          if (exchangeData.balances && !exchangeData.loading) {
-            // Recalculate total USDT value with new prices
-            calculateTotalUsdtValue(exchangeData.balances, Number(exchangeId)).then(totalUsdtValue => {
-              setExchangeBalances(prev => ({
-                ...prev,
-                [Number(exchangeId)]: {
-                  ...prev[Number(exchangeId)],
-                  balance: totalUsdtValue
-                }
-              }));
-            }).catch(error => {
-              console.warn(`Failed to recalculate balance for exchange ${exchangeId}:`, error);
-            });
+    // Get unique asset symbols from all current balances that need price conversion
+    const uniqueAssets = new Set<string>();
+    Object.values(exchangeBalances).forEach(balanceState => {
+      if (balanceState.balances && !balanceState.loading && !balanceState.error) {
+        balanceState.balances.forEach((balance: any) => {
+          if (balance.asset && 
+              balance.asset !== 'USDT' && 
+              (parseFloat(balance.free || '0') > 0 || parseFloat(balance.locked || '0') > 0)) {
+            uniqueAssets.add(balance.asset);
           }
         });
-        
-        return updatedBalances;
-      });
+      }
     });
-
-    // Cleanup subscription when component unmounts
-    return () => {
-      console.log('[MY EXCHANGES] Cleaning up ticker price subscription');
-      unsubscribe();
-    };
-  }, []); // Empty dependency array - run once on mount
+    
+    const assetsArray = Array.from(uniqueAssets);
+    
+    if (assetsArray.length > 0) {
+      console.log('[MY EXCHANGES] Non-USDT balances detected, subscribing to ticker prices for:', assetsArray);
+      
+      const unsubscribe = tickerPriceService.subscribeToSymbols(assetsArray, (prices) => {
+        console.log('[MY EXCHANGES] Received ticker price updates for', Object.keys(prices).length, 'symbols');
+        
+        // Recalculate balances for all exchanges when prices update
+        setExchangeBalances(prevBalances => {
+          const updatedBalances = { ...prevBalances };
+          
+          Object.keys(updatedBalances).forEach(exchangeId => {
+            const exchangeData = updatedBalances[Number(exchangeId)];
+            if (exchangeData.balances && !exchangeData.loading) {
+              // Recalculate total USDT value with new prices
+              calculateTotalUsdtValue(exchangeData.balances, Number(exchangeId)).then(totalUsdtValue => {
+                setExchangeBalances(prev => ({
+                  ...prev,
+                  [Number(exchangeId)]: {
+                    ...prev[Number(exchangeId)],
+                    balance: totalUsdtValue
+                  }
+                }));
+              }).catch(error => {
+                console.warn(`Failed to recalculate balance for exchange ${exchangeId}:`, error);
+              });
+            }
+          });
+          
+          return updatedBalances;
+        });
+      });
+      
+      return unsubscribe;
+    } else {
+      console.log('[MY EXCHANGES] No non-USDT balances found, skipping ticker price subscription');
+    }  }, [exchangeBalances]); // Re-run when exchangeBalances change
 
   // Mutations for CRUD operations
   const createExchangeMutation = useMutation({

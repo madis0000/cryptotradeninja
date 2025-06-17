@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { audioService } from '@/services/audioService';
 import { webSocketSingleton } from '@/services/WebSocketSingleton';
 
@@ -16,19 +17,38 @@ interface OrderNotificationSettings {
 export function useOrderNotifications() {
   const [settings, setSettings] = useState<OrderNotificationSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   // Subscribe to WebSocket order fill notifications
   useEffect(() => {
     const unsubscribe = webSocketSingleton.subscribe(async (data: any) => {
       if (data.type === 'order_fill_notification' && settings) {
         await handleOrderFillNotification(data.data);
+        
+        // Invalidate relevant queries when orders are filled to update UI
+        const botId = data.data?.botId;
+        if (botId) {
+          console.log(`[ORDER NOTIFICATIONS] Order filled for bot ${botId}, invalidating cache...`);
+          
+          // Invalidate bot-related queries
+          queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bot-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/cycle-profits'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bot-orders', botId] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles', botId] });
+          
+          // Also invalidate portfolio-related queries since orders affect portfolio
+          queryClient.invalidateQueries({ queryKey: ['/api/portfolio'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
+        }
       }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [settings]);
+  }, [settings, queryClient]);
 
   // Load user notification settings
   useEffect(() => {

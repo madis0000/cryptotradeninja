@@ -81,10 +81,23 @@ function useMarketData() {
   }, []);
 
   const connectToMarketData = (symbols: string[]) => {
-    webSocketSingleton.connect(symbols);
+    console.log('[MARKET DATA HOOK] Connecting to market data for symbols:', symbols);
+    
+    // Ensure WebSocket is connected first
+    if (!webSocketSingleton.isConnected()) {
+      webSocketSingleton.connect().then(() => {
+        // Subscribe to ticker data after connection is established
+        webSocketSingleton.subscribeToTickers(symbols);
+      });
+    } else {
+      // Subscribe to ticker data immediately
+      webSocketSingleton.subscribeToTickers(symbols);
+    }
   };
 
   const disconnectFromMarketData = () => {
+    console.log('[MARKET DATA HOOK] Disconnecting from market data');
+    webSocketSingleton.unsubscribeFromTickers();
     webSocketSingleton.disconnect();
   };
 

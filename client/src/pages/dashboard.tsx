@@ -7,7 +7,6 @@ import { CreateBotModal } from "@/components/bots/create-bot-modal";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { usePublicWebSocket } from "@/hooks/useWebSocketService";
 import { webSocketSingleton } from "@/services/WebSocketSingleton";
 import { MarketData } from "@/types";
 

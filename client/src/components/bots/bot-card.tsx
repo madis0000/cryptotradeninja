@@ -48,7 +48,7 @@ export function BotCard({ bot }: BotCardProps) {
     return `${sign}${num.toFixed(2)}%`;
   };
 
-  const isProfit = parseFloat(bot.totalPnl) >= 0;
+  const isProfit = parseFloat(bot.totalPnl || '0') >= 0;
 
   return (
     <Card className="border border-gray-800 hover:border-crypto-accent/30 transition-colors bg-crypto-darker">
@@ -67,10 +67,10 @@ export function BotCard({ bot }: BotCardProps) {
           </div>
           <div className="text-right">
             <p className={`font-mono ${isProfit ? 'text-crypto-success' : 'text-crypto-danger'}`}>
-              {formatCurrency(bot.totalPnl)}
+              {formatCurrency(bot.totalPnl || '0')}
             </p>
             <p className="text-sm text-crypto-light">
-              {formatPercentage(bot.winRate)} win rate
+              {formatPercentage(bot.winRate || '0')} win rate
             </p>
           </div>
           <div className="flex items-center space-x-2">
@@ -84,11 +84,14 @@ export function BotCard({ bot }: BotCardProps) {
         <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-800">
           <div>
             <p className="text-crypto-light text-xs uppercase tracking-wide">Investment</p>
-            <p className="text-white font-medium">{formatCurrency(bot.investmentAmount)}</p>
+            <p className="text-white font-medium">{formatCurrency(bot.baseOrderAmount || '0')}</p>
+            <p className="text-sm text-muted-foreground">
+              Investment: ${bot.baseOrderAmount}
+            </p>
           </div>
           <div>
             <p className="text-crypto-light text-xs uppercase tracking-wide">Total Trades</p>
-            <p className="text-white font-medium">{bot.totalTrades}</p>
+            <p className="text-white font-medium">{bot.totalTrades || 0}</p>
           </div>
           <div>
             <p className="text-crypto-light text-xs uppercase tracking-wide">Status</p>

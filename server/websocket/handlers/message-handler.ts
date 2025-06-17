@@ -154,12 +154,19 @@ export class MessageHandler {
 
     // Send initial data
     this.tickerStreamManager.sendCurrentMarketData(ws, symbols);
-  }
-  // Handle configure stream (kline configuration)
+  }  // Handle configure stream (kline configuration)
   private async handleConfigureStream(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
     const { dataType, symbols, interval, exchangeId } = message;
-      if (!dataType || !symbols || !Array.isArray(symbols) || !interval) {
-      console.error('[MESSAGE HANDLER] Configure stream missing required parameters');
+    
+    if (!dataType || !symbols || !Array.isArray(symbols) || symbols.length === 0 || !interval) {
+      console.error('[MESSAGE HANDLER] Configure stream missing required parameters or empty symbols array');
+      return;
+    }
+
+    // Validate that symbols array contains valid non-empty strings
+    const validSymbols = symbols.filter(symbol => symbol && typeof symbol === 'string' && symbol.trim().length > 0);
+    if (validSymbols.length === 0) {
+      console.error('[MESSAGE HANDLER] Configure stream has no valid symbols');
       return;
     }
 
@@ -168,14 +175,16 @@ export class MessageHandler {
       console.error('[MESSAGE HANDLER] No available exchange found');
       return;
     }
-    console.log(`[UNIFIED WS SERVER] Configure stream request: dataType=${dataType}, symbols=[${symbols.join(', ')}], interval=${interval}, exchangeId=${targetExchangeId}`);
+    console.log(`[UNIFIED WS SERVER] Configure stream request: dataType=${dataType}, symbols=[${validSymbols.join(', ')}], interval=${interval}, exchangeId=${targetExchangeId}`);
 
     if (dataType === 'kline') {
       // For kline streams, we typically handle one symbol at a time
-      const symbol = symbols[0]; // Take the first symbol
+      const symbol = validSymbols[0]; // Take the first valid symbol
       
       // Setup kline client
-      await this.klineStreamManager.setupKlineClient(ws, clientId, symbol, interval, targetExchangeId);      // Send initial data
+      await this.klineStreamManager.setupKlineClient(ws, clientId, symbol, interval, targetExchangeId);
+      
+      // Send initial data
       await this.klineStreamManager.sendHistoricalKlineData(ws, symbol, interval);
     }
   }

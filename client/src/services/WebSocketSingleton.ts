@@ -8,11 +8,11 @@ class WebSocketSingleton {
   private errorCallbacks = new Set<(error: Event) => void>();
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private messageQueue: any[] = [];
+  private maxReconnectAttempts = 5;  private messageQueue: any[] = [];
   private referenceCount = 0; // Track active component references
-  private currentSymbol: string = 'BTCUSDT';
+  private currentSymbol: string = '';
   private currentInterval: string = '4h';
+  private subscribedTickerSymbols = new Set<string>(); // Track ticker subscriptions
 
   private constructor() {
     // Add page visibility handler to clean up WebSocket when page is hidden
@@ -56,14 +56,13 @@ class WebSocketSingleton {
     }
 
     this.status = 'connecting';
-    console.log('[WS SINGLETON] Starting new WebSocket connection...');
-    
-    // If no symbols provided, use default symbols for testing
+    console.log('[WS SINGLETON] Starting new WebSocket connection...');    
+    // Only connect with symbols if explicitly provided
     let symbolsToUse = symbols;
-    if (!symbolsToUse) {
-      // Use default symbols instead of API call for testing
-      symbolsToUse = ['BTCUSDT'];
-      console.log('[WS SINGLETON] Using default symbols for testing:', symbolsToUse);
+    if (!symbolsToUse || symbolsToUse.length === 0) {
+      // Don't subscribe to any symbols by default
+      symbolsToUse = [];
+      console.log('[WS SINGLETON] No symbols provided, connecting without default subscriptions');
     }
     
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -113,24 +112,27 @@ class WebSocketSingleton {
       
       // Notify all connection callbacks
       this.connectionCallbacks.forEach(callback => callback());
-      
-      // Send test message to verify connection
+        // Send test message to verify connection
       console.log('[WS SINGLETON] Sending connection test message');
       this.sendMessage({ type: 'test', message: 'connection_test' });
       
-      // Restore previous subscriptions using current symbol
-      console.log(`[WS SINGLETON] Restoring subscriptions for ${this.currentSymbol}`);
-      this.sendMessage({
-        type: 'subscribe',
-        symbols: [this.currentSymbol]
-      });
-      
-      this.sendMessage({
-        type: 'configure_stream',
-        dataType: 'kline',
-        symbols: [this.currentSymbol],
-        interval: this.currentInterval
-      });
+      // Only restore previous subscriptions if we have a valid current symbol
+      if (this.currentSymbol && this.currentSymbol.trim().length > 0) {
+        console.log(`[WS SINGLETON] Restoring subscriptions for ${this.currentSymbol}`);
+        this.sendMessage({
+          type: 'subscribe',
+          symbols: [this.currentSymbol]
+        });
+        
+        this.sendMessage({
+          type: 'configure_stream',
+          dataType: 'kline',
+          symbols: [this.currentSymbol],
+          interval: this.currentInterval
+        });
+      } else {
+        console.log('[WS SINGLETON] No current symbol set, skipping kline stream restoration');
+      }
     };
 
     this.ws.onmessage = (event) => {
@@ -311,9 +313,60 @@ class WebSocketSingleton {
   public getCurrentSymbol(): string {
     return this.currentSymbol;
   }
-
   public getCurrentInterval(): string {
     return this.currentInterval;
+  }
+
+  public subscribeToTickers(symbols: string[], exchangeId?: number): void {
+    // Filter out already subscribed symbols
+    const newSymbols = symbols.filter(symbol => !this.subscribedTickerSymbols.has(symbol));
+    
+    if (newSymbols.length === 0) {
+      console.log('[WS SINGLETON] All symbols already subscribed, skipping ticker subscription');
+      return;
+    }
+    
+    if (!this.isConnected()) {
+      console.log('[WS SINGLETON] Cannot subscribe to tickers - not connected, queueing request');
+      this.messageQueue.push({
+        type: 'subscribe_ticker',
+        symbols: newSymbols,
+        exchangeId: exchangeId
+      });
+      // Add to subscribed symbols set even if not connected yet
+      newSymbols.forEach(symbol => this.subscribedTickerSymbols.add(symbol));
+      return;
+    }
+    
+    console.log(`[WS SINGLETON] Subscribing to ticker data for new symbols: ${newSymbols.join(', ')}`);
+    this.sendMessage({
+      type: 'subscribe_ticker',
+      symbols: newSymbols,
+      exchangeId: exchangeId
+    });
+    
+    // Add to subscribed symbols set
+    newSymbols.forEach(symbol => this.subscribedTickerSymbols.add(symbol));
+  }
+
+  public unsubscribeFromTickers(symbols?: string[]): void {
+    if (!this.isConnected()) {
+      console.log('[WS SINGLETON] Cannot unsubscribe from tickers - not connected');
+      return;
+    }
+    
+    if (symbols) {
+      console.log(`[WS SINGLETON] Unsubscribing from specific ticker symbols: ${symbols.join(', ')}`);
+      symbols.forEach(symbol => this.subscribedTickerSymbols.delete(symbol));
+    } else {
+      console.log('[WS SINGLETON] Unsubscribing from all ticker symbols');
+      this.subscribedTickerSymbols.clear();
+    }
+    
+    this.sendMessage({
+      type: 'unsubscribe_ticker',
+      symbols: symbols
+    });
   }
 
   private setupPageVisibilityHandler(): void {

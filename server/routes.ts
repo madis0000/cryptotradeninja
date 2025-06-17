@@ -6,7 +6,7 @@ import { z } from "zod";
 import WebSocket, { WebSocketServer } from "ws";
 import { requireAuth, AuthenticatedRequest, generateToken, hashPassword, comparePassword } from "./auth";
 import { encryptApiCredentials, decryptApiCredentials } from "./encryption";
-import { WebSocketService } from "./websocket";
+import { WebSocketService, setGlobalWebSocketService } from "./websocket";
 import { BotLoggerManager } from "./bot-logger";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -27,6 +27,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const wsServer = createServer();
     wsService = new WebSocketService();
     wsService.init(wsServer, '/api/ws');
+    setGlobalWebSocketService(wsService); // Set global reference
     
     wsServer.listen(config.wsPort, config.host, () => {
       console.log(`[UNIFIED WS] [WEBSOCKET] Trading WebSocket server listening on port ${config.wsPort}`);
@@ -36,6 +37,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(`[UNIFIED WS] [WEBSOCKET] Using shared HTTP server for WebSocket on port ${config.port}`);
     wsService = new WebSocketService();
     wsService.init(httpServer, '/api/ws');
+    setGlobalWebSocketService(wsService); // Set global reference
   }
   
   // All market data is now handled by the unified WebSocket server
@@ -142,13 +144,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = loginSchema.parse(req.body);
       
+      // Add detailed logging for debugging
+      console.log('[AUTH] Login attempt for email:', validatedData.email);
+      
       const user = await storage.getUserByEmail(validatedData.email);
-      if (!user || !user.isActive) {
+      if (!user) {
+        console.log('[AUTH] User not found:', validatedData.email);
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      
+      if (!user.isActive) {
+        console.log('[AUTH] User inactive:', validatedData.email);
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
       const isValidPassword = await comparePassword(validatedData.password, user.password);
       if (!isValidPassword) {
+        console.log('[AUTH] Invalid password for user:', validatedData.email);
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
@@ -158,6 +170,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate token
       const token = generateToken(user.id, user.username, user.email);
 
+      console.log('[AUTH] Login successful for user:', user.email);
+      
       res.json({
         token,
         user: {
@@ -167,10 +181,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
     } catch (error) {
+      console.error('[AUTH] Login error:', error);
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: "Validation error", details: error.errors });
       } else {
-        res.status(500).json({ error: "Failed to login" });
+        // Log the full error for debugging
+        console.error('[AUTH] Unexpected login error:', error);
+        res.status(500).json({ error: "Failed to login. Please try again." });
       }
     }
   });
@@ -372,6 +389,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const logger = BotLoggerManager.getLogger(bot.id, bot.tradingPair);
       logger.logBotCreated(bot);
       
+      // Broadcast bot creation to all connected clients
+      console.log(`[WEBSOCKET] Broadcasting bot creation for bot ${bot.id}`);
+      wsService.broadcastBotDataUpdate({
+        action: 'created',
+        bot: bot
+      });
+      
       // If it's a Martingale bot and active, start the first cycle
       if (bot.strategy === 'martingale' && bot.status === 'active') {
         console.log(`[MARTINGALE] Starting new bot cycle for bot ${bot.id}`);
@@ -392,6 +416,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           console.log(`[MARTINGALE] Created initial cycle ${cycle.id} for bot ${bot.id}`);
           
+          // Broadcast cycle creation
+          wsService.broadcastBotCycleUpdate({
+            action: 'created',
+            cycle: cycle
+          });
+          
           // Place the initial base order to start the cycle
           console.log(`[BOT CREATION] Calling placeInitialBaseOrder for bot ${bot.id}, cycle ${cycle.id}`);
           // TODO: Move to TradingOperationsManager
@@ -410,6 +440,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           console.log(`[MARTINGALE] Bot ${bot.id} marked as active after successful order placement`);
           
+          // Broadcast bot status update
+          wsService.broadcastBotStatusUpdate({
+            botId: bot.id,
+            status: 'active',
+            isActive: true,
+            message: 'Bot started successfully'
+          });
+          
         } catch (cycleError) {
           console.error(`[MARTINGALE] Error creating initial cycle for bot ${bot.id}:`, cycleError);
           
@@ -421,6 +459,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             errorMessage: errorMessage
           });
           console.log(`[MARTINGALE] Marked bot ${bot.id} as failed due to order placement failure`);
+          
+          // Broadcast bot failure status
+          wsService.broadcastBotStatusUpdate({
+            botId: bot.id,
+            status: 'failed',
+            isActive: false,
+            message: errorMessage
+          });
           
           return res.status(500).json({ 
             error: `Bot creation failed: ${errorMessage}`,
@@ -454,6 +500,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updateData = req.body;
       const updatedBot = await storage.updateTradingBot(id, updateData);
+      
+      // Broadcast bot update to all connected clients
+      console.log(`[WEBSOCKET] Broadcasting bot update for bot ${id}`);
+      wsService.broadcastBotDataUpdate({
+        action: 'updated',
+        bot: updatedBot
+      });
+      
+      // If status was updated, also broadcast status change
+      if (updateData.status || updateData.isActive !== undefined) {
+        wsService.broadcastBotStatusUpdate({
+          botId: id,
+          status: updatedBot.status,
+          isActive: updatedBot.isActive,
+          message: 'Bot status updated'
+        });
+      }
+      
       res.json(updatedBot);
     } catch (error) {
       res.status(500).json({ error: "Failed to update trading bot" });
@@ -536,6 +600,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
       logger.logBotStopped(`Manual stop - ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}`);
       
+      // Broadcast bot stop status to all connected clients
+      console.log(`[WEBSOCKET] Broadcasting bot stop for bot ${botId}`);
+      wsService.broadcastBotStatusUpdate({
+        botId: botId,
+        status: 'inactive',
+        isActive: false,
+        message: `Bot stopped - ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}`
+      });
+      
+      // Also broadcast general bot data update
+      const updatedBot = await storage.getTradingBot(botId);
+      wsService.broadcastBotDataUpdate({
+        action: 'stopped',
+        bot: updatedBot
+      });
+      
       console.log(`[BOT STOP] Bot ${botId} stopped successfully. Cancelled: ${cancelledOrders} orders, Liquidated: ${liquidated}`);
       
       res.json({
@@ -571,6 +651,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.deleteTradingBot(id);
       
+      // Broadcast bot deletion to all connected clients
+      console.log(`[WEBSOCKET] Broadcasting bot deletion for bot ${id}`);
+      wsService.broadcastBotDataUpdate({
+        action: 'deleted',
+        bot: { id: id, userId: userId } // Only send minimal data since bot is deleted
+      });
+      
       res.json({ 
         success: true,
         deletedData: {
@@ -600,6 +687,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cycles = await storage.getBotCyclesByBotId(botId);
       res.json(cycles);
     } catch (error) {
+      res.status(500).json({ error: "Failed to fetch bot cycles" });
+    }
+  });
+
+  // Bulk Bot Cycles API for multiple bots - Secured
+  app.post("/api/bot-cycles/bulk", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { botIds } = req.body;
+      
+      if (!Array.isArray(botIds) || botIds.length === 0) {
+        return res.status(400).json({ error: "botIds array is required" });
+      }
+      
+      // Verify all bots belong to user
+      const bots = await Promise.all(
+        botIds.map(botId => storage.getTradingBot(botId))
+      );
+      
+      // Filter out null bots and bots that don't belong to the user
+      const validBots = bots.filter(bot => bot && bot.userId === userId);
+      const validBotIds = validBots.map(bot => bot!.id);
+      
+      // Fetch cycles for all valid bots
+      const allCycles = await Promise.all(
+        validBotIds.map(botId => storage.getBotCyclesByBotId(botId))
+      );
+      
+      // Flatten and return
+      const flatCycles = allCycles.flat();
+      res.json(flatCycles);
+    } catch (error) {
+      console.error('Error fetching bulk bot cycles:', error);
       res.status(500).json({ error: "Failed to fetch bot cycles" });
     }
   });

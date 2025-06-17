@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test User Data Stream Integration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #4caf50;
+        }
+        .log {
+            background: #0a0a0a;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        button {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 5px 0;
+        }
+        .status.connected {
+            background: #4caf50;
+        }
+        .status.disconnected {
+            background: #f44336;
+        }
+        .status.connecting {
+            background: #ff9800;
+        }
+        .notification {
+            background: #2196f3;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            animation: fadeIn 0.5s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 User Data Stream Integration Test</h1>
+        
+        <div class="section">
+            <h3>WebSocket Connection</h3>
+            <div id="connectionStatus" class="status disconnected">Disconnected</div>
+            <button id="connectBtn" onclick="connectWebSocket()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnectWebSocket()" disabled>Disconnect</button>
+        </div>
+
+        <div class="section">
+            <h3>Test Order Fill Notifications</h3>
+            <p>These buttons will simulate order fill notifications to test the audio system:</p>
+            <button onclick="testNotification('base_order')">Test Base Order Fill</button>
+            <button onclick="testNotification('safety_order')">Test Safety Order Fill</button>
+            <button onclick="testNotification('take_profit')">Test Take Profit Fill</button>
+        </div>
+
+        <div class="section">
+            <h3>Real-time Updates Test</h3>
+            <p>When connected, this will show any real-time updates received:</p>
+            <div id="realTimeUpdates">No updates received</div>
+        </div>
+
+        <div class="section">
+            <h3>WebSocket Log</h3>
+            <div id="log" class="log">Ready to connect...</div>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectTimeout = null;
+        let messageCount = 0;
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('log');
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById('connectionStatus');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            
+            statusElement.className = `status ${status}`;
+            statusElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            
+            connectBtn.disabled = status === 'connected' || status === 'connecting';
+            disconnectBtn.disabled = status === 'disconnected';
+        }
+
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('⚠️ Already connected');
+                return;
+            }
+
+            updateConnectionStatus('connecting');
+            log('🔌 Connecting to WebSocket...');
+
+            try {
+                ws = new WebSocket('ws://localhost:3000/api/ws');
+
+                ws.onopen = function(event) {
+                    log('✅ WebSocket connected successfully');
+                    updateConnectionStatus('connected');
+                    clearReconnectTimeout();
+                };
+
+                ws.onmessage = function(event) {
+                    messageCount++;
+                    const data = JSON.parse(event.data);
+                    log(`📨 Message ${messageCount}: ${JSON.stringify(data, null, 2)}`);
+                    
+                    handleMessage(data);
+                };
+
+                ws.onclose = function(event) {
+                    log(`🔌 WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`);
+                    updateConnectionStatus('disconnected');
+                    
+                    if (event.code !== 1000) { // Not a normal close
+                        log('🔄 Will attempt to reconnect in 5 seconds...');
+                        scheduleReconnect();
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    log(`❌ WebSocket error: ${error}`);
+                    updateConnectionStatus('disconnected');
+                };
+
+            } catch (error) {
+                log(`❌ Failed to create WebSocket connection: ${error}`);
+                updateConnectionStatus('disconnected');
+            }
+        }
+
+        function disconnectWebSocket() {
+            clearReconnectTimeout();
+            if (ws) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+            }
+            updateConnectionStatus('disconnected');
+            log('🔌 WebSocket disconnected manually');
+        }
+
+        function scheduleReconnect() {
+            clearReconnectTimeout();
+            reconnectTimeout = setTimeout(() => {
+                log('🔄 Attempting to reconnect...');
+                connectWebSocket();
+            }, 5000);
+        }
+
+        function clearReconnectTimeout() {
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+        }
+
+        function handleMessage(data) {
+            if (data.type === 'order_fill_notification') {
+                showOrderFillNotification(data.data);
+                playOrderFillSound(data.data);
+            } else if (data.type === 'bot_update') {
+                updateRealTimeDisplay('Bot Update', data.data);
+            } else if (data.type === 'market_data') {
+                updateRealTimeDisplay('Market Data', data.data);
+            } else {
+                updateRealTimeDisplay('Other', data);
+            }
+        }
+
+        function showOrderFillNotification(orderData) {
+            const container = document.body;
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.innerHTML = `
+                🎯 Order Fill: ${orderData.symbol} ${orderData.orderType}<br>
+                💰 ${orderData.side} ${orderData.quantity} @ $${orderData.price}
+            `;
+            
+            container.appendChild(notification);
+            
+            setTimeout(() => {
+                container.removeChild(notification);
+            }, 5000);
+        }
+
+        function playOrderFillSound(orderData) {
+            // Simple beep sound using Web Audio API
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                // Different frequencies for different order types
+                let frequency = 440; // A4 note
+                if (orderData.orderType === 'take_profit') {
+                    frequency = 880; // A5 note (higher)
+                } else if (orderData.orderType === 'safety_order') {
+                    frequency = 220; // A3 note (lower)
+                }
+                
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+                
+                log(`🔊 Played ${orderData.orderType} notification sound`);
+            } catch (error) {
+                log(`❌ Failed to play sound: ${error}`);
+            }
+        }
+
+        function testNotification(orderType) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('⚠️ WebSocket not connected. Cannot test real notifications.');
+                
+                // Still test the sound
+                const mockOrderData = {
+                    orderId: 'TEST-' + Date.now(),
+                    exchangeOrderId: 'TEST-EX-' + Date.now(),
+                    botId: 1,
+                    orderType: orderType,
+                    symbol: 'ICPUSDT',
+                    side: orderType === 'take_profit' ? 'SELL' : 'BUY',
+                    quantity: '10.0',
+                    price: '12.50',
+                    status: 'filled',
+                    timestamp: new Date().toISOString()
+                };
+                
+                showOrderFillNotification(mockOrderData);
+                playOrderFillSound(mockOrderData);
+                return;
+            }
+
+            log(`🧪 Testing ${orderType} notification...`);
+            
+            // Send test message to backend
+            const testMessage = {
+                type: 'test_order_fill',
+                data: {
+                    orderType: orderType,
+                    symbol: 'ICPUSDT',
+                    botId: 1
+                }
+            };
+            
+            ws.send(JSON.stringify(testMessage));
+        }
+
+        function updateRealTimeDisplay(type, data) {
+            const element = document.getElementById('realTimeUpdates');
+            const timestamp = new Date().toLocaleTimeString();
+            element.innerHTML = `
+                <strong>${type}</strong> received at ${timestamp}<br>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+        }
+
+        function clearLog() {
+            document.getElementById('log').textContent = 'Log cleared...\n';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 Page loaded. Ready to test User Data Stream integration.');
+            log('💡 Click "Connect" to start testing WebSocket connection.');
+            
+            // Try to connect automatically
+            setTimeout(() => {
+                connectWebSocket();
+            }, 1000);
+        };
+
+        // Clean up on page unload
+        window.onbeforeunload = function() {
+            if (ws) {
+                ws.close();
+            }
+        };
+    </script>
+</body>
+</html>

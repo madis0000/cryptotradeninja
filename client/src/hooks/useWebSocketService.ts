@@ -143,23 +143,27 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
       setStatus('connected');
       options.onConnect?.();
       
-      // Send subscription command to backend with configured symbols
-      const symbolsToUse = symbols || ['BTCUSDT'];
+      // Send subscription command to backend with configured symbols only if provided
+      const symbolsToUse = symbols && symbols.length > 0 ? symbols : [];
       
-      // Try to include exchangeId for better compatibility
-      getFirstActiveExchangeId().then(exchangeId => {
-        const subscribeMessage = exchangeId 
-          ? createSubscriptionMessage(symbolsToUse, exchangeId)
-          : { type: 'subscribe', symbols: symbolsToUse }; // Fallback for backward compatibility
-        
-        console.log('[CLIENT WS] Sending configured symbols to backend:', subscribeMessage);
-        ws.send(JSON.stringify(subscribeMessage));
-      }).catch(() => {
-        // Fallback to basic subscription without exchangeId
-        const subscribeMessage = { type: 'subscribe', symbols: symbolsToUse };
-        console.log('[CLIENT WS] Using fallback subscription without exchangeId:', subscribeMessage);
-        ws.send(JSON.stringify(subscribeMessage));
-      });
+      if (symbolsToUse.length > 0) {
+        // Try to include exchangeId for better compatibility
+        getFirstActiveExchangeId().then(exchangeId => {
+          const subscribeMessage = exchangeId 
+            ? createSubscriptionMessage(symbolsToUse, exchangeId)
+            : { type: 'subscribe', symbols: symbolsToUse }; // Fallback for backward compatibility
+          
+          console.log('[CLIENT WS] Sending configured symbols to backend:', subscribeMessage);
+          ws.send(JSON.stringify(subscribeMessage));
+        }).catch(() => {
+          // Fallback to basic subscription without exchangeId
+          const subscribeMessage = { type: 'subscribe', symbols: symbolsToUse };
+          console.log('[CLIENT WS] Using fallback subscription without exchangeId:', subscribeMessage);
+          ws.send(JSON.stringify(subscribeMessage));
+        });
+      } else {
+        console.log('[CLIENT WS] No symbols provided, skipping subscription');
+      }
     };
 
     ws.onmessage = (event) => {

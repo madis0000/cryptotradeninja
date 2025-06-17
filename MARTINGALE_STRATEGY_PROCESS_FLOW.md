@@ -5,7 +5,7 @@
 ### Complete Order Flow Sequence
 
 ```
-Bot Creation → Initial Cycle → Base Order → Take Profit Order → Safety Order Evaluation → Cycle Management
+Bot Creation → Initial Cycle → Base Order → Take Profit Order → Safety Order Strategy Selection → Cycle Management
 ```
 
 ## 2. Detailed Step-by-Step Process
@@ -58,16 +58,53 @@ Bot Creation → Initial Cycle → Base Order → Take Profit Order → Safety O
 - **Quantity**: Same as base order quantity
 - **Price**: Calculated profit target price
 
-### 2.4 Safety Order Evaluation (Continuous)
+### 2.4 Safety Order Strategy Selection
+**Location**: After base order and take profit order placement
+**Toggle**: `activeSafetyOrdersEnabled` boolean
+
+#### 2.4a Active Safety Orders Mode (activeSafetyOrdersEnabled = true)
+**Method**: `placeActiveSafetyOrders(botId, cycleId, currentPrice)`
+**Process**:
+
+```
+1. Place a limited number of safety orders immediately after base order
+2. Number of orders placed = activeSafetyOrders setting (e.g., 3 out of 10 max)
+3. Remaining safety orders are placed reactively when triggered
+4. All safety orders are LIMIT orders at calculated price levels
+```
+
+**Benefits**:
+- Faster execution when price moves quickly
+- Reduced API calls during volatile market conditions
+- Guaranteed order placement at desired price levels
+
+#### 2.4b All Safety Orders Mode (activeSafetyOrdersEnabled = false)
+**Method**: `placeAllSafetyOrders(botId, cycleId, currentPrice)`
+**Process**:
+
+```
+1. Place ALL safety orders immediately after base order
+2. Number of orders placed = maxSafetyOrders setting (e.g., all 10)
+3. No reactive placement needed - all orders already on exchange
+4. All safety orders are LIMIT orders at calculated price levels
+```
+
+**Benefits**:
+- No missed opportunities due to rapid price movements
+- Simplified monitoring (no reactive logic needed)
+- All orders visible on exchange order book
+
+### 2.5 Reactive Safety Order Evaluation (Legacy/Backup)
 **Method**: `evaluateAndPlaceSafetyOrder(botId, cycleId, currentMarketPrice)`
+**Used when**: Additional safety orders needed beyond active ones
 **Process**:
 
 ```
 1. Get existing safety orders count for cycle
 2. Check if max safety orders reached
 3. Calculate safety order trigger price:
-   - Long: basePrice * (1 - (priceDeviation * (safetyOrderCount + 1))/100)
-   - Short: basePrice * (1 + (priceDeviation * (safetyOrderCount + 1))/100)
+   - Long: basePrice * (1 - (priceDeviation * deviationMultiplier^(safetyOrderCount))/100)
+   - Short: basePrice * (1 + (priceDeviation * deviationMultiplier^(safetyOrderCount))/100)
 4. Compare current price with trigger price
 5. If triggered → place safety order
 6. If not triggered → wait and monitor
@@ -77,7 +114,7 @@ Bot Creation → Initial Cycle → Base Order → Take Profit Order → Safety O
 - **Long Position**: Current price ≤ Trigger price (price dropped)
 - **Short Position**: Current price ≥ Trigger price (price rose)
 
-### 2.5 Safety Order Placement
+### 2.6 Safety Order Placement
 **Method**: `placeSafetyOrder(botId, cycleId, safetyOrderNumber, currentPrice)`
 **Process**:
 
@@ -97,7 +134,7 @@ Bot Creation → Initial Cycle → Base Order → Take Profit Order → Safety O
 - Safety Order #2: $100 * 1.5 = $150  
 - Safety Order #3: $100 * 1.5² = $225
 
-### 2.6 Take Profit Update After Safety Orders
+### 2.7 Take Profit Update After Safety Orders
 **Method**: `updateTakeProfitAfterSafetyOrder(botId, cycleId)`
 **Process**:
 
@@ -114,6 +151,105 @@ totalValue = Σ(quantity × price) for all filled orders
 totalQuantity = Σ(quantity) for all filled orders
 averagePrice = totalValue / totalQuantity
 ```
+
+## 2.8 Safety Order Strategy Comparison
+
+### Active Safety Orders Mode vs All Safety Orders Mode
+
+| Aspect | Active Safety Orders (ON) | All Safety Orders (OFF) |
+|--------|---------------------------|-------------------------|
+| **Initial Placement** | Only specified number (e.g., 3/10) | ALL safety orders immediately |
+| **Order Type** | LIMIT orders at calculated levels | LIMIT orders at calculated levels |
+| **Remaining Orders** | Placed reactively when triggered | N/A - all already placed |
+| **API Efficiency** | Fewer initial API calls | More initial API calls |
+| **Execution Speed** | Fast for initial orders, reactive for rest | Fastest - no reactive logic |
+| **Market Volatility** | Risk of missing levels in fast moves | All levels covered immediately |
+| **Exchange Load** | Lower initial order book impact | Higher initial order book impact |
+| **Monitoring Complexity** | Requires reactive monitoring | Simplified - just monitor fills |
+
+### When to Use Each Mode
+
+**Use Active Safety Orders (ON) when**:
+- Trading in stable/slower markets
+- Want to minimize initial exchange impact
+- Prefer gradual position building
+- API rate limits are a concern
+
+**Use All Safety Orders (OFF) when**:
+- Trading in highly volatile markets
+- Want guaranteed order placement
+- Don't want to miss rapid price movements
+- Simplified monitoring is preferred
+
+**Use Cooldown (ON) when**:
+- Want to prevent overtrading in volatile conditions
+- Prefer controlled spacing between trading cycles
+- Risk management requires pause between cycles
+
+**Use No Cooldown (OFF) when**:
+- Want maximum trading frequency and opportunity capture
+- Market conditions are stable
+- Immediate cycle restart is preferred (default behavior)
+
+### Example Scenarios
+
+**Scenario 1: Active Safety Orders (3 active out of 10 max)**
+```
+Base Order: $1000 BTCUSDT at $50,000
+Take Profit: SELL at $51,000 (2% profit)
+Safety Orders Placed Immediately:
+  - SO #1: BUY at $49,000 (2% down)
+  - SO #2: BUY at $47,500 (5% down) 
+  - SO #3: BUY at $45,500 (9% down)
+Safety Orders Pending (placed when triggered):
+  - SO #4-10: Calculated but not placed yet
+```
+
+**Scenario 2: All Safety Orders (10 max, all placed)**
+```
+Base Order: $1000 BTCUSDT at $50,000  
+Take Profit: SELL at $51,000 (2% profit)
+All Safety Orders Placed Immediately:
+  - SO #1: BUY at $49,000 (2% down)
+  - SO #2: BUY at $47,500 (5% down)
+  - SO #3: BUY at $45,500 (9% down)
+  - SO #4: BUY at $43,000 (14% down)
+  - ... (all 10 safety orders placed)
+```
+
+## 2.9 Cooldown Period Configuration
+
+### Cooldown Toggle Settings
+
+| Setting | Value | Behavior |
+|---------|-------|----------|
+| **cooldownEnabled** | `true` | Apply cooldown period between cycles |
+| **cooldownEnabled** | `false` | Start new cycle immediately (default) |
+| **cooldownBetweenRounds** | `0` | No cooldown (when disabled) |
+| **cooldownBetweenRounds** | `60+` | Cooldown duration in seconds |
+
+### Frontend Implementation
+- **Toggle Control**: Switch to enable/disable cooldown
+- **Value Management**: Automatically sets value to 0 when disabled
+- **Default State**: Cooldown disabled for maximum trading frequency
+- **No DB Migration**: Uses existing schema fields
+
+### Backend Cycle Management
+```
+completeCycleAndStartNew() {
+  if (bot.cooldownEnabled && bot.cooldownBetweenRounds > 0) {
+    setTimeout(() => startNewCycle(), bot.cooldownBetweenRounds * 1000);
+  } else {
+    startNewCycle(); // Immediate restart
+  }
+}
+```
+
+### Benefits of This Approach
+- **Zero Breaking Changes**: Existing bots continue working
+- **Clear Intent**: 0 value when disabled makes behavior explicit  
+- **Performance**: No unnecessary delays in high-frequency trading
+- **Flexibility**: Users can choose based on trading style
 
 ## 3. Order Monitoring System
 
@@ -137,7 +273,8 @@ averagePrice = totalValue / totalQuantity
 3. Log cycle completion
 4. Mark cycle as 'completed'
 5. Calculate cycle profit
-6. If bot still active → Start new cycle
+6. Check cooldown settings
+7. If bot still active → Start new cycle (with cooldown if enabled)
 ```
 
 **What Happens Next**:
@@ -145,6 +282,10 @@ averagePrice = totalValue / totalQuantity
 ✅ Take Profit Filled
     ↓
 🎉 Cycle Completed (Profit taken)
+    ↓
+🔍 Check Cooldown Settings
+    ↓
+⏱️ Apply Cooldown (if enabled) OR 🚀 Start Immediately
     ↓
 🔄 Start New Cycle (if bot active)
     ↓
@@ -155,43 +296,52 @@ averagePrice = totalValue / totalQuantity
 ⏳ Monitor for Safety Order Triggers
 ```
 
-**Logging**: 
-```
-[UNIFIED WS] [MARTINGALE STRATEGY] 🎉 TAKE PROFIT ORDER FILLED - CYCLE COMPLETED!
-[UNIFIED WS] [MARTINGALE STRATEGY] 🔄 Starting new cycle...
-```
+### 3.3 Cycle Completion & Cooldown Management
+**Method**: `completeCycleAndStartNew(botId, cycleId, orderFillData)`
+**Purpose**: Handle cycle completion with cooldown support
 
-### 3.3 Safety Order Fill Event
-**When Triggered**: Safety order MARKET order gets filled
+**Cooldown Logic**:
+- **If `cooldownEnabled = true`**: Apply cooldown period before starting new cycle
+- **If `cooldownEnabled = false`**: Start new cycle immediately (value set to 0)
+- **Default**: Cooldown disabled to avoid unnecessary delays
 
 **Process Flow**:
 ```
-1. Receive fill event from exchange
-2. Update safety order status to 'filled'
-3. Update cycle total invested amount
-4. Recalculate average entry price
-5. Cancel existing take profit order
-6. Place updated take profit order
-7. Evaluate next safety order placement
+1. Mark current cycle as completed
+2. Update bot statistics (trades, P&L)
+3. Check if bot is still active
+4. Evaluate cooldown settings:
+   
+   IF cooldownEnabled = true AND cooldownBetweenRounds > 0:
+     → Schedule new cycle after cooldown period
+     → Log: "⏱️ Cooldown enabled: {X}s"
+     → Wait: {cooldownBetweenRounds} seconds
+     → Execute: startNewCycle()
+   
+   ELSE:
+     → Start new cycle immediately
+     → Log: "🚀 No cooldown - starting new cycle immediately"
 ```
 
-**What Happens Next**:
-```
-⚡ Safety Order Filled
-    ↓
-📊 Update Average Entry Price
-    ↓
-🚫 Cancel Current Take Profit Order
-    ↓
-🎯 Place Updated Take Profit Order (at new average price)
-    ↓
-⏳ Continue Monitoring for More Safety Orders
-```
+**Implementation Benefits**:
+- **No DB Migration Required**: Uses existing `cooldownBetweenRounds` field
+- **Toggle Control**: Simple boolean to enable/disable cooldown
+- **Zero Value Strategy**: When disabled, sets cooldown to 0 for clarity
+- **Backward Compatibility**: Existing bots work without changes
 
 **Logging**:
 ```
-[UNIFIED WS] [MARTINGALE STRATEGY] ⚡ SAFETY_ORDER FILLED
-[UNIFIED WS] [MARTINGALE STRATEGY] 🔄 Updating take profit order after safety order fill...
+[UNIFIED WS] [MARTINGALE STRATEGY] 🎉 TAKE PROFIT ORDER FILLED - CYCLE COMPLETED!
+[UNIFIED WS] [MARTINGALE STRATEGY] ⏱️ Cooldown enabled: 60s
+[UNIFIED WS] [MARTINGALE STRATEGY] 💤 Starting cooldown period before new cycle...
+[UNIFIED WS] [MARTINGALE STRATEGY] 🔄 Starting new cycle after cooldown...
+```
+
+OR (when disabled):
+```
+[UNIFIED WS] [MARTINGALE STRATEGY] 🎉 TAKE PROFIT ORDER FILLED - CYCLE COMPLETED!
+[UNIFIED WS] [MARTINGALE STRATEGY] 🚀 No cooldown - starting new cycle immediately
+[UNIFIED WS] [MARTINGALE STRATEGY] 🔄 Starting new cycle...
 ```
 
 ## 4. Order Serialization & Dependencies

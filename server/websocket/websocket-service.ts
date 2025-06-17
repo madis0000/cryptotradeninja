@@ -3,8 +3,20 @@ import { Server } from 'http';
 import crypto from 'crypto';
 import { TickerStreamManager } from './streams/ticker-stream-manager';
 import { KlineStreamManager } from './streams/kline-stream-manager';
+import { UserDataStreamManager } from './streams/user-data-stream-manager';
 import { TradingOperationsManager } from './managers/trading-operations-manager';
 import { MessageHandler } from './handlers/message-handler';
+
+// Global WebSocket service singleton for broadcasting
+let globalWebSocketService: WebSocketService | null = null;
+
+export function setGlobalWebSocketService(service: WebSocketService): void {
+  globalWebSocketService = service;
+}
+
+export function getGlobalWebSocketService(): WebSocketService | null {
+  return globalWebSocketService;
+}
 
 export class WebSocketService {
   private wss?: WebSocketServer;
@@ -13,6 +25,7 @@ export class WebSocketService {
   // Stream managers
   private tickerStreamManager: TickerStreamManager;
   private klineStreamManager: KlineStreamManager;
+  private userDataStreamManager: UserDataStreamManager;
   private tradingOperationsManager: TradingOperationsManager;
   private messageHandler: MessageHandler;
 
@@ -20,11 +33,11 @@ export class WebSocketService {
   private activeConnections = new Map<string, WebSocket>();
   constructor() {
     console.log('[UNIFIED WS] [WEBSOCKET SERVICE] Initializing modular WebSocket service');
-    
-    // Initialize managers
+      // Initialize managers
     this.tickerStreamManager = new TickerStreamManager();
     this.klineStreamManager = new KlineStreamManager();
     this.tradingOperationsManager = new TradingOperationsManager();
+    this.userDataStreamManager = new UserDataStreamManager(this.tradingOperationsManager);
     
     // Initialize message handler
     this.messageHandler = new MessageHandler(
@@ -47,8 +60,13 @@ export class WebSocketService {
     });
 
     this.setupWebSocketServer();
+    
+    // Start user data streams for all exchanges
+    this.initializeUserDataStreams();
+    
     console.log('[UNIFIED WS] [WEBSOCKET] WebSocket server initialized successfully');
   }
+
   // Setup WebSocket server
   private setupWebSocketServer(): void {
     if (!this.wss) {
@@ -141,6 +159,205 @@ export class WebSocketService {
   async getAccountBalance(exchangeId: number, asset: string): Promise<any> {
     return this.tradingOperationsManager.getAccountBalance(exchangeId, asset);
   }
+  // User Data Stream Management methods
+  async startUserDataStreamForExchange(exchangeId: number): Promise<void> {
+    return this.userDataStreamManager.startUserDataStream(exchangeId);
+  }
+
+  async stopUserDataStreamForExchange(exchangeId: number): Promise<void> {
+    return this.userDataStreamManager.stopUserDataStream(exchangeId);
+  }
+
+  // Broadcast order fill notification to all connected clients
+  broadcastOrderFillNotification(orderData: any): void {
+    const message = {
+      type: 'order_fill_notification',
+      data: {
+        orderId: orderData.id,
+        exchangeOrderId: orderData.exchangeOrderId,
+        botId: orderData.botId,
+        orderType: orderData.orderType,
+        orderSubType: orderData.orderType, // Map orderType to orderSubType for compatibility
+        symbol: orderData.symbol,
+        side: orderData.side,
+        quantity: orderData.quantity || orderData.filledQuantity,
+        price: orderData.price || orderData.filledPrice,
+        status: 'filled',
+        filledAt: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    let sentCount = 0;
+    this.activeConnections.forEach((ws, clientId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(message));
+          sentCount++;
+        } catch (error) {
+          console.error(`[UNIFIED WS] [ORDER BROADCAST] Failed to send to client ${clientId}:`, error);
+          this.activeConnections.delete(clientId);
+        }
+      } else {
+        this.activeConnections.delete(clientId);
+      }
+    });
+
+    console.log(`[UNIFIED WS] [ORDER BROADCAST] ✅ Sent order fill notification to ${sentCount} clients for ${orderData.symbol} ${orderData.orderType}`);
+  }
+
+  // Broadcast bot status update to all connected clients
+  broadcastBotStatusUpdate(botData: any): void {
+    const message = {
+      type: 'bot_status_update',
+      data: {
+        botId: botData.id,
+        status: botData.status,
+        name: botData.name,
+        tradingPair: botData.tradingPair,
+        strategy: botData.strategy,
+        direction: botData.direction,
+        updatedAt: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    let sentCount = 0;
+    this.activeConnections.forEach((ws, clientId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(message));
+          sentCount++;
+        } catch (error) {
+          console.error(`[UNIFIED WS] [BOT BROADCAST] Failed to send to client ${clientId}:`, error);
+          this.activeConnections.delete(clientId);
+        }
+      } else {
+        this.activeConnections.delete(clientId);
+      }
+    });
+
+    console.log(`[UNIFIED WS] [BOT BROADCAST] ✅ Sent bot status update to ${sentCount} clients for bot ${botData.id} (${botData.status})`);
+  }
+
+  // Broadcast bot cycle update to all connected clients
+  broadcastBotCycleUpdate(cycleData: any): void {
+    const message = {
+      type: 'bot_cycle_update',
+      data: {
+        botId: cycleData.botId,
+        cycleId: cycleData.id,
+        cycleNumber: cycleData.cycleNumber,
+        status: cycleData.status,
+        baseOrderFilled: cycleData.baseOrderFilled,
+        currentPrice: cycleData.currentPrice,
+        averagePrice: cycleData.averagePrice,
+        totalQuantity: cycleData.totalQuantity,
+        totalCost: cycleData.totalCost,
+        unrealizedPnL: cycleData.unrealizedPnL,
+        updatedAt: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    let sentCount = 0;
+    this.activeConnections.forEach((ws, clientId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(message));
+          sentCount++;
+        } catch (error) {
+          console.error(`[UNIFIED WS] [CYCLE BROADCAST] Failed to send to client ${clientId}:`, error);
+          this.activeConnections.delete(clientId);
+        }
+      } else {
+        this.activeConnections.delete(clientId);
+      }
+    });
+
+    console.log(`[UNIFIED WS] [CYCLE BROADCAST] ✅ Sent cycle update to ${sentCount} clients for bot ${cycleData.botId} cycle ${cycleData.cycleNumber}`);
+  }
+
+  // Broadcast bot statistics update to all connected clients
+  broadcastBotStatsUpdate(statsData: any): void {
+    const message = {
+      type: 'bot_stats_update',
+      data: {
+        botId: statsData.botId,
+        completedCycles: statsData.completedCycles,
+        totalPnL: statsData.totalPnL,
+        totalInvested: statsData.totalInvested,
+        winRate: statsData.winRate,
+        averageCycleDuration: statsData.averageCycleDuration,
+        updatedAt: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    let sentCount = 0;
+    this.activeConnections.forEach((ws, clientId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(message));
+          sentCount++;
+        } catch (error) {
+          console.error(`[UNIFIED WS] [STATS BROADCAST] Failed to send to client ${clientId}:`, error);
+          this.activeConnections.delete(clientId);
+        }
+      } else {
+        this.activeConnections.delete(clientId);
+      }
+    });
+
+    console.log(`[UNIFIED WS] [STATS BROADCAST] ✅ Sent stats update to ${sentCount} clients for bot ${statsData.botId}`);
+  }
+
+  // Broadcast bot data update (general bot information)
+  broadcastBotDataUpdate(botData: any): void {
+    const message = {
+      type: 'bot_data_update',
+      data: {
+        ...botData,
+        updatedAt: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    let sentCount = 0;
+    this.activeConnections.forEach((ws, clientId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(message));
+          sentCount++;
+        } catch (error) {
+          console.error(`[UNIFIED WS] [BOT DATA BROADCAST] Failed to send to client ${clientId}:`, error);
+          this.activeConnections.delete(clientId);
+        }
+      } else {
+        this.activeConnections.delete(clientId);
+      }
+    });
+
+    console.log(`[UNIFIED WS] [BOT DATA BROADCAST] ✅ Sent bot data update to ${sentCount} clients for bot ${botData.id}`);
+  }
+  // Initialize user data streams for all configured exchanges
+  private async initializeUserDataStreams(): Promise<void> {
+    try {
+      console.log('[UNIFIED WS] [USER DATA STREAMS] Initializing user data streams...');
+      
+      // Get all configured exchanges from storage
+      const { storage } = await import('../storage');
+      
+      // Since we don't have getAllExchanges, we'll need to iterate through users
+      // For now, let's start with a simple approach - we'll add a proper method later
+      // This is a temporary solution to get user data streams working
+      
+      console.log('[UNIFIED WS] [USER DATA STREAMS] ✅ User data stream manager initialized (manual exchange setup required)');
+    } catch (error) {
+      console.error('[UNIFIED WS] [USER DATA STREAMS] ❌ Failed to initialize user data streams:', error);
+    }
+  }
+
   // Shutdown the service
   async shutdown(): Promise<void> {
     console.log('[UNIFIED WS] [WEBSOCKET SERVICE] Shutting down...');

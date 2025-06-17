@@ -4,10 +4,11 @@ import { OrderRequest, OrderResponse } from '../types';
 import { db } from '../../db';
 import { storage } from '../../storage';
 import { decryptApiCredentials } from '../../encryption';
-import { getBinanceSymbolFilters, adjustQuantity, adjustPrice } from '../../binance-filters';
+import { getBinanceSymbolFilters, adjustQuantity, adjustPrice, ensureFilterCompliance } from '../../binance-filters';
 import { BotLoggerManager } from '../../bot-logger';
 import config from '../../config';
 import { BotCycle, CycleOrder, tradingBots } from '@shared/schema';
+import { getGlobalWebSocketService } from '../websocket-service';
 import { eq } from 'drizzle-orm';
 
 export class TradingOperationsManager {
@@ -228,6 +229,27 @@ export class TradingOperationsManager {
 
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✓ Created base order record in database (ID: ${baseOrder.id})`);
 
+      // Check account balance before placing order
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🔍 Checking account balance before order placement...`);
+      try {
+        const balanceData = await this.getAccountBalance(bot.exchangeId, 'USDT');
+        const usdtBalance = balanceData?.data?.balances?.find((b: any) => b.asset === 'USDT');
+        const availableUSDT = usdtBalance ? parseFloat(usdtBalance.free) : 0;
+        
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 💰 Available USDT Balance: $${availableUSDT.toFixed(2)}`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 💰 Required for order: $${baseOrderAmount.toFixed(2)}`);
+        
+        if (availableUSDT < baseOrderAmount) {
+          console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Insufficient balance: Available $${availableUSDT.toFixed(2)}, Required $${baseOrderAmount.toFixed(2)}`);
+          throw new Error(`Insufficient USDT balance: Available $${availableUSDT.toFixed(2)}, Required $${baseOrderAmount.toFixed(2)}`);
+        } else {
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Sufficient balance available`);
+        }
+      } catch (balanceError) {
+        console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ⚠️  Balance check failed:`, balanceError);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🔄 Proceeding with order placement anyway...`);
+      }
+
       // Place order on exchange via API
       try {
         const { apiKey, apiSecret } = decryptApiCredentials(
@@ -249,6 +271,15 @@ export class TradingOperationsManager {
           quantity: quantity.toString(),
           timestamp: Date.now().toString()
         });
+
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🔧 Exchange Details:`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Name: ${exchange.name}`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Type: ${exchange.exchangeType || 'Unknown'}`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Testnet: ${exchange.isTestnet || false}`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Endpoint: ${exchange.restApiEndpoint}`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    API Key (first 8 chars): ${apiKey.substring(0, 8)}...`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📋 Order Parameters:`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    ${orderParams.toString().replace('timestamp=', 'timestamp=***').replace(/&signature=.*/, '')}`);
 
         const signature = crypto
           .createHmac('sha256', apiSecret)
@@ -280,6 +311,21 @@ export class TradingOperationsManager {
             filledPrice: currentPrice.toFixed(filters.priceDecimals)
           });
 
+          // Broadcast order fill notification
+          const wsService = getGlobalWebSocketService();
+          if (wsService) {
+            wsService.broadcastOrderFillNotification({
+              id: baseOrder.id,
+              exchangeOrderId: orderResult.orderId.toString(),
+              botId: botId,
+              orderType: 'base_order',
+              symbol: bot.tradingPair,
+              side: bot.direction === 'long' ? 'BUY' : 'SELL',
+              quantity: quantity.toFixed(filters.qtyDecimals),
+              price: currentPrice.toFixed(filters.priceDecimals)
+            });
+          }
+
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Base order filled successfully!`);
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Filled Quantity: ${quantity.toFixed(filters.qtyDecimals)}`);
@@ -288,15 +334,17 @@ export class TradingOperationsManager {
             quantity: quantity.toFixed(filters.qtyDecimals),
             price: currentPrice.toFixed(filters.priceDecimals),
             amount: baseOrderAmount
-          });
-
-          // Place take profit order
+          });          // Place take profit order
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🎯 Starting take profit order placement...`);
-          await this.placeTakeProfitOrder(botId, cycleId, currentPrice, quantity);
-          
-          // Check if first safety order should be placed based on current price
-          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⚡ Checking if safety order should be placed...`);
-          await this.evaluateAndPlaceSafetyOrder(botId, cycleId, currentPrice);
+          await this.placeTakeProfitOrder(botId, cycleId, currentPrice, quantity);            // Handle safety orders based on configuration
+          if (bot.activeSafetyOrdersEnabled) {
+            console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚀 Active Safety Orders enabled - placing ${bot.activeSafetyOrders} safety orders in advance...`);
+            await this.placeMultipleSafetyOrders(botId, cycleId, currentPrice, bot.activeSafetyOrders);
+          } else {
+            // Place ALL safety orders immediately when toggle is disabled
+            console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚀 Active Safety Orders disabled - placing ALL ${bot.maxSafetyOrders} safety orders immediately...`);
+            await this.placeMultipleSafetyOrders(botId, cycleId, currentPrice, bot.maxSafetyOrders);
+          }
           
         } else {
           console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Order result missing orderId:`, orderResult);
@@ -564,14 +612,28 @@ export class TradingOperationsManager {
         
         if (!orderResponse.ok) {
           throw new Error(`Take profit order placement failed: ${orderResult.msg || 'Unknown error'}`);
-        }
-
-        if (orderResult && orderResult.orderId) {
+        }        if (orderResult && orderResult.orderId) {
           // Update the order with exchange order ID
           await storage.updateCycleOrder(takeProfitOrder.id, {
             exchangeOrderId: orderResult.orderId.toString(),
             status: 'active' // Take profit orders are active (waiting for fill)
           });
+
+          // Broadcast order fill notification
+          const wsService = getGlobalWebSocketService();
+          if (wsService) {
+            wsService.broadcastOrderFillNotification({
+              id: takeProfitOrder.id,
+              exchangeOrderId: orderResult.orderId.toString(),
+              botId: botId,
+              orderType: 'take_profit',
+              symbol: bot.tradingPair,
+              side: bot.direction === 'long' ? 'SELL' : 'BUY',
+              quantity: baseOrderQuantity.toFixed(filters.qtyDecimals),
+              price: adjustedTakeProfitPrice.toFixed(filters.priceDecimals),
+              status: 'active'
+            });
+          }
 
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Take profit order placed successfully!`);
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
@@ -656,23 +718,28 @@ export class TradingOperationsManager {
       const scaledAmount = safetyOrderAmount * Math.pow(safetyOrderSizeMultiplier, safetyOrderNumber - 1);
       const rawQuantity = scaledAmount / adjustedSafetyOrderPrice;
 
-      // Apply LOT_SIZE filter
-      const quantity = adjustQuantity(rawQuantity, filters.stepSize, filters.minQty, filters.qtyDecimals);
-
-      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📊 SAFETY ORDER ${safetyOrderNumber} CALCULATION:`);
+      // Enhanced filter compliance with validation
+      const { quantity: validatedQuantity, price: validatedPrice, isValid, error } = ensureFilterCompliance(
+        rawQuantity,
+        adjustedSafetyOrderPrice,
+        filters
+      );
+      
+      if (!isValid) {
+        console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Filter compliance failed: ${error}`);
+        throw new Error(`Order filter validation failed: ${error}`);
+      }      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📊 SAFETY ORDER ${safetyOrderNumber} CALCULATION:`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Current Price: $${currentPrice.toFixed(6)}`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Base Deviation: ${priceDeviation}%`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Deviation Multiplier: ${deviationMultiplier}x`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Adjusted Deviation: ${adjustedDeviation.toFixed(2)}%`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Raw SO Price: $${safetyOrderPrice.toFixed(8)}`);
-      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Adjusted SO Price: $${adjustedSafetyOrderPrice.toFixed(filters.priceDecimals)} (PRICE_FILTER compliant)`);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Validated SO Price: $${validatedPrice.toFixed(filters.priceDecimals)} (PRICE_FILTER compliant)`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Base Amount: $${safetyOrderAmount}`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Size Multiplier: ${safetyOrderSizeMultiplier}x`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Adjusted Amount: $${scaledAmount.toFixed(2)}`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Raw Quantity: ${rawQuantity.toFixed(8)}`);
-      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Final Quantity: ${quantity.toFixed(filters.qtyDecimals)} (LOT_SIZE compliant)`);
-
-      // Create safety order record
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Validated Quantity: ${validatedQuantity.toFixed(filters.qtyDecimals)} (LOT_SIZE compliant)`);      // Create safety order record with validated values
       const safetyOrder = await storage.createCycleOrder({
         cycleId: cycleId,
         botId: botId,
@@ -681,8 +748,8 @@ export class TradingOperationsManager {
         side: bot.direction === 'long' ? 'BUY' : 'SELL',
         orderCategory: 'LIMIT', // Safety orders can be LIMIT orders at specific price levels
         symbol: bot.tradingPair,
-        quantity: quantity.toFixed(filters.qtyDecimals),
-        price: adjustedSafetyOrderPrice.toFixed(filters.priceDecimals),
+        quantity: validatedQuantity.toFixed(filters.qtyDecimals),
+        price: validatedPrice.toFixed(filters.priceDecimals),
         status: 'pending'
       });
 
@@ -702,9 +769,8 @@ export class TradingOperationsManager {
         const orderParams = new URLSearchParams({
           symbol: bot.tradingPair,
           side: bot.direction === 'long' ? 'BUY' : 'SELL',
-          type: 'LIMIT',
-          quantity: quantity.toString(),
-          price: adjustedSafetyOrderPrice.toFixed(filters.priceDecimals),
+          type: 'LIMIT',          quantity: validatedQuantity.toString(),
+          price: validatedPrice.toFixed(filters.priceDecimals),
           timeInForce: 'GTC', // FIX: Add missing timeInForce parameter
           timestamp: Date.now().toString()
         });
@@ -738,14 +804,29 @@ export class TradingOperationsManager {
             status: 'active' // Safety orders are active (waiting for fill)
           });
 
+          // Broadcast order fill notification
+          const wsService = getGlobalWebSocketService();
+          if (wsService) {
+            wsService.broadcastOrderFillNotification({
+              id: safetyOrder.id,
+              exchangeOrderId: orderResult.orderId.toString(),
+              botId: botId,
+              orderType: 'safety_order',
+              symbol: bot.tradingPair,
+              side: bot.direction === 'long' ? 'BUY' : 'SELL',
+              quantity: validatedQuantity.toFixed(filters.qtyDecimals),
+              price: validatedPrice.toFixed(filters.priceDecimals),
+              status: 'active'
+            });
+          }
+
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ SAFETY ORDER ${safetyOrderNumber} SUCCESSFULLY PLACED!`);
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
 
           logger.logStrategyAction('SAFETY_ORDER_PLACED', {
             safetyOrderNumber,
-            orderId: orderResult.orderId,
-            quantity: quantity.toFixed(filters.qtyDecimals),
-            price: adjustedSafetyOrderPrice.toFixed(filters.priceDecimals),
+            orderId: orderResult.orderId,            quantity: validatedQuantity.toFixed(filters.qtyDecimals),
+            price: validatedPrice.toFixed(filters.priceDecimals),
             scaledAmount: scaledAmount.toFixed(2)
           });
 
@@ -841,26 +922,52 @@ export class TradingOperationsManager {
       throw error;
     }
   }
-
   // Method to handle order fill events (for future implementation)
   async handleOrderFillEvent(botId: number, cycleId: number, orderFillData: any): Promise<void> {
     console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📩 Processing order fill event for bot ${botId}, cycle ${cycleId}`);
     
     try {
       // This method would be called when we receive order fill events from WebSocket streams
-      // For now, this is a placeholder for future real-time fill monitoring
-      
       const orderType = orderFillData.orderType;
+      const { orderId, symbol, side, quantity, price, commission, commissionAsset } = orderFillData;
+      
+      // Broadcast order fill notification to all connected clients
+      const wsService = getGlobalWebSocketService();
+      if (wsService) {
+        wsService.broadcastOrderFillNotification({
+          id: orderId,
+          exchangeOrderId: orderId.toString(),
+          botId: botId,
+          orderType: orderType,
+          symbol: symbol,
+          side: side,
+          quantity: quantity,
+          price: price,
+          status: 'filled',
+          commission: commission,
+          commissionAsset: commissionAsset
+        });
+      }
       
       switch (orderType) {
+        case 'base_order':
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🎯 BASE ORDER FILLED - STARTING SAFETY ORDERS`);
+          // Base order filled - safety orders should already be placed
+          break;
+          
         case 'take_profit':
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🎉 TAKE PROFIT ORDER FILLED - CYCLE COMPLETED!`);
-          // TODO: Mark cycle as completed, calculate profit, start new cycle if bot is active
+          await this.completeCycleAndStartNew(botId, cycleId, orderFillData);
           break;
           
         case 'safety_order':
-          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⚡ SAFETY_ORDER FILLED`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⚡ SAFETY ORDER FILLED - UPDATING TAKE PROFIT`);
           // TODO: Update average entry price, cancel and replace take profit order
+          // This would involve:
+          // 1. Calculate new average entry price
+          // 2. Cancel existing take profit order
+          // 3. Place new take profit order at updated price
+          // 4. Place next safety order if conditions are met
           break;
           
         default:
@@ -868,7 +975,140 @@ export class TradingOperationsManager {
       }
       
     } catch (error) {
-      console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Order fill event processing failed:`, error); 
+      console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Order fill event processing failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Complete current cycle and start new one with cooldown support
+   */  async completeCycleAndStartNew(botId: number, cycleId: number, orderFillData: any): Promise<void> {
+    console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🏁 Completing cycle ${cycleId} and preparing new cycle...`);
+    
+    try {
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        throw new Error('Bot not found');
+      }
+      
+      // Mark current cycle as completed
+      const completedCycle = await storage.updateBotCycle(cycleId, {
+        status: 'completed',
+        cycleProfit: '0' // Will be calculated based on order fills
+      });
+
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Cycle ${cycleId} marked as completed`);
+      
+      // Broadcast cycle completion
+      const wsService = getGlobalWebSocketService();
+      if (wsService && completedCycle) {
+        wsService.broadcastBotCycleUpdate({
+          action: 'completed',
+          cycle: completedCycle
+        });
+        console.log(`[WEBSOCKET] Broadcasted cycle completion for cycle ${cycleId}`);
+      }
+
+      // Update bot stats (will be implemented)
+      // await storage.updateTradingBot(botId, {
+      //   totalTrades: bot.totalTrades + 1,
+      // });
+
+      // Check if bot is still active
+      if (!bot.isActive) {
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⏸️ Bot ${botId} is inactive, not starting new cycle`);
+        return;
+      }
+
+      // Handle cooldown if enabled
+      if (bot.cooldownEnabled && bot.cooldownBetweenRounds > 0) {
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⏱️ Cooldown enabled: ${bot.cooldownBetweenRounds}s`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 💤 Starting cooldown period before new cycle...`);
+        
+        // Schedule new cycle after cooldown
+        setTimeout(async () => {
+          try {
+            await this.startNewCycle(botId);
+          } catch (error) {
+            console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Failed to start new cycle after cooldown:`, error);
+          }
+        }, bot.cooldownBetweenRounds * 1000);
+        
+      } else {
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚀 No cooldown - starting new cycle immediately`);
+        await this.startNewCycle(botId);
+      }
+
+    } catch (error) {
+      console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Cycle completion failed:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Start a new trading cycle for the bot
+   */
+  async startNewCycle(botId: number): Promise<void> {
+    console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🔄 Starting new cycle for bot ${botId}...`);
+    
+    try {
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        throw new Error('Bot not found');
+      }
+
+      // Check if bot is still active (might have been deactivated during cooldown)
+      if (!bot.isActive) {
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⏸️ Bot ${botId} is now inactive, cancelling new cycle`);
+        return;
+      }
+      
+      // Create new cycle
+      const newCycle = await storage.createBotCycle({
+        botId: botId,
+        userId: bot.userId,
+        maxSafetyOrders: bot.maxSafetyOrders,
+        cycleNumber: 1, // This should be incremented based on previous cycles
+        status: 'active'
+      });
+
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Created new cycle ${newCycle.id} for bot ${botId}`);
+
+      // Broadcast new cycle creation
+      const wsService = getGlobalWebSocketService();
+      if (wsService) {
+        wsService.broadcastBotCycleUpdate({
+          action: 'created',
+          cycle: newCycle
+        });
+        console.log(`[WEBSOCKET] Broadcasted new cycle creation for cycle ${newCycle.id}`);
+      }
+
+      // Start base order execution for new cycle
+      await this.placeInitialBaseOrder(botId, newCycle.id);
+
+    } catch (error) {
+      console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ New cycle creation failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Place multiple safety orders at once
+   */
+  async placeMultipleSafetyOrders(botId: number, cycleId: number, currentPrice: number, numberOfOrders: number): Promise<void> {
+    console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚀 Placing ${numberOfOrders} safety orders...`);
+    
+    try {
+      // Place the specified number of safety orders
+      for (let i = 1; i <= numberOfOrders; i++) {
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🎯 Placing safety order ${i}/${numberOfOrders}...`);
+        await this.placeSafetyOrder(botId, cycleId, i, currentPrice);
+      }
+
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Successfully placed ${numberOfOrders} safety orders`);
+      
+    } catch (error) {
+      console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Failed to place multiple safety orders:`, error);
       throw error;
     }
   }

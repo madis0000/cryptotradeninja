@@ -78,6 +78,7 @@ export const tradingBots = pgTable("trading_bots", {
   priceDeviationMultiplier: decimal("price_deviation_multiplier", { precision: 10, scale: 2 }).notNull().default("1.0"),
   safetyOrderSizeMultiplier: decimal("safety_order_size_multiplier", { precision: 10, scale: 2 }).notNull().default("1.0"),
   cooldownBetweenRounds: integer("cooldown_between_rounds").default(60).notNull(), // seconds
+  cooldownEnabled: boolean("cooldown_enabled").default(false).notNull(), // toggle for cooldown period
   
   // Risk Management
   lowerPriceLimit: decimal("lower_price_limit", { precision: 20, scale: 8 }),
