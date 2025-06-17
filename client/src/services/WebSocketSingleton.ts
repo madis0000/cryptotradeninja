@@ -138,8 +138,24 @@ class WebSocketSingleton {
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log('[WEBSOCKET SINGLETON] Received message:', data.type);
+        
+        // Handle different message types
+        if (data.type === 'ticker_update') {
+          // Store in ticker price service if available
+          if (data.data && data.data.symbol && data.data.price) {
+            TickerPriceService.updatePrice(data.data.symbol, parseFloat(data.data.price));
+          }
+        }
+        
         // Broadcast to all subscribers
-        this.subscribers.forEach(callback => callback(data));
+        this.subscribers.forEach(callback => {
+          try {
+            callback(data);
+          } catch (error) {
+            console.error('[WEBSOCKET SINGLETON] Error in subscriber callback:', error);
+          }
+        });
       } catch (error) {
         console.error('[WS SINGLETON] Error parsing message:', error);
       }
@@ -317,58 +333,32 @@ class WebSocketSingleton {
     return this.currentInterval;
   }
 
-  public subscribeToTickers(symbols: string[], exchangeId?: number): void {
-    // Filter out already subscribed symbols
-    const newSymbols = symbols.filter(symbol => !this.subscribedTickerSymbols.has(symbol));
-    
-    if (newSymbols.length === 0) {
-      console.log('[WS SINGLETON] All symbols already subscribed, skipping ticker subscription');
+  public subscribeToTickers(symbols: string[]): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[WEBSOCKET SINGLETON] Cannot subscribe - not connected');
       return;
     }
-    
-    if (!this.isConnected()) {
-      console.log('[WS SINGLETON] Cannot subscribe to tickers - not connected, queueing request');
-      this.messageQueue.push({
-        type: 'subscribe_ticker',
-        symbols: newSymbols,
-        exchangeId: exchangeId
-      });
-      // Add to subscribed symbols set even if not connected yet
-      newSymbols.forEach(symbol => this.subscribedTickerSymbols.add(symbol));
-      return;
-    }
-    
-    console.log(`[WS SINGLETON] Subscribing to ticker data for new symbols: ${newSymbols.join(', ')}`);
+
+    console.log('[WEBSOCKET SINGLETON] Subscribing to tickers:', symbols);
     this.sendMessage({
-      type: 'subscribe_ticker',
-      symbols: newSymbols,
-      exchangeId: exchangeId
+      type: 'subscribe',
+      symbols: symbols,
+      dataType: 'ticker'
     });
-    
-    // Add to subscribed symbols set
-    newSymbols.forEach(symbol => this.subscribedTickerSymbols.add(symbol));
   }
 
   public unsubscribeFromTickers(symbols?: string[]): void {
-    if (!this.isConnected()) {
-      console.log('[WS SINGLETON] Cannot unsubscribe from tickers - not connected');
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
-    
-    if (symbols) {
-      console.log(`[WS SINGLETON] Unsubscribing from specific ticker symbols: ${symbols.join(', ')}`);
-      symbols.forEach(symbol => this.subscribedTickerSymbols.delete(symbol));
-    } else {
-      console.log('[WS SINGLETON] Unsubscribing from all ticker symbols');
-      this.subscribedTickerSymbols.clear();
-    }
-    
+
     this.sendMessage({
-      type: 'unsubscribe_ticker',
-      symbols: symbols
+      type: 'unsubscribe',
+      symbols: symbols || [],
+      dataType: 'ticker'
     });
   }
-
+  
   private setupPageVisibilityHandler(): void {
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {

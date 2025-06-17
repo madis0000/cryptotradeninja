@@ -107,6 +107,14 @@ export function MartingaleProgressDialog({
           },
         });
         
+        // Handle bot deletion case - stop polling if bot doesn't exist
+        if (cycleResponse.status === 404) {
+          console.log(`[PROGRESS DIALOG] Bot ${botId} was deleted, stopping polling`);
+          updateStepStatus('base_order', 'error', undefined, undefined, undefined, 'Bot was deleted during monitoring');
+          onError?.('Bot was deleted during order placement monitoring');
+          return;
+        }
+        
         if (cycleResponse.ok) {
           const cycles = await cycleResponse.json();
           if (cycles.length > 0) {
@@ -115,6 +123,14 @@ export function MartingaleProgressDialog({
                 'Authorization': `Bearer ${token}`,
               },
             });
+            
+            // Handle bot deletion case for orders API
+            if (ordersResponse.status === 404) {
+              console.log(`[PROGRESS DIALOG] Bot ${botId} orders not found, bot was likely deleted`);
+              updateStepStatus('base_order', 'error', undefined, undefined, undefined, 'Bot was deleted during monitoring');
+              onError?.('Bot was deleted during order placement monitoring');
+              return;
+            }
             
             if (ordersResponse.ok) {
               const orders = await ordersResponse.json();

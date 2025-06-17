@@ -111,8 +111,7 @@ export class UserDataStreamManager {
     console.log(`[USER DATA STREAM] Order update: ${orderId} - ${orderStatus} (${symbol} ${side})`);
     
     if (orderStatus === 'FILLED') {
-      console.log(`[USER DATA STREAM] ✅ Order ${orderId} filled via WebSocket - processing...`);
-        try {
+      try {
         // Find the bot and cycle associated with this order
         const order = await storage.getCycleOrderByExchangeId(orderId.toString());
         if (!order) {
@@ -143,21 +142,25 @@ export class UserDataStreamManager {
         }
         
         // Broadcast order fill notification to all connected clients
-        const wsService = getGlobalWebSocketService();
+        const notification = {
+          botId: order.botId,
+          orderId: order.id,
+          exchangeOrderId: order.exchangeOrderId,
+          orderType: order.orderType,
+          orderSubType: order.orderSubType,
+          symbol: event.s,
+          side: event.S,
+          quantity: event.q,
+          price: event.p || event.L,
+          status: 'filled',
+          filledAt: new Date().toISOString(),
+          timestamp: new Date().toISOString()
+        };
+        
+        // Get WebSocketService instance to broadcast
+        const wsService = (global as any).webSocketService;
         if (wsService) {
-          wsService.broadcastOrderFillNotification({
-            id: order.id,
-            exchangeOrderId: orderId.toString(),
-            botId: botId,
-            orderType: orderType,
-            symbol: symbol,
-            side: side,
-            quantity: executedQuantity,
-            price: price,
-            status: 'filled',
-            commission: commission,
-            commissionAsset: commissionAsset
-          });
+          wsService.broadcastOrderFillNotification(notification);
         }
         
         // Call the trading operations manager to handle the order fill

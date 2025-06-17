@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -11,16 +11,19 @@ import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 import { useMarketData } from "@/hooks/useMarketData";
 import { BotDetailsPage } from "./bot-details";
 import { format } from 'date-fns';
+import { webSocketSingleton } from "@/services/WebSocketSingleton";
 
 export function MyBotsPage() {
   const [activeTab, setActiveTab] = useState('running');
   const [selectedBot, setSelectedBot] = useState<any>(null);
+  const [marketData, setMarketData] = useState<any>({});
+  const [selectedExchangeId, setSelectedExchangeId] = useState<string>('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Initialize order notifications and market data
   useOrderNotifications();
-  const marketData = useMarketData();
+  const marketDataHook = useMarketData();
 
   // Utility functions for bot data calculations
   const formatCurrency = (amount: string | number) => {
@@ -66,53 +69,70 @@ export function MyBotsPage() {
       return 'Days:0 - 00:00:00';
     }
   };
-
   // Fetch bots data (event-driven updates only)
   const { data: bots = [], isLoading: botsLoading } = useQuery<any[]>({
-    queryKey: ['/api/bots']
+    queryKey: ['/api/bots'],
+    staleTime: 60000, // Consider data fresh for 60 seconds
+  });  // Fetch bot statistics
+  const { data: botStats = [] } = useQuery<{
+    botId: number;
+    completedCycles: number;
+    totalPnL: number;
+    totalInvested: number;
+  }[]>({
+    queryKey: ['/api/bot-stats'],
+    staleTime: 30000, // Consider data fresh for 30 seconds
   });
-
-  // Fetch bot statistics
-  const { data: botStats = [] } = useQuery({
-    queryKey: ['/api/bot-stats']
-  });
-
   // Fetch cycle profits for display
-  const { data: cycleProfits = [] } = useQuery({
-    queryKey: ['/api/cycle-profits']
-  });
-
-  // Fetch bot cycles for active bots to get current average prices
+  const { data: cycleProfits = [] } = useQuery<{
+    botId: number;
+    cycleProfit: number;
+  }[]>({
+    queryKey: ['/api/cycle-profits'],
+    staleTime: 30000, // Consider data fresh for 30 seconds
+  });  // Fetch bot cycles for active bots to get current average prices
   const activeBotIds = bots.filter(bot => bot.status === 'active').map(bot => bot.id);
+  
+  // Debug: Log active bot IDs to understand what's being requested
+  console.log('[MY-BOTS] Active bot IDs:', activeBotIds);
+  
   const { data: botCycles = [], isLoading: cyclesLoading, refetch: refetchCycles } = useQuery({
-    queryKey: ['/api/bot-cycles', activeBotIds],
+    queryKey: ['/api/bot-cycles', 'bulk', activeBotIds],
     queryFn: async () => {
-      if (activeBotIds.length === 0) return [];
-      // Use authenticated fetch for each bot's cycles
-      const results = await Promise.all(
-        activeBotIds.map(botId => 
-          fetch(`/api/bot-cycles/${botId}`, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
-              'Content-Type': 'application/json'
-            }
-          }).then(res => res.json())
-        )
-      );
-      return results.flat();
+      if (activeBotIds.length === 0) {
+        console.log('[MY-BOTS] No active bots, skipping cycles fetch');
+        return [];
+      }
+      
+      console.log('[MY-BOTS] Fetching cycles for active bots:', activeBotIds);
+      
+      // Use bulk API endpoint to get cycles for all active bots in a single request
+      const response = await fetch('/api/bot-cycles/bulk', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ botIds: activeBotIds })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch bot cycles: ${response.status}`);
+      }
+      
+      return response.json();
     },
     enabled: activeBotIds.length > 0,
-    refetchInterval: 5000, // Refresh every 5 seconds for real-time updates
-    refetchIntervalInBackground: true
+    staleTime: 30000, // Consider data fresh for 30 seconds
+    // Removed polling - now uses event-driven updates via WebSocket
   });
 
   // Utility functions for calculations
   const getBotData = (botId: number) => {
     return bots.find(b => b.id === botId) || {};
   };
-
   const getBotStats = (botId: number) => {
-    return botStats.find(stats => stats.botId === botId) || { completedCycles: 0, totalPnL: 0, totalInvested: 0 };
+    return botStats.find((stats: { botId: number; completedCycles: number; totalPnL: number; totalInvested: number }) => stats.botId === botId) || { completedCycles: 0, totalPnL: 0, totalInvested: 0 };
   };
 
   const getCompletedCycles = (bot: any) => {
@@ -143,14 +163,13 @@ export function MyBotsPage() {
       return 0;
     }
     
-    const symbolData = marketData.getSymbolData(bot.tradingPair);
+    const symbolData = marketDataHook.getSymbolData(bot.tradingPair);
     const currentPrice = parseFloat(symbolData?.price || '0');
     if (!currentPrice || currentPrice <= 0) {
       return 0;
     }
-    
-    // Find the active cycle for this bot
-    const activeCycle = botCycles.find(cycle => cycle.botId === bot.id && cycle.status === 'active');
+      // Find the active cycle for this bot
+    const activeCycle = botCycles.find((cycle: any) => cycle.botId === bot.id && cycle.status === 'active');
     if (!activeCycle) {
       return 0;
     }
@@ -482,7 +501,7 @@ export function MyBotsPage() {
                 Current Price:
               </span>
               <span className={`font-mono ${isActive ? 'text-crypto-primary' : 'text-gray-400'}`}>
-                ${marketData.getSymbolData(bot.tradingPair)?.price || '0.00'}
+                ${marketDataHook.getSymbolData(bot.tradingPair)?.price || '0.00'}
               </span>
             </div>
           </div>
@@ -527,6 +546,53 @@ export function MyBotsPage() {
     );
   };
 
+  // Subscribe to WebSocket updates for bot symbols
+  useEffect(() => {
+    if (!activeBots || activeBots.length === 0) return;
+
+    const symbolsArray = Array.from(new Set(activeBots.map(bot => bot.tradingPair)));
+    console.log('[MY BOTS] Subscribing to symbols:', symbolsArray);
+
+    // Connect and subscribe using the singleton
+    if (!webSocketSingleton.isConnected()) {
+      webSocketSingleton.connect();
+    }
+
+    // Subscribe to ticker updates for all bot symbols
+    const unsubscribe = webSocketSingleton.subscribe((data: any) => {
+      if (data.type === 'ticker_update' && data.data) {
+        const update = data.data;
+        // Update price in the marketData state
+        setMarketData((prev: any) => ({
+          ...prev,
+          [update.symbol]: {
+            symbol: update.symbol,
+            price: parseFloat(update.price),
+            priceChangePercent: parseFloat(update.priceChangePercent)
+          }
+        }));
+      }
+    });
+
+    // Send subscription message with correct format
+    webSocketSingleton.sendMessage({
+      type: 'subscribe',
+      symbols: symbolsArray,
+      dataType: 'ticker',
+      exchangeId: selectedExchangeId
+    });
+
+    return () => {
+      unsubscribe();
+      // Unsubscribe from symbols when component unmounts
+      webSocketSingleton.sendMessage({
+        type: 'unsubscribe',
+        symbols: symbolsArray,
+        dataType: 'ticker'
+      });
+    };
+  }, [activeBots, selectedExchangeId]);
+
   return (
     <div className="min-h-screen bg-crypto-dark text-white">
       <div className="container mx-auto px-4 py-8">
@@ -570,12 +636,11 @@ export function MyBotsPage() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">Total Realized P&L</p>
-                      <p className={`text-lg font-bold font-mono ${
-                        cycleProfits.reduce((sum: number, cycle) => sum + (cycle.cycleProfit || 0), 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                      <p className="text-xs text-gray-400 uppercase tracking-wider">Total Realized P&L</p>                      <p className={`text-lg font-bold font-mono ${
+                        cycleProfits.reduce((sum: number, cycle: { botId: number; cycleProfit: number }) => sum + (cycle.cycleProfit || 0), 0) >= 0 ? 'text-green-400' : 'text-red-400'
                       }`}>
-                        {cycleProfits.reduce((sum: number, cycle) => sum + (cycle.cycleProfit || 0), 0) >= 0 ? '+' : ''}$
-                        {formatCurrency(cycleProfits.reduce((sum: number, cycle) => sum + (cycle.cycleProfit || 0), 0))}
+                        {cycleProfits.reduce((sum: number, cycle: { botId: number; cycleProfit: number }) => sum + (cycle.cycleProfit || 0), 0) >= 0 ? '+' : ''}$
+                        {formatCurrency(cycleProfits.reduce((sum: number, cycle: { botId: number; cycleProfit: number }) => sum + (cycle.cycleProfit || 0), 0))}
                       </p>
                     </div>
                     <TrendingUp className="w-8 h-8 text-green-400" />
@@ -601,8 +666,7 @@ export function MyBotsPage() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">Completed Cycles</p>
-                      <p className="text-lg font-bold font-mono text-purple-400">
+                      <p className="text-xs text-gray-400 uppercase tracking-wider">Completed Cycles</p>                      <p className="text-lg font-bold font-mono text-purple-400">
                         {cycleProfits.length}
                       </p>
                     </div>

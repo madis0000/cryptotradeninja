@@ -14,7 +14,7 @@ export interface UserStats {
 }
 
 export interface WebSocketMessage {
-  type: 'connected' | 'market_update' | 'balance_update' | 'balance_subscribed' | 'trade_executed' | 'bot_status';
+  type: 'connected' | 'market_update' | 'balance_update' | 'balance_subscribed' | 'trade_executed' | 'bot_status' | 'ticker_update' | 'subscription_confirmed';
   data: any;
   userId?: number;
   exchangeId?: number;

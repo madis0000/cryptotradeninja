@@ -135,25 +135,45 @@ export class MessageHandler {
     await this.klineStreamManager.sendHistoricalKlineData(ws, symbol, interval);
   }
   // Handle subscribe (ticker subscription)
-  private async handleSubscribe(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
-    const { symbols, exchangeId } = message;
-      if (!symbols || !Array.isArray(symbols)) {
-      console.error('[MESSAGE HANDLER] Subscribe missing symbols array');
+  private async handleSubscribe(ws: WebSocket, message: any, clientId: string): Promise<void> {
+    console.log(`[MESSAGE HANDLER] Subscribe request from ${clientId}:`, message);
+    
+    const { symbols, dataType = 'ticker', exchangeId } = message;
+    
+    if (!symbols || !Array.isArray(symbols)) {
+      console.error('[MESSAGE HANDLER] Invalid symbols in subscribe request');
       return;
     }
 
-    const targetExchangeId = exchangeId || await this.getDefaultExchangeId();
-    if (!targetExchangeId) {
-      console.error('[MESSAGE HANDLER] No available exchange found');
-      return;
+    // Store client subscription info
+    if (!this.clientManager.getClient(clientId)) {
+      this.clientManager.addClient(clientId, ws);
     }
-    console.log(`[UNIFIED WS SERVER] Subscribe request: symbols=${symbols.join(', ')}, exchangeId=${targetExchangeId}`);
 
-    // Setup ticker client
-    await this.tickerStreamManager.setupTickerClient(ws, clientId, symbols, targetExchangeId);
-
-    // Send initial data
-    this.tickerStreamManager.sendCurrentMarketData(ws, symbols);
+    // Handle ticker subscriptions
+    if (dataType === 'ticker') {
+      await this.tickerStreamManager.subscribeClient(clientId, symbols, exchangeId);
+      
+      // Send initial data for subscribed symbols
+      for (const symbol of symbols) {
+        const cachedPrice = this.tickerStreamManager.getCachedPrice(symbol);
+        if (cachedPrice) {
+          ws.send(JSON.stringify({
+            type: 'ticker_update',
+            data: cachedPrice
+          }));
+        }
+      }
+      
+      console.log(`[MESSAGE HANDLER] Client ${clientId} subscribed to tickers:`, symbols);
+    }
+    
+    // Send confirmation
+    ws.send(JSON.stringify({
+      type: 'subscription_confirmed',
+      symbols,
+      dataType
+    }));
   }  // Handle configure stream (kline configuration)
   private async handleConfigureStream(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
     const { dataType, symbols, interval, exchangeId } = message;

@@ -88,7 +88,6 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
   // Get real-time market data via WebSocket
   const { getSymbolData } = useMarketData();
   const currentMarketData = getSymbolData(bot.tradingPair);
-
   // Fetch bot orders for selected bot (event-driven updates only)
   const { data: botOrders = [], isLoading: ordersLoading } = useQuery<any[]>({
     queryKey: ['/api/bot-orders', bot?.id],
@@ -102,9 +101,9 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
       if (!response.ok) throw new Error('Failed to fetch orders');
       return response.json();
     },
-    enabled: !!bot?.id
+    enabled: !!bot?.id,
+    staleTime: 30000, // Consider data fresh for 30 seconds
   });
-
   // Fetch bot cycles for current cycle information
   const { data: botCycles = [] } = useQuery({
     queryKey: ['/api/bot-cycles', bot?.id],
@@ -118,9 +117,9 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
       if (!response.ok) throw new Error('Failed to fetch cycles');
       return response.json();
     },
-    enabled: !!bot?.id
+    enabled: !!bot?.id,
+    staleTime: 30000, // Consider data fresh for 30 seconds
   });
-
   // Fetch individual bot data for the selected bot
   const { data: selectedBotData } = useQuery({
     queryKey: ['/api/bots', bot?.id],
@@ -134,7 +133,8 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
       if (!response.ok) throw new Error('Failed to fetch bot data');
       return response.json();
     },
-    enabled: !!bot?.id
+    enabled: !!bot?.id,
+    staleTime: 60000, // Consider data fresh for 60 seconds
   });
 
   // Get current active cycle - prioritize active cycles, then get highest cycle number

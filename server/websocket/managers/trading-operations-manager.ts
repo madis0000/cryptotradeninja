@@ -769,7 +769,8 @@ export class TradingOperationsManager {
         const orderParams = new URLSearchParams({
           symbol: bot.tradingPair,
           side: bot.direction === 'long' ? 'BUY' : 'SELL',
-          type: 'LIMIT',          quantity: validatedQuantity.toString(),
+          type: 'LIMIT',
+          quantity: validatedQuantity.toString(),
           price: validatedPrice.toFixed(filters.priceDecimals),
           timeInForce: 'GTC', // FIX: Add missing timeInForce parameter
           timestamp: Date.now().toString()
@@ -1024,15 +1025,20 @@ export class TradingOperationsManager {
       if (bot.cooldownEnabled && bot.cooldownBetweenRounds > 0) {
         console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⏱️ Cooldown enabled: ${bot.cooldownBetweenRounds}s`);
         console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 💤 Starting cooldown period before new cycle...`);
-        
-        // Schedule new cycle after cooldown
-        setTimeout(async () => {
+          // Schedule new cycle after cooldown
+        const timeoutId = setTimeout(async () => {
           try {
+            // Remove from pending timers when executing
+            this.pendingCycleStarts.delete(botId);
             await this.startNewCycle(botId);
           } catch (error) {
             console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Failed to start new cycle after cooldown:`, error);
           }
         }, bot.cooldownBetweenRounds * 1000);
+        
+        // Store the timeout ID for cleanup purposes
+        this.pendingCycleStarts.set(botId, timeoutId);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⏰ Scheduled new cycle for bot ${botId} in ${bot.cooldownBetweenRounds}s`);
         
       } else {
         console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚀 No cooldown - starting new cycle immediately`);
@@ -1111,5 +1117,45 @@ export class TradingOperationsManager {
       console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Failed to place multiple safety orders:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Cancel any pending cycle start timers for a bot
+   */
+  cancelPendingCycleStart(botId: number): void {
+    const timeoutId = this.pendingCycleStarts.get(botId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      this.pendingCycleStarts.delete(botId);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⏹️ Cancelled pending cycle start for bot ${botId}`);
+    }
+  }
+
+  /**
+   * Clean up all resources for a bot (call when bot is deleted)
+   */
+  cleanupBot(botId: number): void {
+    console.log(`[UNIFIED WS] [TRADING OPERATIONS] 🧹 Cleaning up resources for bot ${botId}`);
+    
+    // Cancel any pending cycle start timers
+    this.cancelPendingCycleStart(botId);
+    
+    // Remove any cycle operation locks
+    this.cycleOperationLocks.delete(botId);
+    
+    // Clean up any pending order requests for this bot
+    const requestsToRemove: string[] = [];
+    this.pendingOrderRequests.forEach((request, key) => {
+      // If the request key contains the bot ID, mark it for removal
+      if (key.includes(`bot-${botId}-`)) {
+        requestsToRemove.push(key);
+      }
+    });
+    
+    requestsToRemove.forEach(key => {
+      this.pendingOrderRequests.delete(key);
+    });
+    
+    console.log(`[UNIFIED WS] [TRADING OPERATIONS] ✅ Cleanup completed for bot ${botId}`);
   }
 }

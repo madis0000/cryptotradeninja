@@ -376,4 +376,8 @@ export class WebSocketService {
     
     console.log('[UNIFIED WS] [WEBSOCKET SERVICE] Shutdown complete');
   }
+
+  async cleanupBot(botId: number): Promise<void> {
+    return this.tradingOperationsManager.cleanupBot(botId);
+  }
 }

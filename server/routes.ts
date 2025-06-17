@@ -144,23 +144,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = loginSchema.parse(req.body);
       
-      // Add detailed logging for debugging
-      console.log('[AUTH] Login attempt for email:', validatedData.email);
-      
       const user = await storage.getUserByEmail(validatedData.email);
-      if (!user) {
-        console.log('[AUTH] User not found:', validatedData.email);
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-      
-      if (!user.isActive) {
-        console.log('[AUTH] User inactive:', validatedData.email);
+      if (!user || !user.isActive) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
       const isValidPassword = await comparePassword(validatedData.password, user.password);
       if (!isValidPassword) {
-        console.log('[AUTH] Invalid password for user:', validatedData.email);
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
@@ -170,8 +160,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate token
       const token = generateToken(user.id, user.username, user.email);
 
-      console.log('[AUTH] Login successful for user:', user.email);
-      
       res.json({
         token,
         user: {
@@ -181,13 +169,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
     } catch (error) {
-      console.error('[AUTH] Login error:', error);
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: "Validation error", details: error.errors });
       } else {
-        // Log the full error for debugging
-        console.error('[AUTH] Unexpected login error:', error);
-        res.status(500).json({ error: "Failed to login. Please try again." });
+        res.status(500).json({ error: "Failed to login" });
       }
     }
   });
@@ -596,6 +581,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'inactive'
       });
       
+      // Clean up any pending cycle start timers for stopped bot
+      console.log(`[BOT STOP] Cleaning up pending timers for bot ${botId}`);
+      await wsService.cleanupBot(botId);
+      
       // Log bot stop
       const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
       logger.logBotStopped(`Manual stop - ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}`);
@@ -648,6 +637,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trades = await storage.getTradesByBotId(id);
       
       console.log(`[DELETE BOT] Deleting bot ${id} with ${cycles.length} cycles, ${orders.length} orders, ${trades.length} trades`);
+      
+      // Clean up any pending timers and resources for this bot
+      console.log(`[DELETE BOT] Cleaning up bot resources for bot ${id}`);
+      await wsService.cleanupBot(id);
       
       await storage.deleteTradingBot(id);
       

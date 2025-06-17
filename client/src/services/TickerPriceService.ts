@@ -142,24 +142,24 @@ class TickerPriceService {
     console.log('[TICKER PRICE SERVICE] Tracking symbols for price updates:', symbolsArray);
   }
     private handleMarketUpdate(data: MarketData): void {
-    // Only process symbols that we're tracking
-    if (!this.requestedSymbols.has(data.symbol)) {
-      return;
-    }
-    
+    // Update price in our cache regardless of whether it's in requestedSymbols
+    // This ensures we capture all price updates from the WebSocket
     console.log(`[TICKER PRICE SERVICE] Received price update: ${data.symbol} = $${data.price}`);
     
     // Update price in our cache
     this.prices[data.symbol] = data.price;
     
-    // Notify all subscribers
-    this.subscribers.forEach(callback => {
-      try {
-        callback(this.prices);
-      } catch (error) {
-        console.error('[TICKER PRICE SERVICE] Error calling subscriber callback:', error);
-      }
-    });
+    // Only notify subscribers if they're tracking this symbol
+    if (this.requestedSymbols.has(data.symbol)) {
+      // Notify all subscribers
+      this.subscribers.forEach(callback => {
+        try {
+          callback(this.prices);
+        } catch (error) {
+          console.error('[TICKER PRICE SERVICE] Error calling subscriber callback:', error);
+        }
+      });
+    }
   }
   /**
    * Clear all cached prices and subscriptions

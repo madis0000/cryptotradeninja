@@ -3,7 +3,8 @@ import { TickerClient, MarketUpdate } from '../types';
 import { ExchangeApiService } from '../services/exchange-api-service';
 
 export class TickerStreamManager {
-  private tickerClients = new Map<string, TickerClient>();
+  private clients: Map<string, TickerClient> = new Map();
+  private cachedPrices: Map<string, MarketUpdate> = new Map();
   private tickerBinanceWs: WebSocket | null = null;
   private activeTickerSubscriptions = new Set<string>();
   private exchangeApiService: ExchangeApiService;
@@ -20,10 +21,10 @@ export class TickerStreamManager {
     this.currentExchangeId = exchangeId;
     
     // Remove existing client if it exists
-    if (this.tickerClients.has(clientId)) {
-      const existingClient = this.tickerClients.get(clientId)!;
+    if (this.clients.has(clientId)) {
+      const existingClient = this.clients.get(clientId)!;
       console.log(`[UNIFIED WS] [TICKER CLIENT] Removing existing client ${clientId} with symbols: ${Array.from(existingClient.symbols).join(', ')}`);
-      this.tickerClients.delete(clientId);
+      this.clients.delete(clientId);
     }
     
     // Create new client
@@ -35,23 +36,23 @@ export class TickerStreamManager {
     };
     
     console.log(`[UNIFIED WS] [TICKER CLIENT] Created new client ${clientId} with symbols: ${Array.from(client.symbols).join(', ')}`);
-    this.tickerClients.set(clientId, client);
+    this.clients.set(clientId, client);
     
     // Ensure ticker stream is running
     await this.ensureTickerStream();
   }
   // Remove ticker client
   removeClient(clientId: string): void {
-    if (this.tickerClients.has(clientId)) {
+    if (this.clients.has(clientId)) {
       console.log(`[UNIFIED WS] [TICKER CLIENT] Removing client ${clientId}`);
-      this.tickerClients.delete(clientId);
+      this.clients.delete(clientId);
       this.updateTickerSubscriptions();
     }
   }
 
   // Mark client as inactive
   deactivateClient(clientId: string): void {
-    const client = this.tickerClients.get(clientId);
+    const client = this.clients.get(clientId);
     if (client) {
       console.log(`[TICKER CLIENT] Deactivating client ${clientId}`);
       client.isActive = false;
@@ -172,7 +173,7 @@ export class TickerStreamManager {
   // Get active ticker symbols
   private getActiveTickerSymbols(): Set<string> {
     const activeSymbols = new Set<string>();
-    this.tickerClients.forEach(client => {
+    this.clients.forEach(client => {
       if (client.isActive) {
         client.symbols.forEach(symbol => activeSymbols.add(symbol.toUpperCase()));
       }
@@ -215,9 +216,12 @@ export class TickerStreamManager {
 
   // Broadcast to ticker clients
   private broadcastToTickerClients(marketUpdate: MarketUpdate): void {
+    // Cache the latest price
+    this.cachedPrices.set(marketUpdate.symbol, marketUpdate);
+    
     let activeClientCount = 0;
     
-    this.tickerClients.forEach(client => {
+    this.clients.forEach(client => {
       if (client.isActive && client.symbols.has(marketUpdate.symbol.toUpperCase())) {
         if (client.ws.readyState === WebSocket.OPEN) {
           client.ws.send(JSON.stringify({
@@ -238,7 +242,7 @@ export class TickerStreamManager {
 
   // Get ticker clients count
   getActiveClientsCount(): number {
-    return Array.from(this.tickerClients.values()).filter(client => client.isActive).length;
+    return Array.from(this.clients.values()).filter(client => client.isActive).length;
   }
 
   // Get active subscriptions count
