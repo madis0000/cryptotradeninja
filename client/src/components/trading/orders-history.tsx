@@ -7,8 +7,8 @@ interface OrdersHistoryProps {
 export function OrdersHistory({ className }: OrdersHistoryProps) {
   return (
     <div className={className}>
-      <Card className="bg-crypto-dark border-0 h-full rounded-none">
-        <CardHeader className="py-3 px-4 border-b border-gray-800">
+      <Card className="bg-crypto-dark border-0 h-full rounded-none flex flex-col">
+        <CardHeader className="py-3 px-4 border-b border-gray-800 shrink-0">
           <div className="flex space-x-4 text-xs">
             <button className="text-crypto-accent">Open Orders(0)</button>
             <button className="text-crypto-light hover:text-white">Order History</button>
@@ -17,7 +17,7 @@ export function OrdersHistory({ className }: OrdersHistoryProps) {
             <button className="text-crypto-light hover:text-white">Grid Orders</button>
           </div>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="p-4 flex-1 overflow-y-auto">
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <div className="text-4xl text-gray-500 mb-4">

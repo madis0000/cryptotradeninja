@@ -18,14 +18,13 @@ if (existsSync('dist')) {
 
 // Build client with increased memory and timeout handling
 console.log('📦 Building client (frontend)...');
-const clientBuild = spawn('node', [
-  '--max-old-space-size=4096',
-  './node_modules/.bin/vite',
-  'build',
-  '--mode', 'production'
+const clientBuild = spawn('npm', [
+  'run',
+  'build'
 ], {
   stdio: 'inherit',
-  env: { ...process.env, NODE_ENV: 'production' }
+  env: { ...process.env, NODE_ENV: 'production' },
+  shell: true
 });
 
 clientBuild.on('close', (code) => {
@@ -38,7 +37,8 @@ clientBuild.on('close', (code) => {
   console.log('🔧 Building server...');
   
   // Build server
-  const serverBuild = spawn('./node_modules/.bin/esbuild', [
+  const serverBuild = spawn('npx', [
+    'esbuild',
     'server/index.ts',
     '--platform=node',
     '--packages=external',
@@ -47,7 +47,8 @@ clientBuild.on('close', (code) => {
     '--outdir=dist',
     '--minify'
   ], {
-    stdio: 'inherit'
+    stdio: 'inherit',
+    shell: true
   });
   
   serverBuild.on('close', (serverCode) => {

@@ -380,4 +380,35 @@ export class WebSocketService {
   async cleanupBot(botId: number): Promise<void> {
     return this.tradingOperationsManager.cleanupBot(botId);
   }
+
+  // Place order via REST API with proper error handling and logging
+  async placeOrderViaRest(exchangeId: number, orderParams: any): Promise<any> {
+    console.log(`[WEBSOCKET SERVICE] placeOrderViaRest called with exchangeId: ${exchangeId}`);
+    console.log(`[WEBSOCKET SERVICE] Order params:`, orderParams);
+    
+    try {
+      // Use the trading operations manager's placeOrder method
+      const orderRequest = {
+        symbol: orderParams.symbol,
+        side: orderParams.side,
+        type: orderParams.type,
+        quantity: orderParams.quantity,
+        price: orderParams.price,
+        timeInForce: orderParams.timeInForce || 'GTC'
+      };
+      
+      const result = await this.tradingOperationsManager.placeOrder(exchangeId, orderRequest);
+      
+      if (!result) {
+        throw new Error('Order placement failed - no response from exchange');
+      }
+      
+      console.log(`[WEBSOCKET SERVICE] Order placed successfully:`, result);
+      return result;
+      
+    } catch (error) {
+      console.error(`[WEBSOCKET SERVICE] placeOrderViaRest failed:`, error);
+      throw error;
+    }
+  }
 }

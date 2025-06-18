@@ -239,8 +239,8 @@ export function MartingaleStrategy({
       direction: localDirection,
       status: "active",
       
-      // Order Settings
-      baseOrderAmount: config.baseOrderSize,
+      // Order Settings - ensure baseOrderAmount is for quote asset (USDT)
+      baseOrderAmount: config.baseOrderSize, // This is in USDT for market orders
       safetyOrderAmount: config.safetyOrderSize,
       maxSafetyOrders: parseInt(config.maxSafetyOrders),
       activeSafetyOrdersEnabled: config.activeSafetyOrdersEnabled,
@@ -264,6 +264,17 @@ export function MartingaleStrategy({
       lowerPriceLimit: config.lowerPrice || null,
       upperPriceLimit: config.upperPrice || null
     };
+
+    // Add validation for minimum order amount
+    const minOrderAmount = 10; // Most exchanges have a minimum order value
+    if (parseFloat(config.baseOrderSize) < minOrderAmount) {
+      toast({
+        title: "Order Amount Too Small",
+        description: `Minimum order amount is ${minOrderAmount} USDT`,
+        variant: "destructive"
+      });
+      return;
+    }
 
     createBotMutation.mutate(botData);
   };

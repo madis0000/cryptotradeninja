@@ -58,8 +58,7 @@ export class TickerStreamManager {
       client.isActive = false;
       this.updateTickerSubscriptions();
     }
-  }
-  // Ensure ticker stream is running
+  }  // Ensure ticker stream is running
   private async ensureTickerStream(): Promise<void> {
     if (this.tickerBinanceWs && this.tickerBinanceWs.readyState === WebSocket.OPEN) {
       console.log('[UNIFIED WS] [TICKER STREAM] Ticker stream already active, updating subscriptions');
@@ -70,12 +69,16 @@ export class TickerStreamManager {
     console.log('[UNIFIED WS] [TICKER STREAM] Starting ticker stream');
     
     // Get WebSocket URL from exchange configuration
-    const wsUrl = await this.exchangeApiService.getWebSocketStreamUrl(this.currentExchangeId);
-    if (!wsUrl) {
+    const baseWsUrl = await this.exchangeApiService.getWebSocketStreamUrl(this.currentExchangeId);
+    if (!baseWsUrl) {
       console.error(`[TICKER STREAM] No WebSocket URL found for exchange ${this.currentExchangeId}`);
       return;
     }
 
+    // Use combined stream endpoint for multiple ticker subscriptions
+    // According to Binance docs: /stream?streams=<streamName1>/<streamName2>
+    const wsUrl = `${baseWsUrl}/stream`;
+    
     console.log(`[TICKER STREAM] Connecting to: ${wsUrl}`);
     this.tickerBinanceWs = new WebSocket(wsUrl);
     

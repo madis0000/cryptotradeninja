@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Binance WebSocket URLs</title>
+</head>
+<body>
+    <div id="output"></div>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message) {
+            const div = document.createElement('div');
+            div.textContent = `${new Date().toISOString()}: ${message}`;
+            output.appendChild(div);
+            console.log(message);
+        }
+        
+        // Test different Binance WebSocket URLs
+        const urlsToTest = [
+            'wss://stream.testnet.binance.vision:9443/ws',           // Current (failing)
+            'wss://testnet.binance.vision/ws',                      // Without port
+            'wss://stream.testnet.binance.vision/ws',               // Without port 9443
+            'wss://testnet.binance.vision:9443/ws',                 // With port but different subdomain
+            'wss://stream.binance.com:9443/ws',                     // Mainnet for comparison
+        ];
+        
+        async function testWebSocketUrl(url, timeout = 5000) {
+            return new Promise((resolve) => {
+                log(`Testing: ${url}`);
+                
+                const ws = new WebSocket(url);
+                const timer = setTimeout(() => {
+                    ws.close();
+                    resolve({ url, status: 'timeout', error: 'Connection timeout' });
+                }, timeout);
+                
+                ws.onopen = () => {
+                    clearTimeout(timer);
+                    log(`✅ ${url} - Connected successfully`);
+                    
+                    // Try to subscribe to a ticker
+                    ws.send(JSON.stringify({
+                        method: "SUBSCRIBE",
+                        params: ["btcusdt@ticker"],
+                        id: 1
+                    }));
+                    
+                    // Wait a bit for response
+                    setTimeout(() => {
+                        ws.close();
+                        resolve({ url, status: 'success', error: null });
+                    }, 2000);
+                };
+                
+                ws.onerror = (error) => {
+                    clearTimeout(timer);
+                    log(`❌ ${url} - Error: ${error.type || 'Unknown error'}`);
+                    resolve({ url, status: 'error', error: error.type || 'Connection error' });
+                };
+                
+                ws.onclose = (event) => {
+                    clearTimeout(timer);
+                    if (event.code !== 1000) {
+                        log(`❌ ${url} - Closed with code: ${event.code}, reason: ${event.reason}`);
+                        resolve({ url, status: 'closed', error: `Code: ${event.code}, Reason: ${event.reason}` });
+                    }
+                };
+                
+                ws.onmessage = (event) => {
+                    log(`📨 ${url} - Received: ${event.data.substring(0, 100)}...`);
+                };
+            });
+        }
+        
+        async function testAllUrls() {
+            log('Starting WebSocket URL tests...');
+            
+            for (const url of urlsToTest) {
+                const result = await testWebSocketUrl(url);
+                log(`Result for ${result.url}: ${result.status} ${result.error ? '- ' + result.error : ''}`);
+                
+                // Wait between tests
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            
+            log('All tests completed!');
+        }
+        
+        // Start tests
+        testAllUrls();
+    </script>
+</body>
+</html>

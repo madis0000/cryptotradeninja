@@ -100,45 +100,73 @@ export function ensureFilterCompliance(
   filters: any
 ): { quantity: number; price: number; isValid: boolean; error?: string } {
   try {
-    const adjustedPrice = adjustPrice(price, filters.tickSize, filters.priceDecimals);
-    const adjustedQuantity = adjustQuantity(quantity, filters.stepSize, filters.minQty, filters.qtyDecimals);
+    console.log(`[BINANCE FILTERS] Validating compliance for quantity: ${quantity}, price: ${price}`);
+    console.log(`[BINANCE FILTERS] Filters: tickSize=${filters.tickSize}, stepSize=${filters.stepSize}, minQty=${filters.minQty}`);
     
-    // Validate final values with better floating point handling
-    const priceRemainder = Math.abs(adjustedPrice / filters.tickSize - Math.round(adjustedPrice / filters.tickSize));
-    const qtyRemainder = Math.abs(adjustedQuantity / filters.stepSize - Math.round(adjustedQuantity / filters.stepSize));
+    // Apply adjustments multiple times to ensure compliance
+    let adjustedPrice = price;
+    let adjustedQuantity = quantity;
+    
+    // Price adjustment with multiple passes
+    for (let i = 0; i < 3; i++) {
+      adjustedPrice = adjustPrice(adjustedPrice, filters.tickSize, filters.priceDecimals);
+      const priceRemainder = Math.abs((adjustedPrice / filters.tickSize) - Math.round(adjustedPrice / filters.tickSize));
+      if (priceRemainder < 0.0000001) break;
+    }
+    
+    // Quantity adjustment with multiple passes
+    for (let i = 0; i < 3; i++) {
+      adjustedQuantity = adjustQuantity(adjustedQuantity, filters.stepSize, filters.minQty, filters.qtyDecimals);
+      const qtyRemainder = Math.abs((adjustedQuantity / filters.stepSize) - Math.round(adjustedQuantity / filters.stepSize));
+      if (qtyRemainder < 0.0000001 && adjustedQuantity >= filters.minQty) break;
+    }
+    
+    // Final validation with stricter checks
+    const priceRemainder = Math.abs((adjustedPrice / filters.tickSize) - Math.round(adjustedPrice / filters.tickSize));
+    const qtyRemainder = Math.abs((adjustedQuantity / filters.stepSize) - Math.round(adjustedQuantity / filters.stepSize));
     
     const priceValid = priceRemainder < 0.0000001;
     const qtyValid = adjustedQuantity >= filters.minQty && qtyRemainder < 0.0000001;
     
+    console.log(`[BINANCE FILTERS] Validation results - Price: ${priceValid}, Quantity: ${qtyValid}`);
+    console.log(`[BINANCE FILTERS] Adjusted values - Price: ${adjustedPrice}, Quantity: ${adjustedQuantity}`);
+    
     if (!priceValid) {
+      const error = `PRICE_FILTER: Price ${adjustedPrice} not compliant with tickSize ${filters.tickSize} (remainder: ${priceRemainder})`;
+      console.error(`[BINANCE FILTERS] ${error}`);
       return {
         quantity: adjustedQuantity,
         price: adjustedPrice,
         isValid: false,
-        error: `PRICE_FILTER: Price ${adjustedPrice} not compliant with tickSize ${filters.tickSize}`
+        error
       };
     }
     
     if (!qtyValid) {
+      const error = `LOT_SIZE: Quantity ${adjustedQuantity} not compliant with stepSize ${filters.stepSize} or below minQty ${filters.minQty} (remainder: ${qtyRemainder})`;
+      console.error(`[BINANCE FILTERS] ${error}`);
       return {
         quantity: adjustedQuantity,
         price: adjustedPrice,
         isValid: false,
-        error: `LOT_SIZE: Quantity ${adjustedQuantity} not compliant with stepSize ${filters.stepSize} or below minQty ${filters.minQty}`
+        error
       };
     }
     
+    console.log(`[BINANCE FILTERS] ✅ Filter compliance validation PASSED`);
     return {
       quantity: adjustedQuantity,
       price: adjustedPrice,
       isValid: true
     };
   } catch (error) {
+    const errorMsg = `Filter validation error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    console.error(`[BINANCE FILTERS] ${errorMsg}`);
     return {
       quantity,
       price,
       isValid: false,
-      error: `Filter validation error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      error: errorMsg
     };
   }
 }

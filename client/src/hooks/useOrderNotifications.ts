@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useToast } from '@/hooks/use-toast';
 import { audioService } from '@/services/audioService';
 import { webSocketSingleton } from '@/services/WebSocketSingleton';
 
@@ -19,39 +18,29 @@ export function useOrderNotifications() {
   const [settings, setSettings] = useState<OrderNotificationSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   // Subscribe to WebSocket order fill notifications
   useEffect(() => {
     const unsubscribe = webSocketSingleton.subscribe(async (data: any) => {
-      if (data.type === 'order_fill_notification') {
-        console.log('[ORDER NOTIFICATIONS] Order filled for bot', data.data.botId, 'invalidating cache...');
+      if (data.type === 'order_fill_notification' && settings) {
+        await handleOrderFillNotification(data.data);
         
-        const notification = data.data;
-        
-        // Invalidate relevant queries
-        queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/bot-stats'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/cycle-profits'] });
-        queryClient.invalidateQueries({ queryKey: [`/api/bot-orders/${notification.botId}`] });
-        queryClient.invalidateQueries({ queryKey: ['/api/portfolio'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
-        
-        // Show toast notification
-        toast({
-          title: "Order Filled",
-          description: `${notification.orderType} order filled for ${notification.symbol}`,
-        });
-        
-        // Play audio notification
-        const settings = await queryClient.fetchQuery({
-          queryKey: ['/api/settings'],
-          staleTime: Infinity,
-        });
-        
-        if (settings?.soundNotificationsEnabled) {
-          await audioService.playOrderFillNotification(notification.orderType, settings);
+        // Invalidate relevant queries when orders are filled to update UI
+        const botId = data.data?.botId;
+        if (botId) {
+          console.log(`[ORDER NOTIFICATIONS] Order filled for bot ${botId}, invalidating cache...`);
+          
+          // Invalidate bot-related queries
+          queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bot-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/cycle-profits'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bot-orders', botId] });
+          queryClient.invalidateQueries({ queryKey: ['/api/bot-cycles', botId] });
+          
+          // Also invalidate portfolio-related queries since orders affect portfolio
+          queryClient.invalidateQueries({ queryKey: ['/api/portfolio'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
         }
       }
     });
@@ -59,7 +48,7 @@ export function useOrderNotifications() {
     return () => {
       unsubscribe();
     };
-  }, [queryClient, toast]);
+  }, [settings, queryClient]);
 
   // Load user notification settings
   useEffect(() => {
@@ -102,6 +91,30 @@ export function useOrderNotifications() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOrderFillNotification = async (orderData: any) => {
+    if (!settings?.soundNotificationsEnabled) return;
+
+    try {
+      // Determine order type from order data
+      let orderType: 'take_profit' | 'safety_order' | 'base_order' = 'base_order';
+      
+      if (orderData.orderType === 'TAKE_PROFIT' || orderData.side === 'SELL') {
+        orderType = 'take_profit';
+      } else if (orderData.orderSubType === 'SAFETY_ORDER') {
+        orderType = 'safety_order';
+      } else if (orderData.orderSubType === 'BASE_ORDER') {
+        orderType = 'base_order';
+      }
+
+      // Play appropriate notification sound
+      await audioService.playOrderFillNotification(orderType, settings);
+      
+      console.log(`[ORDER NOTIFICATION] Played ${orderType} sound for order ${orderData.orderId}`);
+    } catch (error) {
+      console.error('Failed to play order notification:', error);
     }
   };
 

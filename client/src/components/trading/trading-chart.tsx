@@ -479,16 +479,16 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy, klineDat
   };
 
   return (
-    <div className={cn("bg-card border-gray-600 rounded-lg", className)}>
+    <div className={cn("bg-crypto-dark border-gray-800 rounded-none flex flex-col", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-600 trading-chart-header">
-        <div className="flex items-center space-x-4" style={{ outline: 'none', border: 'none' }}>
-          <h3 className="text-lg font-semibold" style={{ outline: 'none', border: 'none' }}>{symbol} Chart</h3>
+      <div className="flex items-center justify-between p-4 border-b border-gray-800 shrink-0">
+        <div className="flex items-center space-x-4">
+          <h3 className="text-lg font-semibold text-white">{symbol} Chart</h3>
           <div className={cn(
             "w-2 h-2 rounded-full",
             klineData ? "bg-green-500" : "bg-yellow-500"
           )} />
-          <span className="text-sm text-muted-foreground" style={{ outline: 'none', border: 'none' }}>
+          <span className="text-sm text-crypto-light">
             {klineData ? 'Data Available' : 'Waiting for Data'}
           </span>
         </div>
@@ -502,8 +502,8 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy, klineDat
               className={cn(
                 "px-3 py-1 text-xs rounded transition-colors",
                 currentInterval === interval.value
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-muted"
+                  ? "bg-crypto-accent text-black"
+                  : "text-crypto-light hover:bg-crypto-darker hover:text-white"
               )}
             >
               {interval.label}
@@ -513,14 +513,14 @@ export function TradingChart({ className, symbol = 'BTCUSDT', strategy, klineDat
       </div>
 
       {/* Chart container */}
-      <div className="relative">
-        <div ref={chartContainerRef} className="w-full h-[400px]" />
+      <div className="flex-1 min-h-0 relative">
+        <div ref={chartContainerRef} className="w-full h-full" />
         
         {!klineData && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/80">
+          <div className="absolute inset-0 flex items-center justify-center bg-crypto-dark/90">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Waiting for chart data...</p>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-crypto-accent mx-auto mb-2" />
+              <p className="text-sm text-crypto-light">Waiting for chart data...</p>
             </div>
           </div>
         )}

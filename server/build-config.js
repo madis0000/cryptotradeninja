@@ -23,7 +23,21 @@ const buildConfig = {
     'canvas',
     'sharp',
     '@replit/vite-plugin-cartographer',
-    '@replit/vite-plugin-runtime-error-modal'
+    '@replit/vite-plugin-runtime-error-modal',
+    // Node.js built-in modules
+    'fs',
+    'path',
+    'crypto',
+    'os',
+    'util',
+    'stream',
+    'events',
+    'url',
+    'querystring',
+    'buffer',
+    'zlib',
+    // Problematic packages that should remain external
+    'dotenv'
   ],
   define: {
     'process.env.NODE_ENV': '"production"'

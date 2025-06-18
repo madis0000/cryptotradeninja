@@ -92,9 +92,20 @@ export class MessageHandler {
           case 'unsubscribe_balance':
           await this.handleUnsubscribeBalance(ws, message, clientId);
           break;
-        
-        case 'subscribe_ticker':
+          case 'subscribe_ticker':
           await this.handleSubscribeTicker(ws, message, clientId);
+          break;
+        
+        case 'get_trading_balance':
+          await this.handleGetTradingBalance(ws, message, clientId);
+          break;
+        
+        case 'subscribe_trading_balance':
+          await this.handleSubscribeTradingBalance(ws, message, clientId);
+          break;
+        
+        case 'unsubscribe_trading_balance':
+          await this.handleUnsubscribeTradingBalance(ws, message, clientId);
           break;
         
         default:
@@ -145,25 +156,19 @@ export class MessageHandler {
       return;
     }
 
-    // Store client subscription info
-    if (!this.clientManager.getClient(clientId)) {
-      this.clientManager.addClient(clientId, ws);
+    const targetExchangeId = exchangeId || await this.getDefaultExchangeId();
+    if (!targetExchangeId) {
+      console.error('[MESSAGE HANDLER] No available exchange found');
+      return;
     }
 
     // Handle ticker subscriptions
     if (dataType === 'ticker') {
-      await this.tickerStreamManager.subscribeClient(clientId, symbols, exchangeId);
+      // Setup ticker client instead of using subscribeClient
+      await this.tickerStreamManager.setupTickerClient(ws, clientId, symbols, targetExchangeId);
       
-      // Send initial data for subscribed symbols
-      for (const symbol of symbols) {
-        const cachedPrice = this.tickerStreamManager.getCachedPrice(symbol);
-        if (cachedPrice) {
-          ws.send(JSON.stringify({
-            type: 'ticker_update',
-            data: cachedPrice
-          }));
-        }
-      }
+      // Send initial market data for subscribed symbols
+      this.tickerStreamManager.sendCurrentMarketData(ws, symbols);
       
       console.log(`[MESSAGE HANDLER] Client ${clientId} subscribed to tickers:`, symbols);
     }
@@ -391,10 +396,113 @@ export class MessageHandler {
         message: 'Subscribed to ticker updates',
         clientId
       }));
+    }    // Send initial market data
+    this.tickerStreamManager.sendCurrentMarketData(ws, symbols);
+  }
+
+  // Handle trading balance request (returns base and quote currencies for a trading symbol)
+  private async handleGetTradingBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
+    const { symbol, exchangeId } = message;
+    
+    if (!symbol) {
+      console.error('[MESSAGE HANDLER] Get trading balance missing symbol');
+      return;
     }
 
-    // Send initial market data
-    this.tickerStreamManager.sendCurrentMarketData(ws, symbols);
+    const defaultExchangeId = await this.getDefaultExchangeId();
+    const targetExchangeId = exchangeId || defaultExchangeId;
+    
+    if (!targetExchangeId) {
+      console.error(`[MESSAGE HANDLER] No available exchange found for trading balance request`);
+      return;
+    }
+    
+    console.log(`[MESSAGE HANDLER] Get trading balance request from client ${clientId}: symbol=${symbol}, exchangeId=${targetExchangeId}`);
+    
+    // Extract base and quote assets from symbol
+    const baseAsset = symbol.replace(/USDT|USDC|BUSD/g, '');
+    const quoteAsset = symbol.includes('USDT') ? 'USDT' : 
+                      symbol.includes('USDC') ? 'USDC' : 'BUSD';
+    
+    try {
+      const balanceResult = await this.tradingOperationsManager.getAccountBalance(targetExchangeId, 'ALL');
+      console.log(`[MESSAGE HANDLER] Retrieved trading balance for exchange ${targetExchangeId}:`, balanceResult);
+      
+      if (balanceResult.data && balanceResult.data.balances) {
+        const baseBalance = balanceResult.data.balances.find((balance: any) => balance.asset === baseAsset);
+        const quoteBalance = balanceResult.data.balances.find((balance: any) => balance.asset === quoteAsset);
+        
+        console.log(`[MESSAGE HANDLER] Found ${baseAsset} balance:`, baseBalance);
+        console.log(`[MESSAGE HANDLER] Found ${quoteAsset} balance:`, quoteBalance);
+        
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'trading_balance_update',
+            exchangeId: targetExchangeId,
+            symbol: symbol,
+            baseBalance: baseBalance || { asset: baseAsset, free: '0.00000000', locked: '0.00000000' },
+            quoteBalance: quoteBalance || { asset: quoteAsset, free: '0.00000000', locked: '0.00000000' },
+            timestamp: balanceResult.timestamp || Date.now(),
+            clientId
+          }));
+        }
+      }
+    } catch (error) {
+      console.error(`[MESSAGE HANDLER] Error getting trading balance:`, error);
+      
+      if (ws.readyState === WebSocket.OPEN) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        ws.send(JSON.stringify({
+          type: 'balance_error',
+          message: 'Failed to fetch trading balance',
+          error: errorMessage,
+          exchangeId: targetExchangeId,
+          symbol: symbol,
+          clientId
+        }));
+      }
+    }
+  }
+
+  // Handle trading balance subscription
+  private async handleSubscribeTradingBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
+    const { symbol, exchangeId } = message;
+    
+    const defaultExchangeId = await this.getDefaultExchangeId();
+    const targetExchangeId = exchangeId || defaultExchangeId;
+    
+    if (!targetExchangeId) {
+      console.error(`[MESSAGE HANDLER] No available exchange found for trading balance subscription`);
+      return;
+    }
+    
+    console.log(`[MESSAGE HANDLER] Subscribe trading balance request from client ${clientId}: symbol=${symbol}, exchangeId=${targetExchangeId}`);
+    
+    // Send current balance and mark client as subscribed
+    await this.handleGetTradingBalance(ws, message, clientId);
+    
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'trading_balance_subscription_confirmed',
+        exchangeId: targetExchangeId,
+        symbol: symbol,
+        message: 'Subscribed to trading balance updates',
+        clientId
+      }));
+    }
+  }
+
+  // Handle trading balance unsubscription
+  private async handleUnsubscribeTradingBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
+    console.log(`[MESSAGE HANDLER] Unsubscribe trading balance request from client ${clientId}`);
+    
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'trading_balance_unsubscription_confirmed',
+        message: 'Unsubscribed from trading balance updates',
+        clientId
+      }));
+    }
   }
 
   // Get status information

@@ -9,6 +9,13 @@ export interface WebSocketMessageWithExchange {
 }
 
 /**
+ * Generate a unique client ID for tracking messages
+ */
+function generateClientId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
  * Create a WebSocket message with proper exchange ID handling
  * @param message - The base message object
  * @param selectedExchangeId - The currently selected exchange ID (can be string or number)
@@ -90,4 +97,96 @@ export function createConfigureStreamMessage(
     type: 'configure_stream',
     ...config
   }, selectedExchangeId);
+}
+
+/**
+ * Creates a balance subscription message
+ */
+export function createBalanceSubscriptionMessage(
+  symbol: string,
+  exchangeId: number,
+  clientId?: string
+) {
+  return {
+    type: 'subscribe_balance',
+    symbol,
+    exchangeId,
+    clientId: clientId || generateClientId()
+  };
+}
+
+/**
+ * Creates a balance unsubscription message
+ */
+export function createBalanceUnsubscriptionMessage(
+  symbol: string,
+  exchangeId: number,
+  clientId?: string
+) {
+  return {
+    type: 'unsubscribe_balance',
+    symbol,
+    exchangeId,
+    clientId: clientId || generateClientId()
+  };
+}
+
+/**
+ * Creates a balance subscription message for trading page
+ */
+export function createTradingBalanceSubscriptionMessage(
+  symbol: string,
+  exchangeId: number,
+  clientId?: string
+): WebSocketMessageWithExchange {
+  return createWebSocketMessage({
+    type: 'subscribe_trading_balance',
+    symbol,
+    clientId: clientId || generateClientId()
+  }, exchangeId);
+}
+
+/**
+ * Creates a balance unsubscription message for trading page
+ */
+export function createTradingBalanceUnsubscriptionMessage(
+  symbol: string,
+  exchangeId: number,
+  clientId?: string
+): WebSocketMessageWithExchange {
+  return createWebSocketMessage({
+    type: 'unsubscribe_trading_balance',
+    symbol,
+    clientId: clientId || generateClientId()
+  }, exchangeId);
+}
+
+/**
+ * Creates a specific asset balance request message
+ */
+export function createAssetBalanceRequestMessage(
+  asset: string,
+  exchangeId: number,
+  clientId?: string
+): WebSocketMessageWithExchange {
+  return createWebSocketMessage({
+    type: 'get_asset_balance',
+    asset,
+    clientId: clientId || generateClientId()
+  }, exchangeId);
+}
+
+/**
+ * Creates a comprehensive balance request for trading (base + quote currencies)
+ */
+export function createTradingBalanceRequestMessage(
+  symbol: string,
+  exchangeId: number,
+  clientId?: string
+): WebSocketMessageWithExchange {
+  return createWebSocketMessage({
+    type: 'get_trading_balance',
+    symbol,
+    clientId: clientId || generateClientId()
+  }, exchangeId);
 }

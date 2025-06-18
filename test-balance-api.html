@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Balance API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .balance-display {
+            background-color: #e8f5e8;
+            border: 1px solid #c3e6c3;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Balance API Test</h1>
+        
+        <div class="test-section">
+            <h3>Test All Balances Endpoint</h3>
+            <button onclick="testAllBalances(4)">Test Exchange 4 (Testnet)</button>
+            <button onclick="testAllBalances(5)">Test Exchange 5 (Live)</button>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Specific Asset Balance</h3>
+            <button onclick="testAssetBalance(4, 'USDT')">Test USDT - Exchange 4</button>
+            <button onclick="testAssetBalance(5, 'USDT')">Test USDT - Exchange 5</button>
+            <button onclick="testAssetBalance(4, 'ICPUSDT')">Test ICP - Exchange 4</button>
+            <button onclick="testAssetBalance(5, 'ICPUSDT')">Test ICP - Exchange 5</button>
+        </div>
+
+        <div class="test-section">
+            <h3>Balance Display</h3>
+            <div id="balanceDisplay"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>API Response Log</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function displayBalance(data, exchangeId) {
+            const displayElement = document.getElementById('balanceDisplay');
+            
+            if (data.success && data.balances) {
+                // Show all balances
+                const importantAssets = ['USDT', 'BTC', 'ETH', 'BNB', 'ICP'];
+                let html = `<h4>Exchange ${exchangeId} Balances:</h4>`;
+                
+                importantAssets.forEach(asset => {
+                    const balance = data.balances.find(b => b.asset === asset);
+                    if (balance && (parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0)) {
+                        html += `<div><strong>${asset}:</strong> ${balance.free} (Free) + ${balance.locked} (Locked)</div>`;
+                    } else {
+                        html += `<div><strong>${asset}:</strong> 0.00000000 (Not found or zero)</div>`;
+                    }
+                });
+                
+                // Show total assets with non-zero balances
+                const nonZeroBalances = data.balances.filter(b => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0);
+                html += `<div style="margin-top: 10px;"><em>Total assets with balance: ${nonZeroBalances.length}</em></div>`;
+                
+                displayElement.innerHTML = html;
+            } else if (data.asset) {
+                // Single asset balance
+                displayElement.innerHTML = `
+                    <h4>Single Asset Balance:</h4>
+                    <div><strong>${data.asset}:</strong> ${data.free} (Free) + ${data.locked} (Locked)</div>
+                `;
+            } else {
+                displayElement.innerHTML = `<div class="error">No balance data received</div>`;
+            }
+        }        async function testAllBalances(exchangeId) {
+            log(`Testing all balances for exchange ${exchangeId}...`);
+            
+            try {
+                const response = await fetch(`/api/exchanges/${exchangeId}/balance`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token') || 'test-token'}`
+                    }
+                });
+                const data = await response.json();
+                
+                log(`Response Status: ${response.status}`);
+                log(`Response Data: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok) {
+                    displayBalance(data, exchangeId);
+                    log(`✅ Successfully fetched all balances for exchange ${exchangeId}`);
+                } else {
+                    log(`❌ Failed to fetch balances: ${data.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                log(`❌ Error testing all balances: ${error.message}`);
+            }
+        }        async function testAssetBalance(exchangeId, symbol) {
+            log(`Testing ${symbol} balance for exchange ${exchangeId}...`);
+            
+            try {
+                const response = await fetch(`/api/exchanges/${exchangeId}/balance/${symbol}`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token') || 'test-token'}`
+                    }
+                });
+                const data = await response.json();
+                
+                log(`Response Status: ${response.status}`);
+                log(`Response Data: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok) {
+                    displayBalance(data, exchangeId);
+                    log(`✅ Successfully fetched ${symbol} balance for exchange ${exchangeId}`);
+                } else {
+                    log(`❌ Failed to fetch ${symbol} balance: ${data.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                log(`❌ Error testing ${symbol} balance: ${error.message}`);
+            }
+        }
+
+        // Auto-test on page load
+        window.onload = function() {
+            log('🚀 Balance API Test Page Loaded');
+            log('Click buttons above to test different balance endpoints');
+        };
+    </script>
+</body>
+</html>

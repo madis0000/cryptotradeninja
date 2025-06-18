@@ -40,56 +40,17 @@ export default function Trading() {
   const [currentInterval, setCurrentInterval] = useState<string>('4h');
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [selectedExchangeId, setSelectedExchangeId] = useState<number | undefined>();
-    // Balance states for trading
+  
+  // Balance states for trading
   const [baseBalance, setBaseBalance] = useState<BalanceData | null>(null);
   const [quoteBalance, setQuoteBalance] = useState<BalanceData | null>(null);
   const [balanceLoading, setBalanceLoading] = useState<boolean>(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
-  
-  // Order execution tracking
-  const [lastOrderStatus, setLastOrderStatus] = useState<string | null>(null);
-  const [orderHistory, setOrderHistory] = useState<Array<{
-    id: string;
-    symbol: string;
-    side: string;
-    type: string;
-    quantity: string;
-    price?: string;
-    status: string;
-    timestamp: number;
-  }>>([]);
-  // Enhanced asset extraction logic to handle various trading pairs
-  const getAssetPair = (symbol: string) => {
-    // Common quote assets in order of preference
-    const quoteAssets = ['USDT', 'USDC', 'BUSD', 'BTC', 'ETH', 'BNB'];
-    
-    for (const quote of quoteAssets) {
-      if (symbol.endsWith(quote)) {
-        return {
-          baseAsset: symbol.slice(0, -quote.length),
-          quoteAsset: quote
-        };
-      }
-    }
-    
-    // Fallback: assume last 3-4 characters are quote asset
-    if (symbol.length > 6) {
-      return {
-        baseAsset: symbol.slice(0, -4),
-        quoteAsset: symbol.slice(-4)
-      };
-    } else {
-      return {
-        baseAsset: symbol.slice(0, -3),
-        quoteAsset: symbol.slice(-3)
-      };
-    }
-  };
+
   // Extract base and quote assets from symbol
-  const { baseAsset, quoteAsset } = getAssetPair(selectedSymbol);
-  
-  // Debug logging for asset extraction
-  console.log(`[TRADING PAGE] Symbol: ${selectedSymbol} -> Base: ${baseAsset}, Quote: ${quoteAsset}`);
+  const baseAsset = selectedSymbol.replace(/USDT|USDC|BUSD/g, '');
+  const quoteAsset = selectedSymbol.includes('USDT') ? 'USDT' : 
+                   selectedSymbol.includes('USDC') ? 'USDC' : 'BUSD';
 
   // Fetch exchanges for trading
   const { data: exchanges } = useQuery({
@@ -102,60 +63,29 @@ export default function Trading() {
       const activeExchange = exchanges.find((ex: any) => ex.isActive);
       setSelectedExchangeId(activeExchange?.id || exchanges[0].id);
     }
-  }, [exchanges, selectedExchangeId]);  // Function to fetch trading balances via API (similar to martingale strategy)
-  const fetchTradingBalances = async () => {
-    if (!selectedExchangeId) {
-      console.log('[MANUAL TRADING] Cannot fetch balances - no exchange selected');
+  }, [exchanges, selectedExchangeId]);
+
+  // Function to request trading balances
+  const requestTradingBalances = () => {
+    if (!selectedExchangeId || !webSocketSingleton.isConnected()) {
+      console.log('[TRADING] Cannot request balances - no exchange selected or WebSocket not connected');
       return;
     }
 
     setBalanceLoading(true);
     setBalanceError(null);
     
-    console.log(`[MANUAL TRADING] ===== FETCHING TRADING BALANCES =====`);
-    console.log(`[MANUAL TRADING] 📊 BALANCE REQUEST:`);
-    console.log(`[MANUAL TRADING]    Symbol: ${selectedSymbol}`);
-    console.log(`[MANUAL TRADING]    Exchange ID: ${selectedExchangeId}`);
-    console.log(`[MANUAL TRADING]    Base Asset: ${baseAsset}`);
-    console.log(`[MANUAL TRADING]    Quote Asset: ${quoteAsset}`);
-      try {
-      const response = await fetch(`/api/exchanges/${selectedExchangeId}/balance`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const result = await response.json();
-      
-      if (response.ok && result.balances) {
-        console.log(`[MANUAL TRADING] ✅ BALANCE FETCH SUCCESSFUL:`);
-        console.log(`[MANUAL TRADING]    Total Assets: ${result.balances.length}`);
-        
-        const baseBalance = result.balances.find((balance: any) => balance.asset === baseAsset);
-        const quoteBalance = result.balances.find((balance: any) => balance.asset === quoteAsset);
-        
-        console.log(`[MANUAL TRADING] 💰 ${baseAsset} BALANCE:`, baseBalance || { asset: baseAsset, free: '0.00000000', locked: '0.00000000' });
-        console.log(`[MANUAL TRADING]    Available: ${baseBalance?.free || '0.00000000'} ${baseAsset}`);
-        console.log(`[MANUAL TRADING]    Locked: ${baseBalance?.locked || '0.00000000'} ${baseAsset}`);
-        
-        console.log(`[MANUAL TRADING] 💰 ${quoteAsset} BALANCE:`, quoteBalance || { asset: quoteAsset, free: '0.00000000', locked: '0.00000000' });
-        console.log(`[MANUAL TRADING]    Available: ${quoteBalance?.free || '0.00000000'} ${quoteAsset}`);
-        console.log(`[MANUAL TRADING]    Locked: ${quoteBalance?.locked || '0.00000000'} ${quoteAsset}`);
-        
-        setBaseBalance(baseBalance || { asset: baseAsset, free: '0.00000000', locked: '0.00000000' });
-        setQuoteBalance(quoteBalance || { asset: quoteAsset, free: '0.00000000', locked: '0.00000000' });
-        setBalanceError(null);
-        
-        console.log(`[MANUAL TRADING] ===== BALANCE FETCH COMPLETED =====`);
-      } else {
-        throw new Error(result.error || 'Failed to fetch balances');
-      }
-    } catch (error) {
-      console.log(`[MANUAL TRADING] ❌ BALANCE FETCH ERROR:`);
-      console.log(`[MANUAL TRADING]    Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setBalanceError(error instanceof Error ? error.message : 'Failed to fetch balances');
-    } finally {
-      setBalanceLoading(false);
-    }
+    console.log(`[TRADING] Requesting trading balances for ${selectedSymbol} on exchange ${selectedExchangeId}`);
+    
+    // Subscribe to balance updates for this symbol
+    webSocketSingleton.sendMessage(
+      createTradingBalanceSubscriptionMessage(selectedSymbol, selectedExchangeId)
+    );
+    
+    // Request initial balance data
+    webSocketSingleton.sendMessage(
+      createTradingBalanceRequestMessage(selectedSymbol, selectedExchangeId)
+    );
   };
 
   const handleExchangeChange = (exchangeId: number) => {
@@ -168,11 +98,15 @@ export default function Trading() {
         createTradingBalanceUnsubscriptionMessage(selectedSymbol, selectedExchangeId)
       );
     }
-      // Request balances for new exchange
+    
+    // Request balances for new exchange
     setTimeout(() => {
-      fetchTradingBalances();
+      if (webSocketSingleton.isConnected()) {
+        requestTradingBalances();
+      }
     }, 100);
   };
+
   // Handle WebSocket messages
   useEffect(() => {
     const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
@@ -208,34 +142,26 @@ export default function Trading() {
           klines: data.data.klines
         });
       }
-      
-      // Handle order fill notifications and refresh balances (similar to martingale strategy)
-      if (data && data.type === 'order_fill_notification' && data.data) {
-        const orderData = data.data;
-        console.log(`[MANUAL TRADING] ===== ORDER FILL NOTIFICATION RECEIVED =====`);
-        console.log(`[MANUAL TRADING] 📊 ORDER FILL DETAILS:`);
-        console.log(`[MANUAL TRADING]    Exchange Order ID: ${orderData.exchangeOrderId}`);
-        console.log(`[MANUAL TRADING]    Symbol: ${orderData.symbol}`);
-        console.log(`[MANUAL TRADING]    Side: ${orderData.side}`);
-        console.log(`[MANUAL TRADING]    Quantity: ${orderData.quantity}`);
-        console.log(`[MANUAL TRADING]    Price: ${orderData.price}`);
-        console.log(`[MANUAL TRADING]    Status: ${orderData.status}`);
+
+      // Handle balance updates for trading
+      if (data && data.type === 'trading_balance_update' && data.exchangeId === selectedExchangeId) {
+        console.log('[TRADING] Received trading balance update:', data);
+        setBalanceLoading(false);
+        setBalanceError(null);
         
-        // Check if this order fill is for our current trading pair and exchange
-        if (orderData.symbol === selectedSymbol && orderData.exchangeId === selectedExchangeId) {
-          console.log(`[MANUAL TRADING] ✅ ORDER FILL MATCHES CURRENT TRADING PAIR:`);
-          console.log(`[MANUAL TRADING]    Triggering balance refresh...`);
-          
-          // Delay balance refresh to allow order settlement
-          setTimeout(() => {
-            console.log(`[MANUAL TRADING] 🔄 Refreshing balances after order fill...`);
-            fetchTradingBalances();
-          }, 1000);
-        } else {
-          console.log(`[MANUAL TRADING] ⚠️ Order fill for different symbol/exchange, skipping balance refresh`);
+        if (data.baseBalance) {
+          setBaseBalance(data.baseBalance);
         }
-        
-        console.log(`[MANUAL TRADING] ===== ORDER FILL PROCESSING COMPLETE =====`);
+        if (data.quoteBalance) {
+          setQuoteBalance(data.quoteBalance);
+        }
+      }
+
+      // Handle balance errors
+      if (data && data.type === 'balance_error') {
+        console.error('[TRADING] Balance error:', data.error);
+        setBalanceLoading(false);
+        setBalanceError(data.error);
       }
 
       // Handle ticker updates for price display
@@ -260,9 +186,10 @@ export default function Trading() {
     const unsubscribeConnect = webSocketSingleton.onConnect(() => {
       setConnectionStatus('connected');
       console.log('[TRADING] Connected to unified WebSocket server');
-        // Request initial balance data when connected
+      
+      // Request initial balance data when connected
       if (selectedExchangeId) {
-        fetchTradingBalances();
+        requestTradingBalances();
       }
     });
 
@@ -327,8 +254,9 @@ export default function Trading() {
       if (webSocketSingleton.isConnected() && selectedExchangeId) {
         console.log(`[TRADING] Setting up initial subscriptions for ${selectedSymbol} on exchange ${selectedExchangeId}`);
         webSocketSingleton.sendMessage(createChangeSubscriptionMessage(selectedSymbol, currentInterval, selectedExchangeId));
-          // Request trading balances
-        fetchTradingBalances();
+        
+        // Request trading balances
+        requestTradingBalances();
       }
     };
 
@@ -377,20 +305,13 @@ export default function Trading() {
     if (webSocketSingleton.isConnected() && selectedExchangeId) {
       console.log(`[TRADING] Changing subscription to ${selectedSymbol} at ${currentInterval} on exchange ${selectedExchangeId}`);
       webSocketSingleton.sendMessage(createChangeSubscriptionMessage(selectedSymbol, currentInterval, selectedExchangeId));
-        // Request balances for new symbol
-      fetchTradingBalances();
+      
+      // Request balances for new symbol
+      requestTradingBalances();
     } else {
       console.log(`[TRADING] WebSocket not connected or no exchange selected, cannot change subscription to ${selectedSymbol}`);
     }
   }, [selectedSymbol, currentInterval, selectedExchangeId]);
-
-  // Initial balance fetch when exchange is selected
-  useEffect(() => {
-    if (selectedExchangeId) {
-      console.log(`[MANUAL TRADING] Exchange selected: ${selectedExchangeId}, fetching initial balances...`);
-      fetchTradingBalances();
-    }
-  }, [selectedExchangeId]);
 
   return (
     <div className="min-h-screen bg-crypto-darker">
@@ -435,7 +356,8 @@ export default function Trading() {
             {/* Right Sidebar - Order Form and Markets */}
             <div className="w-80 shrink-0 border-l border-gray-800 flex flex-col">
               {/* Order Form Section */}
-              <div className="h-96 shrink-0">                <OrderForm 
+              <div className="h-96 shrink-0">
+                <OrderForm 
                   className="h-full" 
                   symbol={selectedSymbol} 
                   exchangeId={selectedExchangeId}
@@ -443,8 +365,6 @@ export default function Trading() {
                   quoteBalance={quoteBalance}
                   balanceLoading={balanceLoading}
                   balanceError={balanceError}
-                  onBalanceRefresh={fetchTradingBalances}
-                  tickerData={tickerData}
                 />
               </div>
               

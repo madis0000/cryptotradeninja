@@ -7,11 +7,11 @@ interface OrderBookProps {
 export function OrderBook({ className }: OrderBookProps) {
   return (
     <div className={className}>
-      <Card className="bg-crypto-dark border-0 h-full rounded-none">
-        <CardHeader className="py-3 px-4 border-b border-gray-800">
+      <Card className="bg-crypto-dark border-0 h-full rounded-none flex flex-col">
+        <CardHeader className="py-3 px-4 border-b border-gray-800 shrink-0">
           <CardTitle className="text-white text-sm">Order Book</CardTitle>
         </CardHeader>
-        <CardContent className="p-0 h-[calc(100%-60px)]">
+        <CardContent className="p-0 flex-1 overflow-y-auto">
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <div className="text-4xl text-gray-500 mb-4">

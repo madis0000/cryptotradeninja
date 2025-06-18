@@ -108,3 +108,12 @@ export interface WebSocketMessage {
   exchangeId?: number;
   asset?: string;
 }
+
+export interface ExtendedWebSocket extends WebSocket {
+  clientId: string;
+  isAlive: boolean;
+  subscriptions?: SubscriptionInfo[];
+  userId?: number;
+  balanceSubscriptions?: Set<string>;
+  balanceIntervals?: { [key: string]: NodeJS.Timeout };
+}

@@ -1,15 +1,38 @@
-import WebSocket from 'ws';
-import crypto from 'crypto';
-import { OrderRequest, OrderResponse } from '../types';
-import { db } from '../../db';
+import { getBinanceSymbolFilters, adjustQuantity, adjustPrice, ensureFilterCompliance } from '../../binance-filters';
 import { storage } from '../../storage';
 import { decryptApiCredentials } from '../../encryption';
-import { getBinanceSymbolFilters, adjustQuantity, adjustPrice, ensureFilterCompliance } from '../../binance-filters';
 import { BotLoggerManager } from '../../bot-logger';
-import config from '../../config';
-import { BotCycle, CycleOrder, tradingBots } from '@shared/schema';
 import { getGlobalWebSocketService } from '../websocket-service';
-import { eq } from 'drizzle-orm';
+import * as crypto from 'crypto';
+import WebSocket from 'ws';
+
+// Order interfaces
+interface OrderRequest {
+  symbol: string;
+  side: string;
+  type: string;
+  quantity: string;
+  price?: string;
+  timeInForce?: string;
+}
+
+interface OrderResponse {
+  symbol: string;
+  orderId: number;
+  orderListId: number;
+  clientOrderId: string;
+  transactTime: number;
+  price: string;
+  origQty: string;
+  executedQty: string;
+  cummulativeQuoteQty: string;
+  status: string;
+  timeInForce: string;
+  type: string;
+  side: string;
+  workingTime: number;
+  selfTradePreventionMode: string;
+}
 
 export class TradingOperationsManager {
   private pendingOrderRequests = new Map<string, { resolve: Function, reject: Function, timestamp: number }>();
@@ -20,34 +43,176 @@ export class TradingOperationsManager {
   constructor() {
     console.log('[UNIFIED WS] [TRADING OPERATIONS MANAGER] Initialized');
   }
-
-  // Place order
+  // Place order with enhanced logging for manual trading
   async placeOrder(exchangeId: number, orderRequest: OrderRequest): Promise<OrderResponse | null> {
-    try {
-      console.log(`[TRADING] Placing order:`, orderRequest);
+    const startTime = Date.now();
+    
+    console.log(`[MANUAL TRADING] ===== STARTING ORDER EXECUTION =====`);
+    console.log(`[MANUAL TRADING] 📊 ORDER REQUEST:`);
+    console.log(`[MANUAL TRADING]    Exchange ID: ${exchangeId}`);
+    console.log(`[MANUAL TRADING]    Symbol: ${orderRequest.symbol}`);
+    console.log(`[MANUAL TRADING]    Side: ${orderRequest.side}`);
+    console.log(`[MANUAL TRADING]    Type: ${orderRequest.type}`);
+    console.log(`[MANUAL TRADING]    Quantity: ${orderRequest.quantity}`);
+    console.log(`[MANUAL TRADING]    Price: ${orderRequest.price || 'MARKET'}`);
+    console.log(`[MANUAL TRADING]    Time in Force: ${orderRequest.timeInForce || 'GTC'}`);
+      try {
+      // Get exchange information and decrypt credentials
+      const exchange = await storage.getExchange(exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
       
-      // Mock implementation - in production this would make actual API calls
-      return {
+      console.log(`[MANUAL TRADING] ✓ Exchange: ${exchange.name} (${exchange.exchangeType || 'unknown'})`);
+      console.log(`[MANUAL TRADING]    Testnet: ${exchange.isTestnet ? 'Yes' : 'No'}`);
+      console.log(`[MANUAL TRADING]    Active: ${exchange.isActive ? 'Yes' : 'No'}`);
+      
+      // Calculate estimated order value for logging
+      if (orderRequest.price && orderRequest.quantity) {
+        const estimatedValue = (parseFloat(orderRequest.price) * parseFloat(orderRequest.quantity)).toFixed(2);
+        console.log(`[MANUAL TRADING] 💰 Estimated Order Value: $${estimatedValue}`);
+      }
+      
+      console.log(`[MANUAL TRADING] 🚀 Processing order on exchange...`);
+        const decryptedCredentials = decryptApiCredentials(exchange.apiKey, exchange.apiSecret, exchange.encryptionIv);
+      const { apiKey, apiSecret } = decryptedCredentials;
+        // Get exchange filters for the symbol
+      const restEndpoint = exchange.restApiEndpoint || 'https://testnet.binance.vision';
+      const filters = await getBinanceSymbolFilters(orderRequest.symbol, restEndpoint);
+      console.log(`[MANUAL TRADING] 📊 Exchange filters for ${orderRequest.symbol}:`, filters);
+      
+      // Apply filter compliance for LIMIT orders
+      let adjustedQuantity = orderRequest.quantity;
+      let adjustedPrice = orderRequest.price;
+      
+      if (orderRequest.type === 'LIMIT' && orderRequest.price) {
+        const compliance = ensureFilterCompliance(
+          parseFloat(orderRequest.quantity),
+          parseFloat(orderRequest.price),
+          filters
+        );
+        
+        if (!compliance.isValid) {
+          console.log(`[MANUAL TRADING] ❌ Filter compliance failed: ${compliance.error}`);
+          throw new Error(`Filter compliance failed: ${compliance.error}`);
+        }
+        
+        adjustedQuantity = compliance.quantity.toString();
+        adjustedPrice = compliance.price.toString();
+        
+        console.log(`[MANUAL TRADING] ✓ Filter compliance passed:`);
+        console.log(`[MANUAL TRADING]    Original Qty: ${orderRequest.quantity} → Adjusted: ${adjustedQuantity}`);
+        console.log(`[MANUAL TRADING]    Original Price: ${orderRequest.price} → Adjusted: ${adjustedPrice}`);
+      } else if (orderRequest.type === 'MARKET') {
+        // For market orders, only adjust quantity
+        const adjustedQty = adjustQuantity(
+          parseFloat(orderRequest.quantity),
+          filters.stepSize,
+          filters.minQty,
+          filters.qtyDecimals
+        );
+        adjustedQuantity = adjustedQty.toString();
+        
+        console.log(`[MANUAL TRADING] ✓ Market order quantity adjusted:`);
+        console.log(`[MANUAL TRADING]    Original: ${orderRequest.quantity} → Adjusted: ${adjustedQuantity}`);
+      }
+      
+      // Prepare order parameters for Binance API
+      const orderParams = new URLSearchParams({
         symbol: orderRequest.symbol,
-        orderId: Math.floor(Math.random() * 1000000),
-        orderListId: -1,
-        clientOrderId: crypto.randomBytes(16).toString('hex'),
-        transactTime: Date.now(),
-        price: orderRequest.price || '0',
-        origQty: orderRequest.quantity,
-        executedQty: '0',
-        cummulativeQuoteQty: '0',
-        status: 'NEW',
-        timeInForce: orderRequest.timeInForce || 'GTC',
-        type: orderRequest.type,
         side: orderRequest.side,
-        workingTime: Date.now(),
-        selfTradePreventionMode: 'NONE'
+        type: orderRequest.type,
+        quantity: adjustedQuantity,
+        timestamp: Date.now().toString()
+      });
+
+      // Add price for LIMIT orders
+      if (orderRequest.type === 'LIMIT' && adjustedPrice) {
+        orderParams.append('price', adjustedPrice);
+        orderParams.append('timeInForce', orderRequest.timeInForce || 'GTC');
+      }
+
+      // Create signature for Binance API
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(orderParams.toString())
+        .digest('hex');
+      
+      orderParams.append('signature', signature);
+
+      console.log(`[MANUAL TRADING] 📤 Placing real order on ${exchange.name}...`);
+      
+      // Make API call to place order
+      const orderResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: orderParams
+      });
+
+      const orderResult = await orderResponse.json();
+      
+      if (!orderResponse.ok) {
+        console.log(`[MANUAL TRADING] ❌ Order failed:`, orderResult);
+        throw new Error(`Order failed: ${orderResult.msg || orderResult.message || 'Unknown error'}`);
+      }
+
+      if (!orderResult || !orderResult.orderId) {
+        console.log(`[MANUAL TRADING] ❌ Invalid order response:`, orderResult);
+        throw new Error('Invalid order response from exchange');
+      }
+      
+      // Convert exchange response to our OrderResponse format
+      const result: OrderResponse = {
+        symbol: orderResult.symbol,
+        orderId: orderResult.orderId,
+        orderListId: orderResult.orderListId || -1,
+        clientOrderId: orderResult.clientOrderId,
+        transactTime: orderResult.transactTime,
+        price: orderResult.price || orderRequest.price || '0',
+        origQty: orderResult.origQty,
+        executedQty: orderResult.executedQty,
+        cummulativeQuoteQty: orderResult.cummulativeQuoteQty,
+        status: orderResult.status,
+        timeInForce: orderResult.timeInForce,
+        type: orderResult.type,
+        side: orderResult.side,
+        workingTime: orderResult.workingTime || orderResult.transactTime,
+        selfTradePreventionMode: orderResult.selfTradePreventionMode || 'NONE'
       };
+        const responseTime = Date.now() - startTime;
+      console.log(`[MANUAL TRADING] ⏱️ Order Processing Time: ${responseTime}ms`);
+      console.log(`[MANUAL TRADING] ✅ ORDER PLACED SUCCESSFULLY!`);
+      console.log(`[MANUAL TRADING]    Exchange Order ID: ${result.orderId}`);
+      console.log(`[MANUAL TRADING]    Client Order ID: ${result.clientOrderId}`);
+      console.log(`[MANUAL TRADING]    Status: ${result.status}`);
+      console.log(`[MANUAL TRADING]    Executed Qty: ${result.executedQty}`);
+      console.log(`[MANUAL TRADING]    Transaction Time: ${new Date(result.transactTime).toISOString()}`);
+      
+      if (result.status === 'FILLED') {
+        console.log(`[MANUAL TRADING] 🎯 Order filled immediately (${orderRequest.type} order)`);
+        console.log(`[MANUAL TRADING]    Fill Price: ${result.price || 'Market'}`);
+        console.log(`[MANUAL TRADING]    Fill Quantity: ${result.executedQty}`);
+        console.log(`[MANUAL TRADING]    Quote Volume: ${result.cummulativeQuoteQty}`);
+      } else {
+        console.log(`[MANUAL TRADING] ⏳ Order placed and waiting for fill (${orderRequest.type} order)`);
+      }
+      
+      console.log(`[MANUAL TRADING] ===== ORDER EXECUTION COMPLETE =====`);
+      
+      return result;
     } catch (error) {
-      console.error(`[TRADING] Error placing order:`, error);
+      const responseTime = Date.now() - startTime;
+      console.log(`[MANUAL TRADING] ❌ ORDER EXECUTION FAILED:`);
+      console.log(`[MANUAL TRADING]    Processing Time: ${responseTime}ms`);
+      console.log(`[MANUAL TRADING]    Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.log(`[MANUAL TRADING]    Stack:`, error);
+      console.log(`[MANUAL TRADING] ===== ORDER EXECUTION FAILED =====`);
       return null;
-    }  }
+    }
+  }
 
   // Cancel order
   async cancelOrder(botId: number, orderId: string): Promise<void> {
@@ -262,25 +427,16 @@ export class TradingOperationsManager {
         console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Order Type: MARKET ${bot.direction === 'long' ? 'BUY' : 'SELL'}`);
         console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Symbol: ${symbol}`);
         console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(filters.qtyDecimals)}`);
-        
-        // Place market order for base order
+          // Place market order using REST API directly
         const orderParams = new URLSearchParams({
           symbol: bot.tradingPair,
           side: bot.direction === 'long' ? 'BUY' : 'SELL',
           type: 'MARKET',
-          quantity: quantity.toString(),
+          quantity: quantity.toFixed(filters.qtyDecimals),
           timestamp: Date.now().toString()
         });
 
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🔧 Exchange Details:`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Name: ${exchange.name}`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Type: ${exchange.exchangeType || 'Unknown'}`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Testnet: ${exchange.isTestnet || false}`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Endpoint: ${exchange.restApiEndpoint}`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    API Key (first 8 chars): ${apiKey.substring(0, 8)}...`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📋 Order Parameters:`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    ${orderParams.toString().replace('timestamp=', 'timestamp=***').replace(/&signature=.*/, '')}`);
-
+        // Create signature for Binance API
         const signature = crypto
           .createHmac('sha256', apiSecret)
           .update(orderParams.toString())
@@ -288,7 +444,15 @@ export class TradingOperationsManager {
         
         orderParams.append('signature', signature);
 
-        const orderResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📤 Placing real order on exchange...`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Exchange: ${exchange.name} (${exchange.isTestnet ? 'Testnet' : 'Live'})`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Symbol: ${bot.tradingPair}`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Side: ${bot.direction === 'long' ? 'BUY' : 'SELL'}`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Type: MARKET`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(filters.qtyDecimals)}`);
+
+        // Make API call to place order
+        const orderResponse = await fetch(`${exchange.restApiEndpoint || 'https://testnet.binance.vision'}/api/v3/order`, {
           method: 'POST',
           headers: {
             'X-MBX-APIKEY': apiKey,
@@ -300,55 +464,59 @@ export class TradingOperationsManager {
         const orderResult = await orderResponse.json();
         
         if (!orderResponse.ok) {
-          throw new Error(`Order placement failed: ${orderResult.msg || 'Unknown error'}`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Order failed:`, orderResult);
+          throw new Error(`Order failed: ${JSON.stringify(orderResult)}`);
         }
 
-        if (orderResult && orderResult.orderId) {          // Update the order with exchange order ID
-          await storage.updateCycleOrder(baseOrder.id, {
-            exchangeOrderId: orderResult.orderId.toString(),
-            status: 'filled',
-            filledQuantity: quantity.toFixed(filters.qtyDecimals),
-            filledPrice: currentPrice.toFixed(filters.priceDecimals)
-          });
+        if (!orderResult || !orderResult.orderId) {
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Invalid order response:`, orderResult);
+          throw new Error('Invalid order response from exchange');
+        }
 
-          // Broadcast order fill notification
-          const wsService = getGlobalWebSocketService();
-          if (wsService) {
-            wsService.broadcastOrderFillNotification({
-              id: baseOrder.id,
-              exchangeOrderId: orderResult.orderId.toString(),
-              botId: botId,
-              orderType: 'base_order',
-              symbol: bot.tradingPair,
-              side: bot.direction === 'long' ? 'BUY' : 'SELL',
-              quantity: quantity.toFixed(filters.qtyDecimals),
-              price: currentPrice.toFixed(filters.priceDecimals)
-            });
-          }
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ BASE ORDER SUCCESSFULLY PLACED!`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Filled Price: $${orderResult.price || currentPrice.toFixed(filters.priceDecimals)}`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Filled Quantity: ${orderResult.executedQty || quantity.toFixed(filters.qtyDecimals)}`);
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Total Investment: $${baseOrderAmount}`);
 
-          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Base order filled successfully!`);
-          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
-          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Filled Quantity: ${quantity.toFixed(filters.qtyDecimals)}`);
-          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Filled Price: $${currentPrice.toFixed(filters.priceDecimals)}`);          logger.logStrategyAction('BASE_ORDER_FILLED', {
-            orderId: orderResult.orderId,
-            quantity: quantity.toFixed(filters.qtyDecimals),
-            price: currentPrice.toFixed(filters.priceDecimals),
-            amount: baseOrderAmount
-          });          // Place take profit order
-          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🎯 Starting take profit order placement...`);
-          await this.placeTakeProfitOrder(botId, cycleId, currentPrice, quantity);            // Handle safety orders based on configuration
-          if (bot.activeSafetyOrdersEnabled) {
-            console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚀 Active Safety Orders enabled - placing ${bot.activeSafetyOrders} safety orders in advance...`);
-            await this.placeMultipleSafetyOrders(botId, cycleId, currentPrice, bot.activeSafetyOrders);
-          } else {
-            // Place ALL safety orders immediately when toggle is disabled
-            console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚀 Active Safety Orders disabled - placing ALL ${bot.maxSafetyOrders} safety orders immediately...`);
-            await this.placeMultipleSafetyOrders(botId, cycleId, currentPrice, bot.maxSafetyOrders);
+        // Update order record with fill information
+        await storage.updateCycleOrder(baseOrder.id, {
+          status: 'filled',
+          exchangeOrderId: orderResult.orderId.toString(),
+          filledPrice: (orderResult.price || currentPrice).toString(),
+          filledQuantity: (orderResult.executedQty || quantity).toString(),
+          filledAt: new Date()
+        });        // Place take profit order after successful base order
+        await this.placeTakeProfitOrder(
+          botId, 
+          cycleId, 
+          parseFloat(orderResult.price || currentPrice.toString()), 
+          parseFloat(orderResult.executedQty || quantity.toString())
+        );
+
+        // Place safety orders based on bot configuration
+        if (bot.maxSafetyOrders && bot.maxSafetyOrders > 0) {
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ===== PLACING SAFETY ORDERS =====`);
+          
+          // Check if we should place safety orders immediately (activeSafetyOrdersEnabled = false)
+          // or place them gradually (activeSafetyOrdersEnabled = true)
+          const shouldPlaceAllSafetyOrders = !bot.activeSafetyOrdersEnabled;
+          const safetyOrdersToPlace = shouldPlaceAllSafetyOrders 
+            ? bot.maxSafetyOrders 
+            : Math.min(bot.activeSafetyOrders || 1, bot.maxSafetyOrders);
+          
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🔄 Placing ${safetyOrdersToPlace} of ${bot.maxSafetyOrders} safety orders...`);
+          
+          for (let i = 1; i <= safetyOrdersToPlace; i++) {
+            try {
+              await this.placeSafetyOrder(botId, cycleId, i, currentPrice);
+            } catch (safetyOrderError) {
+              console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Error placing safety order ${i}:`, safetyOrderError);
+              // Continue with other safety orders even if one fails
+            }
           }
           
-        } else {
-          console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Order result missing orderId:`, orderResult);
-          throw new Error('Order result missing orderId');
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ===== SAFETY ORDER PLACEMENT COMPLETE =====`);
         }
         
       } catch (orderError) {
@@ -1159,3 +1327,4 @@ export class TradingOperationsManager {
     console.log(`[UNIFIED WS] [TRADING OPERATIONS] ✅ Cleanup completed for bot ${botId}`);
   }
 }
+    

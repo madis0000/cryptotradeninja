@@ -13,6 +13,7 @@ import helmet from "helmet";
 import cors from "cors";
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "crypto";
 import config from "./config";
 
 // Global WebSocket service instance
@@ -1137,15 +1138,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get available balance for trading pair
   // Order placement endpoint
   app.post("/api/orders", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { exchangeId, symbol, side, orderType, quantity, price, timeInForce } = req.body;
       const userId = req.user!.id;
 
+      console.log(`[MANUAL ORDER] ===== ORDER PLACEMENT REQUEST =====`);
+      console.log(`[MANUAL ORDER] User ID: ${userId}`);
+      console.log(`[MANUAL ORDER] Exchange ID: ${exchangeId}`);
+      console.log(`[MANUAL ORDER] Symbol: ${symbol}`);
+      console.log(`[MANUAL ORDER] Side: ${side}`);
+      console.log(`[MANUAL ORDER] Order Type: ${orderType}`);
+      console.log(`[MANUAL ORDER] Quantity: ${quantity}`);
+      console.log(`[MANUAL ORDER] Price: ${price || 'MARKET'}`);
+
       // Validate required fields
       if (!exchangeId || !symbol || !side || !orderType || !quantity) {
+        console.log(`[MANUAL ORDER] ❌ Missing required fields`);
         return res.status(400).json({ 
           success: false, 
           error: "Missing required fields" 
@@ -1153,6 +1163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (orderType === 'LIMIT' && !price) {
+        console.log(`[MANUAL ORDER] ❌ Price required for limit orders`);
         return res.status(400).json({ 
           success: false, 
           error: "Price required for limit orders" 
@@ -1164,59 +1175,251 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const exchange = exchanges.find(ex => ex.id === parseInt(exchangeId));
       
       if (!exchange) {
+        console.log(`[MANUAL ORDER] ❌ Exchange not found`);
         return res.status(404).json({ 
           success: false, 
           error: "Exchange not found" 
         });
       }
 
-      // For development, simulate order placement
-      const orderId = `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const currentPrice = price || "106870.03"; // Use provided price or mock market price
+      console.log(`[MANUAL ORDER] ✅ Exchange found: ${exchange.name} (${exchange.isTestnet ? 'Testnet' : 'Live'})`);
+
+      // Check account balance before placing order
+      console.log(`[MANUAL ORDER] 🔍 Checking account balance before order placement...`);
       
-      // Simulate processing delay
-      await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-      
-      // Simulate occasional failures (5% chance)
-      if (Math.random() < 0.05) {
+      try {
+        // Get account balance using WebSocket service
+        const balanceData = await wsService.getAccountBalance(parseInt(exchangeId), side === 'BUY' ? 'USDT' : symbol.replace('USDT', ''));
+        
+        if (!balanceData || !balanceData.data || !balanceData.data.balances) {
+          console.log(`[MANUAL ORDER] ❌ Failed to fetch account balance`);
+          return res.status(400).json({
+            success: false,
+            error: 'Failed to fetch account balance'
+          });
+        }
+
+        const requiredAsset = side === 'BUY' ? 'USDT' : symbol.replace('USDT', '');
+        const assetBalance = balanceData.data.balances.find((b: any) => b.asset === requiredAsset);
+        const availableBalance = assetBalance ? parseFloat(assetBalance.free) : 0;
+
+        console.log(`[MANUAL ORDER] 💰 Available ${requiredAsset} Balance: ${availableBalance.toFixed(8)}`);
+
+        // Calculate required balance
+        let requiredBalance: number;
+        if (side === 'BUY') {
+          // For buy orders, we need USDT
+          if (orderType === 'MARKET') {
+            // For market buy, quantity is in USDT (quote currency)
+            requiredBalance = parseFloat(quantity);
+          } else {
+            // For limit buy, quantity is in base currency, multiply by price to get USDT needed
+            requiredBalance = parseFloat(quantity) * parseFloat(price);
+          }
+        } else {
+          // For sell orders, we need base currency
+          requiredBalance = parseFloat(quantity);
+        }
+
+        console.log(`[MANUAL ORDER] 💰 Required ${requiredAsset}: ${requiredBalance.toFixed(8)}`);
+
+        // Check if we have sufficient balance (with small buffer for fees)
+        const feeBuffer = requiredBalance * 0.001; // 0.1% buffer for fees
+        const totalRequired = requiredBalance + feeBuffer;
+
+        if (availableBalance < totalRequired) {
+          console.log(`[MANUAL ORDER] ❌ Insufficient balance:`);
+          console.log(`[MANUAL ORDER]    Available: ${availableBalance.toFixed(8)} ${requiredAsset}`);
+          console.log(`[MANUAL ORDER]    Required: ${requiredBalance.toFixed(8)} ${requiredAsset}`);
+          console.log(`[MANUAL ORDER]    Fee Buffer: ${feeBuffer.toFixed(8)} ${requiredAsset}`);
+          console.log(`[MANUAL ORDER]    Total Required: ${totalRequired.toFixed(8)} ${requiredAsset}`);
+          
+          return res.status(400).json({
+            success: false,
+            error: `Insufficient balance. Available: ${availableBalance.toFixed(8)} ${requiredAsset}, Required: ${totalRequired.toFixed(8)} ${requiredAsset}`
+          });
+        }
+
+        console.log(`[MANUAL ORDER] ✅ Sufficient balance available`);
+        console.log(`[MANUAL ORDER]    Available: ${availableBalance.toFixed(8)} ${requiredAsset}`);
+        console.log(`[MANUAL ORDER]    Required: ${totalRequired.toFixed(8)} ${requiredAsset}`);
+
+      } catch (balanceError) {
+        console.error(`[MANUAL ORDER] ❌ Balance check failed:`, balanceError);
         return res.status(400).json({
           success: false,
-          error: 'Insufficient balance or market conditions'
+          error: `Balance check failed: ${balanceError instanceof Error ? balanceError.message : 'Unknown error'}`
         });
       }
 
-      // Store trade record in database
-      await storage.createTrade({
-        userId: userId,
-        botId: null,
-        tradingPair: symbol,
-        side: side.toLowerCase(),
-        orderType: orderType.toLowerCase(),
-        orderCategory: "manual",
-        amount: quantity,
-        quoteAmount: orderType === 'MARKET' ? 
-          (parseFloat(quantity) * parseFloat(currentPrice)).toFixed(8) : 
-          (parseFloat(quantity) * parseFloat(price || currentPrice)).toFixed(8),
-        price: currentPrice,
-        status: orderType === 'MARKET' ? 'filled' : 'filled', // Simulate immediate fill for demo
-        pnl: "0",
-        fee: (parseFloat(quantity) * 0.001).toFixed(8), // 0.1% fee
-        feeAsset: "USDT",
-        exchangeOrderId: orderId
-      });
+      // Place real order on exchange
+      console.log(`[MANUAL ORDER] 📤 Placing real order on exchange...`);
+      console.log(`[MANUAL ORDER]    Exchange: ${exchange.name} (${exchange.isTestnet ? 'Testnet' : 'Live'})`);
+      console.log(`[MANUAL ORDER]    Symbol: ${symbol}`);
+      console.log(`[MANUAL ORDER]    Side: ${side}`);
+      console.log(`[MANUAL ORDER]    Type: ${orderType}`);
+      console.log(`[MANUAL ORDER]    Quantity: ${quantity}`);
+      console.log(`[MANUAL ORDER]    Price: ${price || 'MARKET'}`);
+      
+      try {
+        // Decrypt API credentials
+        const decryptedCredentials = decryptApiCredentials(exchange.apiKey, exchange.apiSecret, exchange.encryptionIv);
+        const { apiKey, apiSecret } = decryptedCredentials;
 
-      // Return successful response
-      res.json({
-        success: true,
-        orderId: orderId,
-        symbol: symbol,
-        side: side,
-        quantity: quantity,
-        price: currentPrice,
-        status: orderType === 'MARKET' ? 'FILLED' : 'FILLED',
-        fee: (parseFloat(quantity) * 0.001).toFixed(8),
-        feeAsset: "USDT"
-      });
+        // Prepare order parameters
+        const orderParams = new URLSearchParams({
+          symbol: symbol,
+          side: side,
+          type: orderType,
+          quantity: quantity,
+          timestamp: Date.now().toString()
+        });
+
+        // Add price for LIMIT orders
+        if (orderType === 'LIMIT' && price) {
+          orderParams.append('price', price);
+          orderParams.append('timeInForce', 'GTC');
+        }
+
+        // Create signature for Binance API
+        const signature = crypto
+          .createHmac('sha256', apiSecret)
+          .update(orderParams.toString())
+          .digest('hex');
+        
+        orderParams.append('signature', signature);
+
+        // Make API call to place order
+        const orderResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+          method: 'POST',
+          headers: {
+            'X-MBX-APIKEY': apiKey,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: orderParams
+        });
+
+        const orderResult = await orderResponse.json();
+        
+        console.log(`[MANUAL ORDER] � Exchange API Response:`, orderResult);
+        
+        if (!orderResponse.ok) {
+          console.log(`[MANUAL ORDER] ❌ Order failed:`, orderResult);
+          throw new Error(`Order failed: ${orderResult.msg || orderResult.message || 'Unknown error'}`);
+        }
+
+        if (!orderResult || !orderResult.orderId) {
+          console.log(`[MANUAL ORDER] ❌ Invalid order response:`, orderResult);
+          throw new Error('Invalid order response from exchange');
+        }
+
+        const exchangeOrderId = orderResult.orderId.toString();
+        
+        // For market orders, get the actual fill price from the fills array
+        let filledPrice = '0';
+        if (orderType === 'MARKET' && orderResult.fills && orderResult.fills.length > 0) {
+          // Calculate weighted average price from fills
+          let totalValue = 0;
+          let totalQty = 0;
+          
+          orderResult.fills.forEach((fill: any) => {
+            const fillPrice = parseFloat(fill.price);
+            const fillQty = parseFloat(fill.qty);
+            totalValue += fillPrice * fillQty;
+            totalQty += fillQty;
+          });
+          
+          filledPrice = totalQty > 0 ? (totalValue / totalQty).toFixed(8) : '0';
+          console.log(`[MANUAL ORDER] 📊 Market order fill calculation:`);
+          console.log(`[MANUAL ORDER]    Total fills: ${orderResult.fills.length}`);
+          console.log(`[MANUAL ORDER]    Total value: $${totalValue.toFixed(8)}`);
+          console.log(`[MANUAL ORDER]    Total quantity: ${totalQty.toFixed(8)}`);
+          console.log(`[MANUAL ORDER]    Average price: $${filledPrice}`);
+        } else {
+          // For limit orders, use the order price or fills
+          filledPrice = orderResult.price || price || orderResult.fills?.[0]?.price || '0';
+        }
+        
+        const filledQuantity = orderResult.executedQty || orderResult.origQty || quantity;
+        const orderStatus = orderResult.status || 'NEW';
+
+        console.log(`[MANUAL ORDER] ✅ Order placed successfully on exchange!`);
+        console.log(`[MANUAL ORDER]    Exchange Order ID: ${exchangeOrderId}`);
+        console.log(`[MANUAL ORDER]    Status: ${orderStatus}`);
+        console.log(`[MANUAL ORDER]    Filled Price: $${filledPrice}`);
+        console.log(`[MANUAL ORDER]    Filled Quantity: ${filledQuantity}`);
+
+        // Store trade record in database
+        await storage.createTrade({
+          userId: userId,
+          botId: null,
+          tradingPair: symbol,
+          side: side.toLowerCase(),
+          orderType: orderType.toLowerCase(),
+          orderCategory: "manual",
+          amount: filledQuantity,
+          quoteAmount: orderType === 'MARKET' ? 
+            (parseFloat(filledQuantity) * parseFloat(filledPrice)).toFixed(8) : 
+            (parseFloat(filledQuantity) * parseFloat(filledPrice)).toFixed(8),
+          price: filledPrice,
+          status: orderStatus.toLowerCase(),
+          pnl: "0",
+          fee: orderResult.fills ? 
+            orderResult.fills.reduce((total: number, fill: any) => total + parseFloat(fill.commission || '0'), 0).toFixed(8) :
+            (parseFloat(filledQuantity) * 0.001).toFixed(8), // 0.1% estimated fee
+          feeAsset: orderResult.fills?.[0]?.commissionAsset || "USDT",
+          exchangeOrderId: exchangeOrderId
+        });
+
+        // Broadcast order fill notification to WebSocket clients (similar to martingale strategy)
+        try {
+          console.log(`[MANUAL ORDER] 📢 Broadcasting order fill notification...`);
+          
+          const orderFillData = {
+            exchangeOrderId: exchangeOrderId,
+            symbol: symbol,
+            side: side,
+            quantity: filledQuantity,
+            price: filledPrice,
+            status: orderStatus,
+            exchangeId: parseInt(exchangeId),
+            userId: userId,
+            timestamp: Date.now()
+          };
+
+          // Broadcast to all connected clients
+          wsService.broadcastOrderFillNotification(orderFillData);
+
+          console.log(`[MANUAL ORDER] ✅ Order fill notification broadcasted`);
+        } catch (broadcastError) {
+          console.error(`[MANUAL ORDER] ⚠️ Failed to broadcast order fill notification:`, broadcastError);
+          // Don't fail the order placement if broadcast fails
+        }
+
+        console.log(`[MANUAL ORDER] ===== ORDER PLACEMENT COMPLETE =====`);
+
+        // Return successful response
+        res.json({
+          success: true,
+          orderId: exchangeOrderId,
+          symbol: symbol,
+          side: side,
+          orderType: orderType,
+          quantity: filledQuantity,
+          price: filledPrice,
+          status: orderStatus,
+          message: "Order placed successfully"
+        });
+
+      } catch (orderError) {
+        console.error(`[MANUAL ORDER] ❌ Order placement failed:`, orderError);
+        
+        res.status(500).json({
+          success: false,
+          error: `Order placement failed: ${orderError instanceof Error ? orderError.message : 'Unknown error'}`
+        });
+        return;
+      }
 
     } catch (error) {
       console.error('Error placing order:', error);
@@ -1244,13 +1447,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const quoteCurrency = symbol === 'USDT' ? 'USDT' : symbol.replace(/^[A-Z]+/, '');
       
       try {
-        // Fetch real balance from Binance API using WebSocket service
-        // TODO: Implement proper balance structure
-        const balanceData = { balances: [{ asset: quoteCurrency, free: '0', locked: '0' }] }; // Temporary mock
+        // Fetch real balance from exchange API using WebSocket service
+        console.log(`[BALANCE API SYMBOL] 🔍 Fetching real balance data for ${quoteCurrency}...`);
+        const balanceData = await wsService.getAccountBalance(parseInt(exchangeId), 'ALL');
         
-        if (balanceData && balanceData.balances) {
+        if (!balanceData || !balanceData.data || !balanceData.data.balances) {
+          console.log(`[BALANCE API SYMBOL] ❌ Failed to fetch balance data from exchange`);
+          throw new Error('Failed to fetch balance data from exchange');
+        }
+
+        console.log(`[BALANCE API SYMBOL] ✅ Successfully fetched balance data for ${quoteCurrency}`);
+        
+        if (balanceData && balanceData.data && balanceData.data.balances) {
           // Find the specific asset balance
-          const assetBalance = balanceData.balances.find((balance: any) => balance.asset === quoteCurrency);
+          const assetBalance = balanceData.data.balances.find((balance: any) => balance.asset === quoteCurrency);
+          
+          console.log(`[BALANCE API SYMBOL] 💰 ${quoteCurrency} Balance:`, assetBalance || 'Not found');
           
           if (assetBalance) {
             return res.json({
@@ -1293,6 +1505,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching balance:", error);
       res.status(500).json({ error: "Failed to fetch balance" });
+    }
+  });
+
+  // Get all balances for an exchange (used by trading page)
+  app.get("/api/exchanges/:exchangeId/balance", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { exchangeId } = req.params;
+      const userId = req.user!.id;
+
+      console.log(`[BALANCE API] ===== FETCHING ALL BALANCES =====`);
+      console.log(`[BALANCE API] Exchange ID: ${exchangeId}`);
+      console.log(`[BALANCE API] User ID: ${userId}`);
+
+      // Get exchange credentials
+      const exchanges = await storage.getExchangesByUserId(userId);
+      const targetExchange = exchanges.find(ex => ex.id === parseInt(exchangeId));
+      
+      if (!targetExchange) {
+        console.log(`[BALANCE API] ❌ Exchange not found`);
+        return res.status(404).json({ error: "Exchange not found" });
+      }
+
+      console.log(`[BALANCE API] ✅ Exchange found: ${targetExchange.name} (${targetExchange.isTestnet ? 'Testnet' : 'Live'})`);
+
+      try {
+        // Fetch real balance from exchange API using WebSocket service
+        console.log(`[BALANCE API] 🔍 Fetching real balance data...`);
+        const balanceData = await wsService.getAccountBalance(parseInt(exchangeId), 'ALL');
+        
+        if (!balanceData || !balanceData.data || !balanceData.data.balances) {
+          console.log(`[BALANCE API] ❌ Failed to fetch balance data from exchange`);
+          throw new Error('Failed to fetch balance data from exchange');
+        }
+
+        console.log(`[BALANCE API] ✅ Successfully fetched balance data`);
+        console.log(`[BALANCE API] Total assets: ${balanceData.data.balances.length}`);
+        
+        // Filter out zero balances and format response
+        const nonZeroBalances = balanceData.data.balances.filter((balance: any) => 
+          parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0
+        );
+
+        console.log(`[BALANCE API] Non-zero balances: ${nonZeroBalances.length}`);
+        
+        // Log some example balances
+        const importantAssets = ['USDT', 'BTC', 'ETH', 'BNB'];
+        importantAssets.forEach(asset => {
+          const balance = balanceData.data.balances.find((b: any) => b.asset === asset);
+          if (balance) {
+            console.log(`[BALANCE API] 💰 ${asset}: Free=${balance.free}, Locked=${balance.locked}`);
+          }
+        });
+
+        console.log(`[BALANCE API] ===== BALANCE FETCH COMPLETED =====`);
+
+        return res.json({
+          success: true,
+          balances: balanceData.data.balances,
+          timestamp: Date.now()
+        });
+        
+      } catch (apiError) {
+        console.error(`[BALANCE API] ❌ API request failed:`, apiError);
+        
+        // Fallback to testnet mock data only if real API fails
+        if (targetExchange.isTestnet) {
+          console.log(`[BALANCE API] 🔄 Using testnet mock data fallback`);
+          const mockBalances = [
+            { asset: 'USDT', free: '127247.18000000', locked: '0.00000000' },
+            { asset: 'BTC', free: '0.05000000', locked: '0.00000000' },
+            { asset: 'ETH', free: '2.50000000', locked: '0.00000000' },
+            { asset: 'BNB', free: '10.00000000', locked: '0.00000000' },
+            { asset: 'ICP', free: '0.00000000', locked: '0.00000000' }
+          ];
+          
+          return res.json({ 
+            success: true,
+            balances: mockBalances,
+            timestamp: Date.now(),
+            note: 'Using testnet mock data'
+          });
+        }
+        
+        throw apiError;
+      }
+    } catch (error) {
+      console.error(`[BALANCE API] ❌ Balance fetch failed:`, error);
+      res.status(500).json({ 
+        success: false, 
+        error: "Failed to fetch balances",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
@@ -1346,6 +1650,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Market data is now served through WebSocket-only communication
   // Frontend connects directly to the main WebSocket service
+
+  // Health check endpoint
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: "healthy", 
+      timestamp: new Date().toISOString(),
+      environment: config.isProduction ? "production" : "development"
+    });
+  });
 
   return httpServer;
 }

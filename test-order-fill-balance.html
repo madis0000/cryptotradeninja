@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Fill Balance Update Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+            background-color: #f8f9fa;
+        }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .balance-section {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .balance-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .success {
+            border-left-color: #28a745;
+            background-color: #d4edda;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Order Fill Balance Update Test</h1>
+        
+        <div class="status" id="connectionStatus">
+            Connection Status: Disconnected
+        </div>
+
+        <div class="balance-section">
+            <h3>Current Balances</h3>
+            <div id="balances">
+                <div class="balance-item">
+                    <span>Loading balances...</span>
+                </div>
+            </div>
+            <button onclick="refreshBalances()">Refresh Balances</button>
+        </div>
+
+        <div class="balance-section">
+            <h3>Order Fill Monitoring</h3>
+            <div id="orderFillStatus">Waiting for order fills...</div>
+            <div id="lastOrderFill">No order fills detected yet</div>
+        </div>
+
+        <div class="balance-section">
+            <h3>Test Actions</h3>
+            <button onclick="placeMockOrder()">Place Mock Order (Simulation)</button>
+            <button onclick="simulateOrderFill()">Simulate Order Fill Event</button>
+        </div>
+
+        <div class="log" id="logOutput"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let currentBalances = {};
+        let orderFillCount = 0;
+
+        function log(message) {
+            const timestamp = new Date().toISOString();
+            const logElement = document.getElementById('logOutput');
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(`[ORDER_FILL_TEST] ${message}`);
+        }
+
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.textContent = `Connection Status: ${status}`;
+            statusElement.className = status === 'Connected' ? 'status success' : 'status';
+        }
+
+        function updateBalances(balances) {
+            const balancesElement = document.getElementById('balances');
+            balancesElement.innerHTML = '';
+            
+            if (!balances || Object.keys(balances).length === 0) {
+                balancesElement.innerHTML = '<div class="balance-item"><span>No balances available</span></div>';
+                return;
+            }
+
+            Object.entries(balances).forEach(([asset, balance]) => {
+                if (parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0) {
+                    const div = document.createElement('div');
+                    div.className = 'balance-item';
+                    div.innerHTML = `
+                        <span>${asset}:</span>
+                        <span>Free: ${parseFloat(balance.free).toFixed(8)} | Locked: ${parseFloat(balance.locked).toFixed(8)}</span>
+                    `;
+                    balancesElement.appendChild(div);
+                }
+            });
+        }
+
+        async function refreshBalances() {
+            try {
+                log('Refreshing balances via API...');
+                const response = await fetch('/api/trading/balance');
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentBalances = data.balances;
+                    updateBalances(currentBalances);
+                    log(`Balance refresh successful. Found ${Object.keys(currentBalances).length} assets`);
+                } else {
+                    log(`Balance refresh failed: ${data.error}`);
+                }
+            } catch (error) {
+                log(`Balance refresh error: ${error.message}`);
+            }
+        }
+
+        function simulateOrderFill() {
+            const mockOrderFill = {
+                e: 'executionReport',
+                s: 'BTCUSDT',
+                q: '0.001',
+                p: '45000.00',
+                S: 'BUY',
+                x: 'TRADE',
+                X: 'FILLED',
+                i: Date.now(),
+                t: Date.now()
+            };
+            
+            log('Simulating order fill event...');
+            handleOrderFillEvent(mockOrderFill);
+        }
+
+        function handleOrderFillEvent(data) {
+            orderFillCount++;
+            
+            log(`Order fill detected #${orderFillCount}: ${data.s} ${data.S} ${data.q} at ${data.p}`);
+            
+            document.getElementById('orderFillStatus').textContent = `Order fills detected: ${orderFillCount}`;
+            document.getElementById('lastOrderFill').textContent = 
+                `Last: ${data.s} ${data.S} ${data.q} at ${data.p} (${new Date().toLocaleTimeString()})`;
+            
+            // Refresh balances after order fill
+            setTimeout(refreshBalances, 1000);
+        }
+
+        function placeMockOrder() {
+            log('Mock order placement - this would normally trigger an order fill event');
+            
+            // Simulate a delay and then an order fill
+            setTimeout(() => {
+                simulateOrderFill();
+            }, 2000);
+        }
+
+        function connectWebSocket() {
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}`;
+                
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function() {
+                    log('WebSocket connected successfully');
+                    updateConnectionStatus('Connected');
+                    
+                    // Subscribe to user data stream for order fills
+                    ws.send(JSON.stringify({
+                        type: 'subscribe',
+                        channel: 'userDataStream'
+                    }));
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.e === 'executionReport') {
+                            // This is an order update/fill
+                            if (data.x === 'TRADE' && data.X === 'FILLED') {
+                                handleOrderFillEvent(data);
+                            }
+                        } else if (data.type === 'balance_update') {
+                            // Handle balance updates
+                            log('Received balance update from WebSocket');
+                            updateBalances(data.balances);
+                        }
+                    } catch (error) {
+                        log(`WebSocket message parsing error: ${error.message}`);
+                    }
+                };
+                
+                ws.onclose = function() {
+                    log('WebSocket connection closed');
+                    updateConnectionStatus('Disconnected');
+                    
+                    // Attempt to reconnect after 3 seconds
+                    setTimeout(connectWebSocket, 3000);
+                };
+                
+                ws.onerror = function(error) {
+                    log(`WebSocket error: ${error.message || 'Connection error'}`);
+                    updateConnectionStatus('Error');
+                };
+                
+            } catch (error) {
+                log(`WebSocket connection error: ${error.message}`);
+                updateConnectionStatus('Error');
+            }
+        }
+
+        // Initialize when page loads
+        window.onload = function() {
+            log('Order Fill Balance Test initialized');
+            connectWebSocket();
+            refreshBalances();
+        };
+
+        // Cleanup when page unloads
+        window.onbeforeunload = function() {
+            if (ws) {
+                ws.close();
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,3 +1,5 @@
+import { tickerPriceService } from './TickerPriceService';
+
 class WebSocketSingleton {
   private static instance: WebSocketSingleton;
   private ws: WebSocket | null = null;
@@ -144,7 +146,7 @@ class WebSocketSingleton {
         if (data.type === 'ticker_update') {
           // Store in ticker price service if available
           if (data.data && data.data.symbol && data.data.price) {
-            TickerPriceService.updatePrice(data.data.symbol, parseFloat(data.data.price));
+            tickerPriceService.updatePrice(data.data.symbol, parseFloat(data.data.price));
           }
         }
         

@@ -74,15 +74,18 @@ export class KlineStreamManager {
       return;
     }
 
-    try {
-      console.log(`[UNIFIED WS] [KLINE STREAM] Starting kline stream for ${symbol} at ${interval} on exchange ${this.currentExchangeId}`);
+    try {      console.log(`[UNIFIED WS] [KLINE STREAM] Starting kline stream for ${symbol} at ${interval} on exchange ${this.currentExchangeId}`);
         // Get the WebSocket URL from the exchange API service
-      const wsUrl = await this.exchangeApiService.getWebSocketStreamUrl(this.currentExchangeId);
+      const baseWsUrl = await this.exchangeApiService.getWebSocketStreamUrl(this.currentExchangeId);
       
-      if (!wsUrl) {
+      if (!baseWsUrl) {
         throw new Error(`No WebSocket URL found for exchange ${this.currentExchangeId}`);
       }
 
+      // Use combined stream endpoint for multiple kline subscriptions
+      // According to Binance docs: /stream?streams=<streamName1>/<streamName2>
+      const wsUrl = `${baseWsUrl}/stream`;
+      
       console.log(`[KLINE STREAM] Using WebSocket URL: ${wsUrl}`);
       this.klineBinanceWs = new WebSocket(wsUrl);
       

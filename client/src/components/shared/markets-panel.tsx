@@ -39,9 +39,9 @@ export function MarketsPanel({ className = "", onSymbolSelect, selectedSymbol }:
   );
 
   return (
-    <div className={`bg-crypto-dark border-r border-gray-800 flex flex-col ${className}`}>
+    <div className={`bg-crypto-dark border-l border-gray-800 flex flex-col ${className}`}>
       {/* Market Search */}
-      <div className="p-3 border-b border-gray-800">
+      <div className="p-3 border-b border-gray-800 shrink-0">
         <Input
           placeholder="Search"
           value={searchTerm}
@@ -51,7 +51,7 @@ export function MarketsPanel({ className = "", onSymbolSelect, selectedSymbol }:
       </div>
 
       {/* Market Headers */}
-      <div className="px-3 py-2 border-b border-gray-800">
+      <div className="px-3 py-2 border-b border-gray-800 shrink-0">
         <div className="grid grid-cols-4 gap-2 text-xs text-gray-400">
           <span>Pair</span>
           <span className="text-right">Last Price</span>
@@ -61,7 +61,7 @@ export function MarketsPanel({ className = "", onSymbolSelect, selectedSymbol }:
       </div>
 
       {/* Market List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">{/* ... existing content ... */}
         {filteredPairs.map((pair) => (
           <div
             key={pair.symbol}
