@@ -46,10 +46,10 @@ export class UserDataStreamManager {
       console.log(`[USER DATA STREAM] Connecting to ${isTestnet ? 'testnet' : 'mainnet'} user data stream...`);
       
       const ws = new WebSocket(streamUrl);
-      this.userStreams.set(exchangeId, ws);
-      
+      this.userStreams.set(exchangeId, ws);      
       ws.on('open', () => {
-        console.log(`[USER DATA STREAM] ✅ Connected to ${exchange.name} user data stream`);
+        console.log(`[UNIFIED WS OPEN ORDERS] ✅ Connected to ${exchange.name} user data stream`);
+        console.log(`[UNIFIED WS OPEN ORDERS] 🎧 Monitoring order status changes and fills for real-time open orders updates`);
       });
       
       ws.on('message', (data) => {
@@ -57,17 +57,17 @@ export class UserDataStreamManager {
           const event = JSON.parse(data.toString());
           this.handleUserDataEvent(exchangeId, event);
         } catch (error) {
-          console.error('[USER DATA STREAM] Failed to parse message:', error);
+          console.error('[UNIFIED WS OPEN ORDERS] ❌ Failed to parse message:', error);
         }
       });
       
       ws.on('error', (error) => {
-        console.error(`[USER DATA STREAM] WebSocket error for exchange ${exchangeId}:`, error);
+        console.error(`[UNIFIED WS OPEN ORDERS] ❌ WebSocket error for exchange ${exchangeId}:`, error);
         this.scheduleReconnect(exchangeId);
       });
       
       ws.on('close', (code, reason) => {
-        console.log(`[USER DATA STREAM] Connection closed for exchange ${exchangeId} - Code: ${code}, Reason: ${reason}`);
+        console.log(`[UNIFIED WS OPEN ORDERS] 🔌 Connection closed for exchange ${exchangeId} - Code: ${code}, Reason: ${reason}`);
         this.userStreams.delete(exchangeId);
         this.scheduleReconnect(exchangeId);
       });
@@ -94,29 +94,86 @@ export class UserDataStreamManager {
       console.error('[USER DATA STREAM] Error handling user data event:', error);
     }
   }
+  private async handleExecutionReport(exchangeId: number, data: any): Promise<void> {
+    console.log(`[USER DATA STREAM] Order update: ${data.i} - ${data.X} (${data.s} ${data.S})`);
+    
+    // Enhanced order status logging for comprehensive monitoring
+    const orderStatus = {
+      orderId: data.i,
+      symbol: data.s,
+      side: data.S,
+      type: data.o,
+      quantity: data.q,
+      price: data.p,
+      stopPrice: data.P,
+      executedQty: data.z,
+      cummulativeQuoteQty: data.Z,
+      status: data.X,
+      timeInForce: data.f,
+      clientOrderId: data.c,
+      commission: data.n,
+      commissionAsset: data.N,
+      tradeTime: data.T,
+      exchangeId: exchangeId
+    };
 
-  private async handleExecutionReport(exchangeId: number, event: any): Promise<void> {
-    const { 
-      i: orderId, 
-      s: symbol, 
-      S: side, 
-      X: orderStatus,
-      q: originalQuantity,
-      z: executedQuantity,
-      p: price,
-      n: commission,
-      N: commissionAsset
-    } = event;
+    console.log(`[UNIFIED WS ORDER MONITORING] 📊 Order Status Update:`, orderStatus);
+
+    // Broadcast comprehensive order status update to all clients
+    const wsService = getGlobalWebSocketService();
+    if (wsService) {
+      // Broadcast detailed order status update
+      wsService.broadcastOrderStatusUpdate(orderStatus);
+      
+      // Broadcast comprehensive order update for frontend consumption
+      wsService.broadcastOrderUpdate({
+        type: 'execution_report',
+        exchangeId: exchangeId,
+        orderId: data.i,
+        symbol: data.s,
+        side: data.S,
+        orderType: data.o,
+        quantity: data.q,
+        price: data.p,
+        executedQty: data.z,
+        cummulativeQuoteQty: data.Z,
+        status: data.X,
+        timeInForce: data.f,
+        clientOrderId: data.c,
+        commission: data.n,
+        commissionAsset: data.N,
+        tradeTime: data.T,
+        updateTime: Date.now(),
+        isRealTimeUpdate: true
+      });
+    }
     
-    console.log(`[USER DATA STREAM] Order update: ${orderId} - ${orderStatus} (${symbol} ${side})`);
-    
-    if (orderStatus === 'FILLED') {
-      console.log(`[USER DATA STREAM] ✅ Order ${orderId} filled via WebSocket - processing...`);
+    if (data.X === 'FILLED') {
+      console.log(`[USER DATA STREAM] ✅ Order ${data.i} filled via WebSocket - processing...`);
         try {
         // Find the bot and cycle associated with this order
-        const order = await storage.getCycleOrderByExchangeId(orderId.toString());
+        const order = await storage.getCycleOrderByExchangeId(data.i.toString());
         if (!order) {
-          console.log(`[USER DATA STREAM] ⚠️  Order ${orderId} not found in database, skipping...`);
+          console.log(`[USER DATA STREAM] ⚠️  Order ${data.i} not found in database, might be a manual trade - broadcasting fill notification...`);
+          
+          // Broadcast fill notification for manual trades
+          if (wsService) {
+            wsService.broadcastOrderFillNotification({
+              id: data.i,
+              exchangeOrderId: data.i.toString(),
+              symbol: data.s,
+              side: data.S,
+              quantity: data.z,
+              price: data.p,
+              status: 'filled',
+              commission: data.n,
+              commissionAsset: data.N,
+              isManualTrade: true,
+              exchangeId: exchangeId,
+              orderType: 'manual_trade',
+              tradeTime: data.T
+            });
+          }
           return;
         }
         
@@ -126,8 +183,8 @@ export class UserDataStreamManager {
         // Update order status in database
         await storage.updateCycleOrder(order.id, {
           status: 'filled',
-          filledQuantity: executedQuantity,
-          filledPrice: price
+          filledQuantity: data.z,
+          filledPrice: data.p
         });
         
         console.log(`[USER DATA STREAM] ✓ Updated order ${order.id} status to filled`);
@@ -143,52 +200,79 @@ export class UserDataStreamManager {
         }
         
         // Broadcast order fill notification to all connected clients
-        const wsService = getGlobalWebSocketService();
         if (wsService) {
           wsService.broadcastOrderFillNotification({
             id: order.id,
-            exchangeOrderId: orderId.toString(),
+            exchangeOrderId: data.i.toString(),
             botId: botId,
             orderType: orderType,
-            symbol: symbol,
-            side: side,
-            quantity: executedQuantity,
-            price: price,
+            symbol: data.s,
+            side: data.S,
+            quantity: data.z,
+            price: data.p,
             status: 'filled',
-            commission: commission,
-            commissionAsset: commissionAsset
+            commission: data.n,
+            commissionAsset: data.N,
+            isManualTrade: false,
+            exchangeId: exchangeId,
+            tradeTime: data.T
           });
         }
         
         // Call the trading operations manager to handle the order fill
         await this.tradingOperationsManager.handleOrderFillEvent(botId, cycleId, {
           orderType: orderType,
-          orderId: orderId,
-          symbol: symbol,
-          side: side,
-          quantity: executedQuantity,
-          price: price,
-          commission: commission,
-          commissionAsset: commissionAsset
+          orderId: data.i,
+          symbol: data.s,
+          side: data.S,
+          quantity: data.z,
+          price: data.p,
+          commission: data.n,
+          commissionAsset: data.N
         });
         
       } catch (error) {
-        console.error(`[USER DATA STREAM] Failed to process order fill for ${orderId}:`, error);
+        console.error(`[USER DATA STREAM] Failed to process order fill for ${data.i}:`, error);
       }
-    } else if (orderStatus === 'CANCELED') {
-      console.log(`[USER DATA STREAM] Order ${orderId} cancelled via WebSocket`);
+    } else if (data.X === 'CANCELED') {
+      console.log(`[USER DATA STREAM] Order ${data.i} cancelled via WebSocket`);
         try {
-        const order = await storage.getCycleOrderByExchangeId(orderId.toString());
+        const order = await storage.getCycleOrderByExchangeId(data.i.toString());
         if (order) {
           await storage.updateCycleOrder(order.id, {
             status: 'cancelled'
           });
+          console.log(`[USER DATA STREAM] ✓ Updated order ${order.id} status to cancelled`);
+        } else {
+          console.log(`[USER DATA STREAM] ⚠️  Cancelled order ${data.i} not found in database, might be a manual trade`);
         }
       } catch (error) {
-        console.error(`[USER DATA STREAM] Failed to update cancelled order ${orderId}:`, error);
+        console.error(`[USER DATA STREAM] Failed to update cancelled order ${data.i}:`, error);
       }
-    } else if (orderStatus === 'NEW') {
-      console.log(`[USER DATA STREAM] Order update: ${orderId} - NEW (${symbol} ${side})`);
+    } else if (data.X === 'NEW') {
+      console.log(`[USER DATA STREAM] Order update: ${data.i} - NEW (${data.s} ${data.S})`);
+    } else if (data.X === 'PARTIALLY_FILLED') {
+      console.log(`[USER DATA STREAM] Order update: ${data.i} - PARTIALLY_FILLED (${data.s} ${data.S}) - ${data.z}/${data.q} filled`);
+    } else if (data.X === 'EXPIRED') {
+      console.log(`[USER DATA STREAM] Order update: ${data.i} - EXPIRED (${data.s} ${data.S})`);
+    }    
+    // Broadcast open orders update after order status change
+    if (data.X === 'NEW' || data.X === 'CANCELED' || data.X === 'FILLED' || data.X === 'PARTIALLY_FILLED' || data.X === 'EXPIRED') {
+      try {
+        console.log(`[UNIFIED WS OPEN ORDERS] 🔄 Order status changed to ${data.X}, updating open orders for exchange ${exchangeId}`);
+        
+        // Get updated open orders for the exchange (all symbols)
+        const openOrders = await this.tradingOperationsManager.getOpenOrders(exchangeId);
+        
+        console.log(`[UNIFIED WS OPEN ORDERS] 📡 Broadcasting updated open orders (${openOrders.length} orders) to all clients`);
+        
+        // Broadcast to all connected clients
+        if (wsService) {
+          wsService.broadcastOpenOrdersUpdate(exchangeId, undefined, openOrders);
+        }
+      } catch (error) {
+        console.error('[UNIFIED WS OPEN ORDERS] ❌ Error broadcasting open orders update:', error);
+      }
     }
   }
 

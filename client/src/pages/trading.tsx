@@ -6,6 +6,7 @@ import { TradingChart } from "@/components/trading/trading-chart";
 import { OrderForm } from "@/components/trading/order-form";
 import { MarketTrades } from "@/components/trading/market-trades";
 import { OrdersHistory } from "@/components/trading/orders-history";
+
 import { webSocketSingleton } from "@/services/WebSocketSingleton";
 import { useQuery } from "@tanstack/react-query";
 import { 
@@ -13,7 +14,10 @@ import {
   createChangeSubscriptionMessage,
   createTradingBalanceRequestMessage,
   createTradingBalanceSubscriptionMessage,
-  createTradingBalanceUnsubscriptionMessage
+  createTradingBalanceUnsubscriptionMessage,
+  createOpenOrdersRequestMessage,
+  createOpenOrdersSubscriptionMessage,
+  createOpenOrdersUnsubscriptionMessage
 } from "@/utils/websocket-helpers";
 
 interface TickerData {
@@ -33,23 +37,45 @@ interface BalanceData {
   locked: string;
 }
 
+interface OpenOrderData {
+  orderId: number;  // Binance returns orderId as number
+  clientOrderId: string;
+  symbol: string;
+  side: string;
+  type: string;
+  timeInForce: string;
+  quantity: string;
+  price: string;
+  stopPrice?: string;
+  status: string;
+  time: number;
+  updateTime: number;
+  origQty: string;
+  executedQty: string;
+  cummulativeQuoteQty: string;
+}
+
 export default function Trading() {
   const [tickerData, setTickerData] = useState<TickerData | null>(null);
   const [klineData, setKlineData] = useState<any>(null);
   const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSDT');
   const [currentInterval, setCurrentInterval] = useState<string>('4h');
-  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
-  const [selectedExchangeId, setSelectedExchangeId] = useState<number | undefined>();
-    // Balance states for trading
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');  const [selectedExchangeId, setSelectedExchangeId] = useState<number | undefined>();
+  
+  // Balance states for trading
   const [baseBalance, setBaseBalance] = useState<BalanceData | null>(null);
   const [quoteBalance, setQuoteBalance] = useState<BalanceData | null>(null);
   const [balanceLoading, setBalanceLoading] = useState<boolean>(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   
-  // Order execution tracking
+  // Open orders states
+  const [openOrders, setOpenOrders] = useState<OpenOrderData[]>([]);
+  const [openOrdersLoading, setOpenOrdersLoading] = useState<boolean>(false);
+  const [openOrdersError, setOpenOrdersError] = useState<string | null>(null);
+    // Order execution tracking
   const [lastOrderStatus, setLastOrderStatus] = useState<string | null>(null);
   const [orderHistory, setOrderHistory] = useState<Array<{
-    id: string;
+    orderId: string;
     symbol: string;
     side: string;
     type: string;
@@ -157,27 +183,215 @@ export default function Trading() {
       setBalanceLoading(false);
     }
   };
-
-  const handleExchangeChange = (exchangeId: number) => {
-    setSelectedExchangeId(exchangeId);
-    console.log(`[TRADING] Exchange changed to: ${exchangeId}`);
-    
-    // Unsubscribe from previous exchange balance updates
-    if (selectedExchangeId && webSocketSingleton.isConnected()) {
-      webSocketSingleton.sendMessage(
-        createTradingBalanceUnsubscriptionMessage(selectedSymbol, selectedExchangeId)
-      );
+  // Function to fetch open orders via API
+  const fetchOpenOrders = async () => {
+    if (!selectedExchangeId) {
+      console.log('[UNIFIED WS OPEN ORDERS] Cannot fetch open orders - no exchange selected');
+      setOpenOrdersLoading(false);
+      return;
     }
-      // Request balances for new exchange
-    setTimeout(() => {
-      fetchTradingBalances();
-    }, 100);
+
+    console.log(`[UNIFIED WS OPEN ORDERS] ===== FETCHING OPEN ORDERS =====`);
+    console.log(`[UNIFIED WS OPEN ORDERS] 📊 OPEN ORDERS REQUEST:`);
+    console.log(`[UNIFIED WS OPEN ORDERS]    Exchange ID: ${selectedExchangeId}`);
+    console.log(`[UNIFIED WS OPEN ORDERS]    Requesting ALL open orders (no symbol filter)`);
+    console.log(`[UNIFIED WS OPEN ORDERS]    Current symbol: ${selectedSymbol} (for display context only)`);
+    
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('[UNIFIED WS OPEN ORDERS] ❌ No authentication token found');
+      setOpenOrdersError('Authentication required');
+      setOpenOrdersLoading(false);
+      return;
+    }
+    console.log(`[UNIFIED WS OPEN ORDERS]    Token exists: ${!!token}, length: ${token.length}`);
+    
+    // Store the exchange ID at the start of the request to validate response
+    const requestExchangeId = selectedExchangeId;
+    
+    try {
+      // Don't filter by symbol - get ALL open orders for the exchange
+      const response = await fetch(`/api/exchanges/${requestExchangeId}/orders/open`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      console.log(`[UNIFIED WS OPEN ORDERS] 📡 Response status: ${response.status} ${response.statusText}`);
+      console.log(`[UNIFIED WS OPEN ORDERS] 📡 Response headers:`, Object.fromEntries(response.headers.entries()));
+      
+      let result;
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        const textResult = await response.text();
+        console.log(`[UNIFIED WS OPEN ORDERS] ❌ Non-JSON response received:`, textResult.substring(0, 200));
+        throw new Error(`Server returned non-JSON response (${response.status}): ${textResult.substring(0, 100)}`);
+      }
+      
+      // Validate that the response is still for the current exchange
+      if (requestExchangeId !== selectedExchangeId) {
+        console.log(`[UNIFIED WS OPEN ORDERS] ⚠️ Exchange changed during request (${requestExchangeId} -> ${selectedExchangeId}), ignoring response`);
+        return;
+      }
+      
+      if (response.ok && result.orders) {
+        console.log(`[UNIFIED WS OPEN ORDERS] ✅ OPEN ORDERS FETCH SUCCESSFUL:`);
+        console.log(`[UNIFIED WS OPEN ORDERS]    Total Open Orders: ${result.orders.length}`);
+        console.log(`[UNIFIED WS OPEN ORDERS]    Orders:`, result.orders);
+        
+        setOpenOrders(result.orders);
+        setOpenOrdersError(null);
+        
+        console.log(`[UNIFIED WS OPEN ORDERS] ===== OPEN ORDERS FETCH COMPLETED =====`);
+      } else {
+        throw new Error(result.error || 'Failed to fetch open orders');
+      }
+    } catch (error) {
+      console.log(`[UNIFIED WS OPEN ORDERS] ❌ OPEN ORDERS FETCH ERROR:`);
+      console.log(`[UNIFIED WS OPEN ORDERS]    Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Only set error if we're still on the same exchange
+      if (requestExchangeId === selectedExchangeId) {
+        setOpenOrdersError(error instanceof Error ? error.message : 'Failed to fetch open orders');
+      }
+    } finally {
+      // Only clear loading if we're still on the same exchange
+      if (requestExchangeId === selectedExchangeId) {
+        setOpenOrdersLoading(false);
+      }
+    }
   };
-  // Handle WebSocket messages
+  // Cancel order function
+  const handleCancelOrder = async (orderId: string, symbol: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('[CANCEL ORDER] ❌ No auth token found');
+      throw new Error('Authentication required');
+    }
+
+    console.log(`[CANCEL ORDER] 🚫 Cancelling order ${orderId} for ${symbol}...`);
+
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          exchangeId: selectedExchangeId,
+          symbol: symbol
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || errorData.error || 'Failed to cancel order');
+      }
+
+      const result = await response.json();
+      console.log(`[CANCEL ORDER] ✅ Order cancelled successfully:`, result);
+
+      // Refresh open orders to reflect the cancellation
+      fetchOpenOrders();
+
+    } catch (error) {
+      console.error(`[CANCEL ORDER] ❌ Error cancelling order:`, error);
+      throw error;
+    }
+  };  const handleExchangeChange = (exchangeId: number) => {
+    console.log(`[TRADING] ===== EXCHANGE CHANGE INITIATED =====`);
+    console.log(`[TRADING] Switching from exchange ${selectedExchangeId} to ${exchangeId}`);
+    
+    // Set loading states immediately
+    setOpenOrdersLoading(true);
+    setBalanceLoading(true);
+    
+    // Clear ALL previous exchange data immediately to prevent stale data display
+    setOpenOrders([]);
+    setBaseBalance(null);
+    setQuoteBalance(null);
+    setOpenOrdersError(null);
+    setBalanceError(null);
+    setTickerData(null);
+    setKlineData(null);
+    
+    // Store the previous exchange ID for proper unsubscription
+    const previousExchangeId = selectedExchangeId;
+    
+    // Update the selected exchange ID
+    setSelectedExchangeId(exchangeId);
+    
+    // Enhanced unsubscription from previous exchange
+    if (previousExchangeId && webSocketSingleton.isConnected()) {
+      console.log(`[TRADING] Unsubscribing from previous exchange: ${previousExchangeId}`);
+      
+      // Unsubscribe from balance updates
+      webSocketSingleton.sendMessage(
+        createTradingBalanceUnsubscriptionMessage(selectedSymbol, previousExchangeId)
+      );
+      
+      // Unsubscribe from open orders updates  
+      webSocketSingleton.sendMessage(
+        createOpenOrdersUnsubscriptionMessage(previousExchangeId)
+      );
+      
+      // Unsubscribe from market data for previous exchange
+      webSocketSingleton.sendMessage({
+        type: 'unsubscribe',
+        symbol: selectedSymbol,
+        exchangeId: previousExchangeId
+      });
+    }
+    
+    // Wait for unsubscription to process, then setup new exchange
+    setTimeout(() => {
+      console.log(`[TRADING] Setting up new exchange: ${exchangeId}`);
+      
+      // Fetch fresh data for new exchange
+      fetchTradingBalances();
+      fetchOpenOrders();
+      
+      if (webSocketSingleton.isConnected()) {
+        console.log(`[TRADING] Subscribing to new exchange: ${exchangeId}`);
+        
+        // Subscribe to market data for new exchange
+        webSocketSingleton.sendMessage(createChangeSubscriptionMessage(selectedSymbol, currentInterval, exchangeId));
+        
+        // Subscribe to open orders for new exchange
+        console.log(`[UNIFIED WS OPEN ORDERS] Subscribing to open orders for exchange: ${exchangeId} (all symbols)`);
+        webSocketSingleton.sendMessage(
+          createOpenOrdersSubscriptionMessage(exchangeId)
+        );
+        
+        // Subscribe to balance updates for new exchange
+        webSocketSingleton.sendMessage(
+          createTradingBalanceSubscriptionMessage(selectedSymbol, exchangeId)
+        );
+      }
+      
+      console.log(`[TRADING] ===== EXCHANGE CHANGE COMPLETED =====`);
+    }, 200); // Slightly longer delay to ensure proper cleanup
+  };  // Handle WebSocket messages
   useEffect(() => {
     const unsubscribeData = webSocketSingleton.subscribe((data: any) => {
+      // Add strong exchange filtering at the top level
+      if (data && data.exchangeId && data.exchangeId !== selectedExchangeId) {
+        console.log(`[TRADING] ⚠️ Ignoring message from exchange ${data.exchangeId} (current: ${selectedExchangeId})`);
+        return;
+      }
+      
       if (data && data.type === 'market_update' && data.data) {
         const marketData = data.data;
+        // Additional exchange check for market data
+        if (marketData.exchangeId && marketData.exchangeId !== selectedExchangeId) {
+          console.log(`[TRADING] ⚠️ Ignoring market update from exchange ${marketData.exchangeId}`);
+          return;
+        }
+        
         // Update ticker data in real-time
         setTickerData({
           symbol: marketData.symbol,
@@ -193,12 +407,24 @@ export default function Trading() {
       
       // Handle kline data for the chart
       if (data && data.type === 'kline_update' && data.data) {
+        // Additional exchange check for kline data
+        if (data.data.exchangeId && data.data.exchangeId !== selectedExchangeId) {
+          console.log(`[TRADING] ⚠️ Ignoring kline update from exchange ${data.data.exchangeId}`);
+          return;
+        }
+        
         console.log('[TRADING] Received kline data for chart:', data.data);
         setKlineData(data.data);
       }
       
       // Handle historical klines for the chart
       if (data && data.type === 'historical_klines' && data.data) {
+        // Additional exchange check for historical klines
+        if (data.data.exchangeId && data.data.exchangeId !== selectedExchangeId) {
+          console.log(`[TRADING] ⚠️ Ignoring historical klines from exchange ${data.data.exchangeId}`);
+          return;
+        }
+        
         console.log('[TRADING] Received historical klines for chart:', data.data.klines?.length || 0, 'candles');
         // Set a flag to indicate we're receiving historical data
         setKlineData({
@@ -220,10 +446,9 @@ export default function Trading() {
         console.log(`[MANUAL TRADING]    Quantity: ${orderData.quantity}`);
         console.log(`[MANUAL TRADING]    Price: ${orderData.price}`);
         console.log(`[MANUAL TRADING]    Status: ${orderData.status}`);
-        
-        // Check if this order fill is for our current trading pair and exchange
-        if (orderData.symbol === selectedSymbol && orderData.exchangeId === selectedExchangeId) {
-          console.log(`[MANUAL TRADING] ✅ ORDER FILL MATCHES CURRENT TRADING PAIR:`);
+          // Check if this order fill is for our current exchange (any symbol)
+        if (orderData.exchangeId === selectedExchangeId) {
+          console.log(`[MANUAL TRADING] ✅ ORDER FILL MATCHES CURRENT EXCHANGE:`);
           console.log(`[MANUAL TRADING]    Triggering balance refresh...`);
           
           // Delay balance refresh to allow order settlement
@@ -232,13 +457,11 @@ export default function Trading() {
             fetchTradingBalances();
           }, 1000);
         } else {
-          console.log(`[MANUAL TRADING] ⚠️ Order fill for different symbol/exchange, skipping balance refresh`);
+          console.log(`[MANUAL TRADING] ⚠️ Order fill for different exchange, skipping balance refresh`);
         }
         
         console.log(`[MANUAL TRADING] ===== ORDER FILL PROCESSING COMPLETE =====`);
-      }
-
-      // Handle ticker updates for price display
+      }      // Handle ticker updates for price display
       if (data && data.type === 'ticker_update' && data.data) {
         const tickerUpdate = data.data;
         if (tickerUpdate.symbol === selectedSymbol) {
@@ -255,14 +478,80 @@ export default function Trading() {
           }));
         }
       }
-    });
-
-    const unsubscribeConnect = webSocketSingleton.onConnect(() => {
+        // Handle open orders updates
+      if (data && data.type === 'open_orders_update' && data.data) {
+        console.log(`[UNIFIED WS OPEN ORDERS] ===== OPEN ORDERS UPDATE RECEIVED =====`);
+        console.log(`[UNIFIED WS OPEN ORDERS] 📊 OPEN ORDERS DATA:`, data.data);
+        console.log(`[UNIFIED WS OPEN ORDERS] 📊 Message Exchange ID: ${data.data.exchangeId}, Selected Exchange ID: ${selectedExchangeId}`);
+        
+        // Strong exchange ID validation
+        if (data.data.exchangeId === selectedExchangeId) {
+          console.log(`[UNIFIED WS OPEN ORDERS] ✅ Open orders update matches current exchange: ${selectedExchangeId}`);
+          console.log(`[UNIFIED WS OPEN ORDERS]    Total Orders: ${data.data.orders?.length || 0}`);
+          
+          setOpenOrders(data.data.orders || []);
+          setOpenOrdersError(null);
+          setOpenOrdersLoading(false); // Clear loading state
+          
+          console.log(`[UNIFIED WS OPEN ORDERS] ===== OPEN ORDERS STATE UPDATED =====`);
+        } else {
+          console.log(`[UNIFIED WS OPEN ORDERS] ⚠️ Open orders update for different exchange (${data.data.exchangeId} vs ${selectedExchangeId}), ignoring`);
+        }
+      }
+        // Handle individual order status updates
+      if (data && data.type === 'order_status_update' && data.data) {
+        console.log(`[UNIFIED WS OPEN ORDERS] ===== ORDER STATUS UPDATE RECEIVED =====`);
+        console.log(`[UNIFIED WS OPEN ORDERS] 📊 ORDER STATUS DATA:`, data.data);
+        
+        const orderData = data.data;
+        if (orderData.exchangeId === selectedExchangeId) {
+          console.log(`[UNIFIED WS OPEN ORDERS] ✅ Order status update matches current exchange`);
+          
+          // Update open orders list based on order status
+          setOpenOrders(prev => {
+            const updatedOrders = [...prev];
+            const existingOrderIndex = updatedOrders.findIndex(order => 
+              order.orderId === orderData.orderId || order.clientOrderId === orderData.clientOrderId
+            );
+            
+            if (orderData.status === 'NEW' || orderData.status === 'PARTIALLY_FILLED') {
+              // Add or update order in open orders
+              if (existingOrderIndex >= 0) {
+                updatedOrders[existingOrderIndex] = orderData;
+                console.log(`[UNIFIED WS OPEN ORDERS] 🔄 Updated existing order: ${orderData.orderId}`);
+              } else {
+                updatedOrders.push(orderData);
+                console.log(`[UNIFIED WS OPEN ORDERS] ➕ Added new order: ${orderData.orderId}`);
+              }
+            } else if (orderData.status === 'FILLED' || orderData.status === 'CANCELED') {
+              // Remove order from open orders
+              if (existingOrderIndex >= 0) {
+                updatedOrders.splice(existingOrderIndex, 1);
+                console.log(`[UNIFIED WS OPEN ORDERS] ➖ Removed completed order: ${orderData.orderId}`);
+              }
+            }
+            
+            console.log(`[UNIFIED WS OPEN ORDERS] 📊 Updated open orders count: ${updatedOrders.length}`);
+            return updatedOrders;
+          });
+          
+          console.log(`[UNIFIED WS OPEN ORDERS] ===== ORDER STATUS PROCESSING COMPLETE =====`);
+        } else {
+          console.log(`[UNIFIED WS OPEN ORDERS] ⚠️ Order status update for different exchange (${orderData.exchangeId} vs ${selectedExchangeId}), ignoring`);
+        }
+      }
+    });    const unsubscribeConnect = webSocketSingleton.onConnect(() => {
       setConnectionStatus('connected');
       console.log('[TRADING] Connected to unified WebSocket server');
-        // Request initial balance data when connected
+      // Request initial balance data and open orders when connected
       if (selectedExchangeId) {
         fetchTradingBalances();
+        fetchOpenOrders();
+          // Subscribe to open orders
+        console.log(`[UNIFIED WS OPEN ORDERS] Subscribing to open orders on connection for exchange: ${selectedExchangeId} (all symbols)`);
+        webSocketSingleton.sendMessage(
+          createOpenOrdersSubscriptionMessage(selectedExchangeId) // Remove symbol parameter
+        );
       }
     });
 
@@ -284,16 +573,15 @@ export default function Trading() {
       unsubscribeDisconnect();
       unsubscribeError();
     };
-  }, [selectedExchangeId, selectedSymbol]);
-
-  const handleSymbolSelect = (symbol: string) => {
+  }, [selectedExchangeId, selectedSymbol]);  const handleSymbolSelect = (symbol: string) => {
     console.log(`[TRADING] Symbol selected: ${symbol}`);
-    
-    // Unsubscribe from previous symbol balance updates
+    console.log(`[UNIFIED WS OPEN ORDERS] Symbol changed - open orders remain the same (all symbols for exchange)`);
+      // Unsubscribe from previous symbol balance updates (open orders don't need to change)
     if (selectedExchangeId && webSocketSingleton.isConnected()) {
       webSocketSingleton.sendMessage(
         createTradingBalanceUnsubscriptionMessage(selectedSymbol, selectedExchangeId)
       );
+      // Note: We don't unsubscribe from open orders since we want ALL symbols
     }
     
     setSelectedSymbol(symbol);
@@ -302,7 +590,8 @@ export default function Trading() {
     setBaseBalance(null); // Clear previous balance data
     setQuoteBalance(null);
     
-    // Note: Symbol change will be handled by the useEffect below
+    // Note: We don't clear open orders since we want to see all symbols for the current exchange
+    // Note: Open orders will remain the same, only balances need to be fetched for new symbol
   };
 
   const handleIntervalChange = (interval: string) => {
@@ -321,14 +610,19 @@ export default function Trading() {
     if (!webSocketSingleton.isConnected()) {
       webSocketSingleton.connect();
     }
-    
-    // Setup initial subscriptions once connected
+      // Setup initial subscriptions once connected
     const setupSubscriptions = () => {
       if (webSocketSingleton.isConnected() && selectedExchangeId) {
         console.log(`[TRADING] Setting up initial subscriptions for ${selectedSymbol} on exchange ${selectedExchangeId}`);
         webSocketSingleton.sendMessage(createChangeSubscriptionMessage(selectedSymbol, currentInterval, selectedExchangeId));
-          // Request trading balances
+        // Request trading balances and open orders
         fetchTradingBalances();
+        fetchOpenOrders();
+          // Subscribe to open orders
+        console.log(`[UNIFIED WS OPEN ORDERS] Setting up initial open orders subscription for exchange: ${selectedExchangeId} (all symbols)`);
+        webSocketSingleton.sendMessage(
+          createOpenOrdersSubscriptionMessage(selectedExchangeId) // Remove symbol parameter
+        );
       }
     };
 
@@ -352,24 +646,24 @@ export default function Trading() {
       if (unsubscribeConnect) {
         unsubscribeConnect();
       }
-      
-      // Send unsubscribe message if connected
+        // Send unsubscribe message if connected
       if (webSocketSingleton.isConnected()) {
         console.log('[TRADING] Sending unsubscribe message');
         webSocketSingleton.unsubscribe();
-        
-        // Unsubscribe from balance updates
+          // Unsubscribe from balance and open orders updates
         if (selectedExchangeId) {
           webSocketSingleton.sendMessage(
             createTradingBalanceUnsubscriptionMessage(selectedSymbol, selectedExchangeId)
+          );
+          webSocketSingleton.sendMessage(
+            createOpenOrdersUnsubscriptionMessage(selectedExchangeId) // Remove symbol parameter for all symbols
           );
         }
       }
       
       // Remove reference to allow cleanup
       console.log('[TRADING] Removing WebSocket reference');
-      webSocketSingleton.removeReference();
-    };
+      webSocketSingleton.removeReference();    };
   }, []); // Empty dependency array - only run once on mount and cleanup on unmount
 
   useEffect(() => {
@@ -377,18 +671,34 @@ export default function Trading() {
     if (webSocketSingleton.isConnected() && selectedExchangeId) {
       console.log(`[TRADING] Changing subscription to ${selectedSymbol} at ${currentInterval} on exchange ${selectedExchangeId}`);
       webSocketSingleton.sendMessage(createChangeSubscriptionMessage(selectedSymbol, currentInterval, selectedExchangeId));
-        // Request balances for new symbol
+      // Request balances for new symbol (open orders remain the same for all symbols)
       fetchTradingBalances();
+      // Note: We don't re-fetch open orders since we already have all symbols
     } else {
       console.log(`[TRADING] WebSocket not connected or no exchange selected, cannot change subscription to ${selectedSymbol}`);
     }
   }, [selectedSymbol, currentInterval, selectedExchangeId]);
-
-  // Initial balance fetch when exchange is selected
+  // Initial balance and open orders fetch when exchange is selected
   useEffect(() => {
     if (selectedExchangeId) {
-      console.log(`[MANUAL TRADING] Exchange selected: ${selectedExchangeId}, fetching initial balances...`);
+      console.log(`[MANUAL TRADING] ===== EXCHANGE SELECTION EFFECT =====`);
+      console.log(`[MANUAL TRADING] Exchange selected: ${selectedExchangeId}, fetching initial balances and open orders...`);
+      console.log(`[UNIFIED WS OPEN ORDERS] Exchange selected: ${selectedExchangeId}, fetching initial open orders...`);
+      
+      // Clear any existing data immediately when exchange changes
+      setOpenOrders([]);
+      setOpenOrdersError(null);
+      setBalanceError(null);
+      
+      // Set loading states
+      setOpenOrdersLoading(true);
+      setBalanceLoading(true);
+      
+      // Fetch fresh data
       fetchTradingBalances();
+      fetchOpenOrders();
+      
+      console.log(`[MANUAL TRADING] ===== EXCHANGE SELECTION EFFECT COMPLETED =====`);
     }
   }, [selectedExchangeId]);
 
@@ -424,18 +734,22 @@ export default function Trading() {
                   klineData={klineData}
                   onIntervalChange={handleIntervalChange}
                 />
+              </div>              {/* Orders & History Section */}
+              <div className="h-80 shrink-0 border-t border-gray-800">
+                <OrdersHistory 
+                  className="h-full" 
+                  openOrders={openOrders}
+                  openOrdersLoading={openOrdersLoading}
+                  openOrdersError={openOrdersError}
+                  onRefreshOpenOrders={fetchOpenOrders}
+                  onCancelOrder={handleCancelOrder}
+                />
               </div>
-
-              {/* Orders & History Section - Under Chart */}
-              <div className="h-64 shrink-0 border-t border-gray-800">
-                <OrdersHistory className="h-full" />
-              </div>
-            </div>
-
-            {/* Right Sidebar - Order Form and Markets */}
+            </div>            {/* Right Sidebar - Order Form and Markets */}
             <div className="w-80 shrink-0 border-l border-gray-800 flex flex-col">
-              {/* Order Form Section */}
-              <div className="h-96 shrink-0">                <OrderForm 
+              {/* Order Form Section - Increased height and optimized spacing */}
+              <div className="h-[28rem] shrink-0">
+                <OrderForm 
                   className="h-full" 
                   symbol={selectedSymbol} 
                   exchangeId={selectedExchangeId}

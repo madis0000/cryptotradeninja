@@ -1051,6 +1051,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Order History API - Secured (database-only, no exchange calls)
+  app.get("/api/orders/history", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      
+      console.log(`[ORDER HISTORY] 📊 Fetching order history for user ${userId}, limit: ${limit}`);
+      const orderHistory = await storage.getOrderHistoryByUserId(userId, limit);
+      
+      console.log(`[ORDER HISTORY] ✅ Retrieved ${orderHistory.length} orders from database`);
+      res.json(orderHistory);
+    } catch (error) {
+      console.error('[ORDER HISTORY] ❌ Error fetching order history:', error);
+      res.status(500).json({ error: "Failed to fetch order history" });
+    }
+  });
+
+  // Cancel Order API - Secured
+  app.delete("/api/orders/:orderId", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { orderId } = req.params;
+      const { exchangeId, symbol } = req.body;
+      
+      if (!exchangeId || !symbol) {
+        return res.status(400).json({ error: "exchangeId and symbol are required" });
+      }
+
+      console.log(`[CANCEL ORDER] 🚫 Cancel request for order ${orderId} on ${symbol}`);
+      
+      // Use the trading operations manager to cancel the order
+      await wsService.getTradingOperationsManager().cancelManualOrder(exchangeId, orderId, symbol);
+      
+      console.log(`[CANCEL ORDER] ✅ Order ${orderId} cancelled successfully`);
+      res.json({ message: "Order cancelled successfully", orderId });
+      
+    } catch (error) {
+      console.error('[CANCEL ORDER] ❌ Error cancelling order:', error);
+      res.status(500).json({ 
+        error: "Failed to cancel order",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Portfolio API - Secured
   app.get("/api/portfolio", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
@@ -1596,6 +1640,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false, 
         error: "Failed to fetch balances",
         details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Open Orders API - Get open orders for a specific exchange and symbol
+  app.get("/api/exchanges/:exchangeId/orders/open", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const exchangeId = parseInt(req.params.exchangeId);
+      const { symbol } = req.query;
+      
+      console.log(`[OPEN ORDERS API] 🔍 Fetching open orders for exchange ${exchangeId}, symbol: ${symbol || 'all'}`);
+      
+      if (!exchangeId || isNaN(exchangeId)) {
+        return res.status(400).json({ 
+          success: false,
+          error: "Invalid exchange ID" 
+        });
+      }
+
+      // Get exchange details
+      const exchange = await storage.getExchange(exchangeId);
+      if (!exchange) {
+        return res.status(404).json({ 
+          success: false,
+          error: "Exchange not found" 
+        });
+      }
+
+      // Verify user owns this exchange
+      if (exchange.userId !== req.user!.id) {
+        return res.status(403).json({ 
+          success: false,
+          error: "Unauthorized access to exchange" 
+        });
+      }
+
+      try {
+        // Use the TradingOperationsManager to get open orders
+        if (wsService) {
+          const openOrders = await wsService.getTradingOperationsManager().getOpenOrders(exchangeId, symbol as string);
+          
+          return res.json({
+            success: true,
+            orders: openOrders,
+            exchangeId: exchangeId,
+            symbol: symbol || null,
+            timestamp: Date.now()
+          });
+        } else {
+          return res.status(500).json({
+            success: false,
+            error: "Trading operations manager not available"
+          });
+        }
+      } catch (apiError) {
+        console.error(`[OPEN ORDERS API] ❌ Failed to fetch open orders:`, apiError);
+        
+        // Return empty array if API call fails
+        return res.json({
+          success: true,
+          orders: [],
+          exchangeId: exchangeId,
+          symbol: symbol || null,
+          timestamp: Date.now(),
+          warning: "Could not fetch open orders from exchange API"
+        });
+      }
+    } catch (error) {
+      console.error(`[OPEN ORDERS API] ❌ Open orders fetch failed:`, error);
+      res.status(500).json({ 
+        success: false, 
+        error: "Failed to fetch open orders"
       });
     }
   });

@@ -106,6 +106,28 @@ export class MessageHandler {
         
         case 'unsubscribe_trading_balance':
           await this.handleUnsubscribeTradingBalance(ws, message, clientId);
+          break;          case 'get_open_orders':
+          {
+            const exchangeId = message.exchangeId || await this.getDefaultExchangeId();
+            if (exchangeId) {
+              await this.handleGetOpenOrders(ws, exchangeId, message.symbol);
+            } else {
+              console.error('[MESSAGE HANDLER] No valid exchange ID found for get_open_orders');
+              ws.send(JSON.stringify({ type: 'error', message: 'No valid exchange ID found' }));
+            }
+          }
+          break;
+        
+        case 'subscribe_open_orders':
+          {
+            const exchangeId = message.exchangeId || await this.getDefaultExchangeId();
+            if (exchangeId) {
+              await this.handleSubscribeOpenOrders(ws, clientId, exchangeId, message.symbol);
+            } else {
+              console.error('[MESSAGE HANDLER] No valid exchange ID found for subscribe_open_orders');
+              ws.send(JSON.stringify({ type: 'error', message: 'No valid exchange ID found' }));
+            }
+          }
           break;
         
         default:
@@ -504,6 +526,79 @@ export class MessageHandler {
       }));
     }
   }
+  // Add new handler methods
+  private async handleGetOpenOrders(ws: WebSocket, exchangeId: number, symbol?: string): Promise<void> {
+    try {
+      console.log(`[UNIFIED WS OPEN ORDERS] Getting open orders for exchange ${exchangeId}, symbol: ${symbol || 'all'}`);
+      
+      const openOrders = await this.tradingOperationsManager.getOpenOrders(exchangeId, symbol);
+      
+      console.log(`[UNIFIED WS OPEN ORDERS] Retrieved ${openOrders.length} open orders`);
+      
+      ws.send(JSON.stringify({
+        type: 'open_orders_update',
+        data: {
+          exchangeId,
+          symbol,
+          orders: openOrders,
+          timestamp: Date.now()
+        }
+      }));
+      
+      console.log(`[UNIFIED WS OPEN ORDERS] ✅ Sent open orders data to client`);
+      
+    } catch (error) {
+      console.error('[UNIFIED WS OPEN ORDERS] ❌ Error getting open orders:', error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Failed to get open orders',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }));
+    }
+  }  
+  private async handleSubscribeOpenOrders(ws: WebSocket, clientId: string, exchangeId: number, symbol?: string): Promise<void> {
+    try {
+      console.log(`[UNIFIED WS OPEN ORDERS] Client ${clientId} subscribing to open orders for exchange ${exchangeId}, symbol: ${symbol || 'all'}`);
+      
+      // Store subscription info for this client
+      if (!this.openOrderSubscriptions) {
+        this.openOrderSubscriptions = new Map();
+      }
+      
+      const subscriptionKey = `${exchangeId}-${symbol || 'ALL'}`;
+      if (!this.openOrderSubscriptions.has(subscriptionKey)) {
+        this.openOrderSubscriptions.set(subscriptionKey, new Set());
+      }
+      
+      this.openOrderSubscriptions.get(subscriptionKey)?.add(clientId);
+      
+      console.log(`[UNIFIED WS OPEN ORDERS] Added client ${clientId} to subscription key: ${subscriptionKey}`);
+      
+      // Send initial open orders
+      await this.handleGetOpenOrders(ws, exchangeId, symbol);
+      
+      ws.send(JSON.stringify({
+        type: 'subscription_confirmed',
+        channel: 'open_orders',
+        exchangeId,
+        symbol,
+        message: `Subscribed to open orders for exchange ${exchangeId}${symbol ? ` symbol ${symbol}` : ' (all symbols)'}`
+      }));
+      
+      console.log(`[UNIFIED WS OPEN ORDERS] ✅ Subscription confirmed for client ${clientId}`);
+      
+    } catch (error) {
+      console.error('[UNIFIED WS OPEN ORDERS] ❌ Error subscribing to open orders:', error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Failed to subscribe to open orders',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }));
+    }
+  }
+  
+  // Add property for open order subscriptions
+  private openOrderSubscriptions?: Map<string, Set<string>>;
 
   // Get status information
   getStatus(): any {

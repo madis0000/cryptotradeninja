@@ -96,6 +96,31 @@ class TickerPriceService {
     return { ...this.prices };
   }
   
+  /**
+   * Update price for a specific symbol
+   * @param symbol Symbol to update price for (e.g., 'BTCUSDT')
+   * @param price New price value
+   */
+  public updatePrice(symbol: string, price: number): void {
+    const normalizedSymbol = symbol.toUpperCase();
+    console.log(`[TICKER PRICE SERVICE] Updating price: ${normalizedSymbol} = $${price}`);
+    
+    // Update price in our cache
+    this.prices[normalizedSymbol] = price;
+    
+    // Only notify subscribers if they're tracking this symbol
+    if (this.requestedSymbols.has(normalizedSymbol)) {
+      // Notify all subscribers
+      this.subscribers.forEach(callback => {
+        try {
+          callback(this.prices);
+        } catch (error) {
+          console.error('[TICKER PRICE SERVICE] Error calling subscriber callback:', error);
+        }
+      });
+    }
+  }
+  
   private isSymbolStillNeeded(symbol: string): boolean {
     // This is a simplified check - in a real implementation,
     // you might want to track which subscribers need which symbols

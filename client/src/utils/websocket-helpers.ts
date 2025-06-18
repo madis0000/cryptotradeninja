@@ -190,3 +190,48 @@ export function createTradingBalanceRequestMessage(
     clientId: clientId || generateClientId()
   }, exchangeId);
 }
+
+/**
+ * Creates an open orders request message
+ */
+export function createOpenOrdersRequestMessage(
+  exchangeId: number,
+  symbol?: string,
+  clientId?: string
+): WebSocketMessageWithExchange {
+  return createWebSocketMessage({
+    type: 'get_open_orders',
+    symbol,
+    clientId: clientId || generateClientId()
+  }, exchangeId);
+}
+
+/**
+ * Creates an open orders subscription message
+ */
+export function createOpenOrdersSubscriptionMessage(
+  exchangeId: number,
+  symbol?: string,
+  clientId?: string
+): WebSocketMessageWithExchange {
+  return createWebSocketMessage({
+    type: 'subscribe_open_orders',
+    symbol,
+    clientId: clientId || generateClientId()
+  }, exchangeId);
+}
+
+/**
+ * Creates an open orders unsubscription message
+ */
+export function createOpenOrdersUnsubscriptionMessage(
+  exchangeId: number,
+  symbol?: string,
+  clientId?: string
+): WebSocketMessageWithExchange {
+  return createWebSocketMessage({
+    type: 'unsubscribe_open_orders',
+    symbol,
+    clientId: clientId || generateClientId()
+  }, exchangeId);
+}

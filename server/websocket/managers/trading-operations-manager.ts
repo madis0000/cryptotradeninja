@@ -274,6 +274,63 @@ export class TradingOperationsManager {
       throw error;
     }
   }
+
+  // Cancel order for manual trading (by exchange ID and order ID)
+  async cancelManualOrder(exchangeId: number, orderId: string, symbol: string): Promise<void> {
+    console.log(`[MANUAL TRADING] [CANCEL] 🚫 Cancelling order ${orderId} on ${symbol}...`);
+    
+    try {
+      const exchange = await storage.getExchange(exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+
+      // Get API credentials
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.apiKey,
+        exchange.apiSecret,
+        exchange.encryptionIv
+      );
+
+      console.log(`[MANUAL TRADING] [CANCEL] 📡 Sending cancel request to ${exchange.name}...`);
+
+      // Cancel order on exchange using REST API
+      const cancelParams = new URLSearchParams({
+        symbol: symbol,
+        orderId: orderId,
+        timestamp: Date.now().toString()
+      });
+
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(cancelParams.toString())
+        .digest('hex');
+      
+      cancelParams.append('signature', signature);
+
+      const cancelResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/order?${cancelParams.toString()}`, {
+        method: 'DELETE',
+        headers: {
+          'X-MBX-APIKEY': apiKey
+        }
+      });
+
+      const cancelResult = await cancelResponse.json();
+      
+      if (!cancelResponse.ok) {
+        console.log(`[MANUAL TRADING] [CANCEL] ❌ Cancel failed:`, cancelResult);
+        throw new Error(`Order cancellation failed: ${cancelResult.msg || 'Unknown error'}`);
+      }
+
+      console.log(`[MANUAL TRADING] [CANCEL] ✅ Order ${orderId} cancelled successfully!`);
+      console.log(`[MANUAL TRADING] [CANCEL] 📊 Cancel result:`, cancelResult);
+      
+    } catch (error) {
+      console.error(`[MANUAL TRADING] [CANCEL] ❌ Error cancelling order ${orderId}:`, error);
+      throw error;
+    }
+  }
+
   // Get pending requests count
   getPendingRequestsCount(): number {
     return this.pendingOrderRequests.size;
@@ -368,15 +425,26 @@ export class TradingOperationsManager {
 
       // Fetch dynamic symbol filters from Binance exchange
       const filters = await getBinanceSymbolFilters(symbol, exchange.restApiEndpoint || 'https://testnet.binance.vision');
+        // Apply Binance LOT_SIZE filter using correct step size
+      let quantity = adjustQuantity(rawQuantity, filters.stepSize, filters.minQty, filters.qtyDecimals);
+
+      // Validate filter compliance before proceeding
+      const compliance = ensureFilterCompliance(quantity, currentPrice, filters);
+      if (!compliance.isValid) {
+        console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Filter compliance failed: ${compliance.error}`);
+        throw new Error(`Filter compliance failed: ${compliance.error}`);
+      }
       
-      // Apply Binance LOT_SIZE filter using correct step size
-      const quantity = adjustQuantity(rawQuantity, filters.stepSize, filters.minQty, filters.qtyDecimals);
+      // Use the validated values
+      quantity = compliance.quantity;
+      const validatedPrice = compliance.price;
 
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📊 BASE ORDER CALCULATION:`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Investment Amount: $${baseOrderAmount}`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Current Price: $${currentPrice.toFixed(6)}`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Raw Quantity: ${rawQuantity.toFixed(8)} ${symbol.replace('USDT', '')}`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Adjusted Quantity: ${quantity.toFixed(filters.qtyDecimals)} ${symbol.replace('USDT', '')} (LOT_SIZE compliant)`);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Filter Validation: ✅ PASSED`);
 
       // Create the base order record
       const baseOrder = await storage.createCycleOrder({
@@ -421,20 +489,22 @@ export class TradingOperationsManager {
           exchange.apiKey,
           exchange.apiSecret,
           exchange.encryptionIv
-        );
-
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚀 Placing order on ${exchange.name}...`);
+        );        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚀 Placing order on ${exchange.name}...`);
         console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Order Type: MARKET ${bot.direction === 'long' ? 'BUY' : 'SELL'}`);
         console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Symbol: ${symbol}`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Quantity: ${quantity.toFixed(filters.qtyDecimals)}`);
-          // Place market order using REST API directly
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Investment: $${baseOrderAmount} (using quoteOrderQty)`);
+        
+        // Use quoteOrderQty for market orders to avoid LOT_SIZE issues
+        // This ensures we spend exactly the desired amount in USDT
         const orderParams = new URLSearchParams({
           symbol: bot.tradingPair,
           side: bot.direction === 'long' ? 'BUY' : 'SELL',
           type: 'MARKET',
-          quantity: quantity.toFixed(filters.qtyDecimals),
+          quoteOrderQty: baseOrderAmount.toFixed(2), // Use quote asset amount instead of base asset quantity
           timestamp: Date.now().toString()
         });
+
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📤 Using quoteOrderQty for market order: $${baseOrderAmount.toFixed(2)} USDT`);
 
         // Create signature for Binance API
         const signature = crypto
@@ -710,7 +780,24 @@ export class TradingOperationsManager {
       } else {
         takeProfitPrice = baseOrderPrice * (1 - takeProfitPercentage / 100);
       }      // Apply PRICE_FILTER adjustment
-      const adjustedTakeProfitPrice = adjustPrice(takeProfitPrice, filters.tickSize, filters.priceDecimals);
+      let adjustedTakeProfitPrice = adjustPrice(takeProfitPrice, filters.tickSize, filters.priceDecimals);
+      
+      // Validate filter compliance for take profit order
+      const compliance = ensureFilterCompliance(baseOrderQuantity, adjustedTakeProfitPrice, filters);
+      if (!compliance.isValid) {
+        console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Take profit filter compliance failed: ${compliance.error}`);
+        // Try to fix the price by adjusting it again
+        adjustedTakeProfitPrice = adjustPrice(adjustedTakeProfitPrice, filters.tickSize, filters.priceDecimals);
+        
+        // Validate again
+        const retryCompliance = ensureFilterCompliance(baseOrderQuantity, adjustedTakeProfitPrice, filters);
+        if (!retryCompliance.isValid) {
+          throw new Error(`Take profit filter compliance failed: ${retryCompliance.error}`);
+        }
+        adjustedTakeProfitPrice = retryCompliance.price;
+      } else {
+        adjustedTakeProfitPrice = compliance.price;
+      }
 
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Base Price: $${baseOrderPrice.toFixed(6)}`);
@@ -718,6 +805,7 @@ export class TradingOperationsManager {
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Raw TP Price: $${takeProfitPrice.toFixed(8)}`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Adjusted TP Price: $${adjustedTakeProfitPrice.toFixed(filters.priceDecimals)} (PRICE_FILTER compliant)`);
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Quantity: ${baseOrderQuantity.toFixed(filters.qtyDecimals)}`);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Filter Validation: ✅ PASSED`);
 
       // Create take profit order record
       const takeProfitOrder = await storage.createCycleOrder({
@@ -1325,6 +1413,221 @@ export class TradingOperationsManager {
     });
     
     console.log(`[UNIFIED WS] [TRADING OPERATIONS] ✅ Cleanup completed for bot ${botId}`);
+  }  // Get open orders for a specific exchange and symbol
+  async getOpenOrders(exchangeId: number, symbol?: string): Promise<any[]> {
+    try {
+      console.log(`[UNIFIED WS OPEN ORDERS] 🔍 Getting open orders for exchange ${exchangeId}, symbol: ${symbol || 'all'}`);
+      
+      // Get exchange details
+      const exchange = await storage.getExchange(exchangeId);
+      if (!exchange) {
+        throw new Error(`Exchange ${exchangeId} not found`);
+      }
+      
+      console.log(`[UNIFIED WS OPEN ORDERS] ✓ Using exchange: ${exchange.name} (${exchange.isTestnet ? 'Testnet' : 'Live'})`);
+        // Decrypt API credentials
+      const { apiKey, apiSecret } = decryptApiCredentials(exchange.apiKey, exchange.apiSecret, exchange.encryptionIv);
+      
+      console.log(`[UNIFIED WS OPEN ORDERS] 🔑 API Credentials:`);
+      console.log(`[UNIFIED WS OPEN ORDERS]    API Key: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 8)}`);
+      console.log(`[UNIFIED WS OPEN ORDERS]    API Secret: ${apiSecret.substring(0, 8)}...${apiSecret.substring(apiSecret.length - 8)}`);
+      console.log(`[UNIFIED WS OPEN ORDERS]    Encryption IV: ${exchange.encryptionIv}`);      // Prepare API request
+      const timestamp = Date.now();
+      const baseUrl = exchange.restApiEndpoint || (exchange.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com');
+      
+      console.log(`[UNIFIED WS OPEN ORDERS] 🌐 Using REST API endpoint: ${baseUrl}`);
+      console.log(`[UNIFIED WS OPEN ORDERS] 🌐 Endpoint source: ${exchange.restApiEndpoint ? 'Database' : 'Fallback'}`);
+      
+      // Build query parameters
+      const queryParams = new URLSearchParams({
+        timestamp: timestamp.toString(),
+        recvWindow: '10000'
+      });
+        if (symbol) {
+        queryParams.set('symbol', symbol);
+        console.log(`[UNIFIED WS OPEN ORDERS] 🎯 Filtering by symbol: ${symbol}`);
+      }
+      
+      // Create signature
+      const queryString = queryParams.toString();
+      const signature = crypto.createHmac('sha256', apiSecret)
+        .update(queryString)
+        .digest('hex');
+      
+      queryParams.set('signature', signature);
+      
+      console.log(`[UNIFIED WS OPEN ORDERS] 📡 Making API request to: ${baseUrl}/api/v3/openOrders`);
+      
+      // Make API request
+      const response = await fetch(`${baseUrl}/api/v3/openOrders?${queryParams.toString()}`, {
+        method: 'GET',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/json'
+        }
+      });
+        if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[UNIFIED WS OPEN ORDERS] ❌ API request failed: ${response.status} ${response.statusText} - ${errorText}`);
+        
+        // Try alternative method - use account endpoint which includes open orders
+        console.log(`[UNIFIED WS OPEN ORDERS] 🔄 Trying alternative method using account endpoint...`);
+        
+        try {
+          const accountParams = new URLSearchParams({
+            timestamp: Date.now().toString(),
+            recvWindow: '10000'
+          });
+          
+          const accountQueryString = accountParams.toString();
+          const accountSignature = crypto.createHmac('sha256', apiSecret)
+            .update(accountQueryString)
+            .digest('hex');
+          
+          accountParams.set('signature', accountSignature);
+          
+          const accountResponse = await fetch(`${baseUrl}/api/v3/account?${accountParams.toString()}`, {
+            method: 'GET',
+            headers: {
+              'X-MBX-APIKEY': apiKey,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (accountResponse.ok) {
+            const accountData = await response.json();
+            console.log(`[UNIFIED WS OPEN ORDERS] ⚠️ Account endpoint worked, but openOrders endpoint failed. Using empty array for now.`);
+            console.log(`[UNIFIED WS OPEN ORDERS] 📋 Account data received - this confirms API key is valid`);
+            
+            // Return empty array since we can't get open orders directly
+            // but we know the API key is valid
+            return [];
+          }
+        } catch (accountError) {
+          console.error(`[UNIFIED WS OPEN ORDERS] ❌ Account endpoint also failed:`, accountError);
+        }
+        
+        throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+      
+      const openOrders = await response.json();
+      
+      console.log(`[UNIFIED WS OPEN ORDERS] ✅ Retrieved ${openOrders.length} open orders for exchange ${exchangeId}`);
+      
+      // Log order details for debugging
+      if (openOrders.length > 0) {
+        console.log(`[UNIFIED WS OPEN ORDERS] 📋 Open orders summary:`);
+        openOrders.forEach((order: any, index: number) => {
+          console.log(`[UNIFIED WS OPEN ORDERS]   ${index + 1}. ${order.symbol} ${order.side} ${order.type} - Price: ${order.price || 'MARKET'}, Qty: ${order.origQty}, Status: ${order.status}`);
+        });
+      } else {
+        console.log(`[UNIFIED WS OPEN ORDERS] 📝 No open orders found`);
+      }
+      
+      return openOrders;
+      
+    } catch (error) {
+      console.error(`[UNIFIED WS OPEN ORDERS] ❌ Error getting open orders:`, error);
+      throw error;
+    }
+  }
+  // Enhanced order monitoring for all trading types
+  async monitorAllOrders(exchangeId: number): Promise<void> {
+    console.log(`[UNIFIED WS ORDER MONITOR] 🔍 Starting comprehensive order monitoring for exchange ${exchangeId}`);
+    
+    try {
+      const exchange = await storage.getExchange(exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }
+
+      console.log(`[UNIFIED WS ORDER MONITOR] 📊 Monitoring orders on ${exchange.name} (${exchange.exchangeType || 'binance'})`);
+      
+      // Get all open orders and broadcast to clients
+      const openOrders = await this.getOpenOrders(exchangeId);
+      
+      const wsService = getGlobalWebSocketService();
+      if (wsService) {
+        wsService.broadcastOpenOrdersUpdate(exchangeId, undefined, openOrders);
+        
+        // Also broadcast detailed order monitoring status
+        wsService.broadcastOrderUpdate({
+          type: 'order_monitoring_status',
+          exchangeId: exchangeId,
+          exchangeName: exchange.name,
+          openOrdersCount: openOrders.length,
+          monitoringActive: true,
+          timestamp: Date.now()
+        });        // Enhanced monitoring: categorize orders by type and strategy
+        const orderStats = {
+          total: openOrders.length,
+          manual: 0,
+          martingale: 0,
+          limitOrders: 0,
+          marketOrders: 0,
+          buyOrders: 0,
+          sellOrders: 0
+        };
+        
+        // Basic order analysis
+        openOrders.forEach(order => {
+          if (order.side === 'BUY') orderStats.buyOrders++;
+          if (order.side === 'SELL') orderStats.sellOrders++;
+          if (order.type === 'LIMIT') orderStats.limitOrders++;
+          if (order.type === 'MARKET') orderStats.marketOrders++;
+          
+          const clientId = order.clientOrderId || '';
+          if (clientId.includes('bot_') || clientId.includes('martingale_')) {
+            orderStats.martingale++;
+          } else {
+            orderStats.manual++;
+          }
+        });
+        
+        wsService.broadcastOrderUpdate({
+          type: 'order_distribution_stats',
+          exchangeId: exchangeId,
+          stats: orderStats,
+          timestamp: Date.now()
+        });
+      }
+      
+      console.log(`[UNIFIED WS ORDER MONITOR] ✅ Order monitoring active for exchange ${exchangeId} - ${openOrders.length} orders tracked`);
+      
+    } catch (error) {
+      console.error(`[UNIFIED WS ORDER MONITOR] ❌ Failed to start order monitoring for exchange ${exchangeId}:`, error);
+    }
+  }
+
+  // Enhanced method to track order lifecycle events
+  async trackOrderLifecycle(orderData: any): Promise<void> {
+    console.log(`[UNIFIED WS ORDER LIFECYCLE] 📈 Tracking order lifecycle for ${orderData.symbol} order ${orderData.orderId}`);
+    
+    const lifecycle = {
+      orderId: orderData.orderId || orderData.exchangeOrderId,
+      symbol: orderData.symbol,
+      side: orderData.side,
+      type: orderData.type || orderData.orderType,
+      quantity: orderData.quantity,
+      price: orderData.price,
+      status: orderData.status,
+      exchangeId: orderData.exchangeId,      timestamp: Date.now(),
+      lifecycle_event: 'status_change',
+      // Additional tracking fields
+      isManualTrade: orderData.isManualTrade || false,
+      botId: orderData.botId,
+      cycleId: orderData.cycleId,
+      orderType: orderData.orderType // base_order, safety_order, take_profit, manual_trade
+    };
+    
+    console.log(`[UNIFIED WS ORDER LIFECYCLE] 📊 Tracking order lifecycle:`, lifecycle);
+      // Broadcast lifecycle event to all clients
+    const wsService = getGlobalWebSocketService();
+    if (wsService) {
+      wsService.broadcastOrderUpdate({
+        type: 'order_lifecycle_event',
+        data: lifecycle
+      });
+    }
   }
 }
-    

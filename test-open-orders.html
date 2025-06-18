@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Open Orders WebSocket</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: white; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #0f5132; color: #d1e7dd; }
+        .disconnected { background: #842029; color: #f8d7da; }
+        .connecting { background: #664d03; color: #fff3cd; }
+        .log { background: #212529; border: 1px solid #495057; padding: 10px; height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .orders-table { background: #2d3748; border: 1px solid #4a5568; width: 100%; margin: 10px 0; }
+        .orders-table th, .orders-table td { padding: 8px; border: 1px solid #4a5568; text-align: left; }
+        .orders-table th { background: #1a202c; }
+        button { padding: 8px 16px; margin: 5px; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        input, select { padding: 8px; margin: 5px; background: #495057; color: white; border: 1px solid #6c757d; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Open Orders WebSocket Test</h1>
+        
+        <div id="status" class="status disconnected">
+            Status: Disconnected
+        </div>
+
+        <div style="margin: 20px 0;">
+            <input type="text" id="wsUrl" value="ws://localhost:3001/api/ws" placeholder="WebSocket URL" style="width: 300px;">
+            <select id="exchangeId">
+                <option value="1">Exchange 1</option>
+                <option value="2">Exchange 2</option>
+            </select>
+            <input type="text" id="symbol" placeholder="Symbol (optional)" value="">
+            <br>
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+            <button onclick="getOpenOrders()">Get Open Orders</button>
+            <button onclick="subscribeOpenOrders()">Subscribe to Updates</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div>
+                <h3>📋 Current Open Orders</h3>
+                <div id="ordersContainer">
+                    <table class="orders-table" id="ordersTable" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Side</th>
+                                <th>Type</th>
+                                <th>Price</th>
+                                <th>Quantity</th>
+                                <th>Status</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ordersBody">
+                        </tbody>
+                    </table>
+                    <div id="noOrders" style="padding: 20px; text-align: center; color: #888;">
+                        No open orders found
+                    </div>
+                </div>
+            </div>
+            
+            <div>
+                <h3>📝 WebSocket Log</h3>
+                <div id="log" class="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(status, className) {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = `Status: ${status}`;
+            statusElement.className = `status ${className}`;
+        }
+
+        function connect() {
+            const url = document.getElementById('wsUrl').value;
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('❌ Already connected');
+                return;
+            }
+
+            log(`🔌 Connecting to: ${url}`);
+            updateStatus('Connecting...', 'connecting');
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = function(event) {
+                    connected = true;
+                    log('✅ Connected successfully');
+                    updateStatus('Connected', 'connected');
+                    
+                    // Send test message
+                    ws.send(JSON.stringify({
+                        type: 'test',
+                        message: 'open_orders_test'
+                    }));
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'open_orders_update') {
+                            log(`📋 Received open orders update: ${data.data.orders.length} orders`);
+                            displayOpenOrders(data.data.orders);
+                        } else if (data.type === 'subscription_confirmed') {
+                            log(`✅ Subscription confirmed: ${data.message || 'Open orders subscription active'}`);
+                        } else if (data.type === 'error') {
+                            log(`❌ Error: ${data.message}`);
+                        } else {
+                            log(`📨 Received: ${JSON.stringify(data, null, 2)}`);
+                        }
+                    } catch (e) {
+                        log(`📨 Received (raw): ${event.data}`);
+                    }
+                };
+
+                ws.onclose = function(event) {
+                    connected = false;
+                    log(`🔒 Connection closed - Code: ${event.code}, Reason: ${event.reason}`);
+                    updateStatus('Disconnected', 'disconnected');
+                };
+
+                ws.onerror = function(error) {
+                    log(`❌ Error: ${error}`);
+                    updateStatus('Error', 'disconnected');
+                };
+
+            } catch (error) {
+                log(`❌ Connection failed: ${error.message}`);
+                updateStatus('Error', 'disconnected');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+                connected = false;
+                log('🔌 Disconnected manually');
+                updateStatus('Disconnected', 'disconnected');
+            } else {
+                log('❌ No connection to disconnect');
+            }
+        }
+
+        function getOpenOrders() {
+            if (!connected || !ws) {
+                log('❌ Not connected');
+                return;
+            }
+
+            const exchangeId = parseInt(document.getElementById('exchangeId').value);
+            const symbol = document.getElementById('symbol').value.trim() || undefined;
+
+            const message = {
+                type: 'get_open_orders',
+                exchangeId: exchangeId,
+                symbol: symbol
+            };
+
+            log(`📤 Requesting open orders: ${JSON.stringify(message)}`);
+            ws.send(JSON.stringify(message));
+        }
+
+        function subscribeOpenOrders() {
+            if (!connected || !ws) {
+                log('❌ Not connected');
+                return;
+            }
+
+            const exchangeId = parseInt(document.getElementById('exchangeId').value);
+            const symbol = document.getElementById('symbol').value.trim() || undefined;
+
+            const message = {
+                type: 'subscribe_open_orders',
+                exchangeId: exchangeId,
+                symbol: symbol
+            };
+
+            log(`📤 Subscribing to open orders: ${JSON.stringify(message)}`);
+            ws.send(JSON.stringify(message));
+        }
+
+        function displayOpenOrders(orders) {
+            const ordersTable = document.getElementById('ordersTable');
+            const ordersBody = document.getElementById('ordersBody');
+            const noOrders = document.getElementById('noOrders');
+            
+            if (orders.length === 0) {
+                ordersTable.style.display = 'none';
+                noOrders.style.display = 'block';
+                noOrders.textContent = 'No open orders found';
+                return;
+            }
+            
+            noOrders.style.display = 'none';
+            ordersTable.style.display = 'table';
+            
+            // Clear existing rows
+            ordersBody.innerHTML = '';
+            
+            // Add rows for each order
+            orders.forEach(order => {
+                const row = ordersBody.insertRow();
+                row.insertCell(0).textContent = order.symbol;
+                row.insertCell(1).textContent = order.side;
+                row.insertCell(2).textContent = order.type;
+                row.insertCell(3).textContent = order.price || 'MARKET';
+                row.insertCell(4).textContent = `${order.origQty} (${order.executedQty} filled)`;
+                row.insertCell(5).textContent = order.status;
+                row.insertCell(6).textContent = new Date(order.time).toLocaleTimeString();
+            });
+            
+            log(`📊 Updated orders table with ${orders.length} orders`);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 Open Orders Test initialized');
+            log('💡 Click "Connect" to start testing open orders functionality');
+            log('📋 The system retrieves open orders via API calls and monitors changes via WebSocket');
+        };
+    </script>
+</body>
+</html>

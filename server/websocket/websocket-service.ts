@@ -44,8 +44,12 @@ export class WebSocketService {
       this.tickerStreamManager,
       this.klineStreamManager,
       this.tradingOperationsManager
-    );
-      console.log('[UNIFIED WS] [WEBSOCKET SERVICE] All managers initialized');
+    );    console.log('[UNIFIED WS] [WEBSOCKET SERVICE] All managers initialized');
+  }
+
+  // Public method to access TradingOperationsManager
+  public getTradingOperationsManager(): TradingOperationsManager {
+    return this.tradingOperationsManager;
   }
 
   // Initialize WebSocket server
@@ -410,5 +414,110 @@ export class WebSocketService {
       console.error(`[WEBSOCKET SERVICE] placeOrderViaRest failed:`, error);
       throw error;
     }
+  }  // Broadcast open orders update to subscribed clients
+  broadcastOpenOrdersUpdate(exchangeId: number, symbol: string | undefined, orders: any[]): void {
+    const message = {
+      type: 'open_orders_update',
+      data: {
+        exchangeId,
+        symbol,
+        orders,
+        timestamp: Date.now()
+      }
+    };
+
+    let sentCount = 0;
+    this.activeConnections.forEach((ws, clientId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(message));
+          sentCount++;
+        } catch (error) {
+          console.error(`[UNIFIED WS OPEN ORDERS] [BROADCAST] ❌ Failed to send to client ${clientId}:`, error);
+          this.activeConnections.delete(clientId);
+        }
+      } else {
+        this.activeConnections.delete(clientId);
+      }
+    });
+
+    console.log(`[UNIFIED WS OPEN ORDERS] [BROADCAST] ✅ Sent open orders update (${orders.length} orders) to ${sentCount} clients for exchange ${exchangeId}${symbol ? ` symbol ${symbol}` : ''}`);
+  }
+
+  // Enhanced broadcast method for real-time order status changes
+  broadcastOrderStatusUpdate(orderData: any): void {
+    const message = {
+      type: 'order_status_update',
+      data: {
+        exchangeOrderId: orderData.exchangeOrderId || orderData.orderId,
+        symbol: orderData.symbol,
+        side: orderData.side,
+        type: orderData.type || orderData.orderType,
+        quantity: orderData.quantity || orderData.origQty,
+        price: orderData.price,
+        status: orderData.status,
+        executedQty: orderData.executedQty || orderData.filledQuantity || '0',
+        cummulativeQuoteQty: orderData.cummulativeQuoteQty || orderData.cummulativeQuoteVolume || '0',
+        timeInForce: orderData.timeInForce || 'GTC',
+        clientOrderId: orderData.clientOrderId,
+        updateTime: orderData.updateTime || Date.now(),
+        timestamp: Date.now(),
+        // Additional fields for better monitoring
+        isManualTrade: orderData.isManualTrade || false,
+        botId: orderData.botId,
+        exchangeId: orderData.exchangeId
+      }
+    };
+
+    let sentCount = 0;
+    this.activeConnections.forEach((ws, clientId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(message));
+          sentCount++;
+        } catch (error) {
+          console.error(`[UNIFIED WS ORDER STATUS] [BROADCAST] ❌ Failed to send to client ${clientId}:`, error);
+          this.activeConnections.delete(clientId);
+        }
+      } else {
+        this.activeConnections.delete(clientId);
+      }
+    });
+
+    console.log(`[UNIFIED WS ORDER STATUS] [BROADCAST] ✅ Sent order status update (${orderData.status}) to ${sentCount} clients for ${orderData.symbol} order ${orderData.exchangeOrderId || orderData.orderId}`);
+  }
+
+  // Broadcast comprehensive order update for both bot and manual trades
+  broadcastOrderUpdate(orderUpdateData: any): void {
+    const message = {
+      type: 'order_update',
+      data: {
+        ...orderUpdateData,
+        timestamp: Date.now(),
+        broadcastTime: new Date().toISOString()
+      }
+    };
+
+    let sentCount = 0;
+    this.activeConnections.forEach((ws, clientId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(message));
+          sentCount++;
+        } catch (error) {
+          console.error(`[UNIFIED WS ORDER UPDATE] [BROADCAST] ❌ Failed to send to client ${clientId}:`, error);
+          this.activeConnections.delete(clientId);
+        }
+      } else {
+        this.activeConnections.delete(clientId);
+      }
+    });
+
+    console.log(`[UNIFIED WS ORDER UPDATE] [BROADCAST] ✅ Sent comprehensive order update to ${sentCount} clients for ${orderUpdateData.symbol || 'unknown symbol'}`);
+  }
+
+  // Get open orders via trading operations manager
+  async getOpenOrders(exchangeId: number, symbol?: string): Promise<any[]> {
+    return this.tradingOperationsManager.getOpenOrders(exchangeId, symbol);
   }
 }
