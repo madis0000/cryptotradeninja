@@ -1,5 +1,5 @@
 # Multi-stage build for CryptoTradeNinja
-FROM node:18-alpine AS base
+FROM node:20.18-alpine3.20 AS base
 
 # Install dependencies only when needed
 FROM base AS deps

@@ -85,20 +85,32 @@ export default function MyExchanges() {
       (parseFloat(balance.free || 0) + parseFloat(balance.locked || 0)) > 0
     ).length;
     return `${totalAssets} assets`;
-  };
-
-  // WebSocket for balance fetching
+  };  // WebSocket for balance fetching
   const userWs = useUserWebSocket({
     onMessage: (data) => {
-      console.log('Balance WebSocket response:', data);
+      console.log('[MY EXCHANGES] Balance WebSocket response:', data);
+      
+      if (data.type === 'balance_error') {
+        console.error('[MY EXCHANGES] Balance fetch error:', data.error);
+        const targetExchangeId = data.exchangeId;
+        if (targetExchangeId) {
+          setExchangeBalances(prev => ({
+            ...prev,
+            [targetExchangeId]: { 
+              balance: '0.00', 
+              loading: false, 
+              error: data.error || 'Failed to fetch balance'
+            }
+          }));
+        }
+        return;
+      }
       
       if (data.type === 'balance_update' && data.data?.balances) {
-        const targetExchangeId = currentExchangeId || data.exchangeId;
+        const targetExchangeId = data.exchangeId;
         
-        console.log('Processing balance update:', {
-          currentExchangeId,
-          dataExchangeId: data.exchangeId,
-          targetExchangeId,
+        console.log('[MY EXCHANGES] Processing balance update:', {
+          exchangeId: targetExchangeId,
           balancesLength: data.data.balances.length
         });
         
@@ -110,7 +122,7 @@ export default function MyExchanges() {
           
           // Calculate total USDT value with price conversion (async)
           calculateTotalUsdtValue(data.data.balances, targetExchangeId).then(totalUsdtValue => {
-            console.log('✅ Balance fetched via WebSocket API:', totalUsdtValue, 'USDT');
+            console.log(`[MY EXCHANGES] ✅ Balance calculated for exchange ${targetExchangeId}:`, totalUsdtValue, 'USDT');
             
             setExchangeBalances(prev => ({
               ...prev,
@@ -124,7 +136,7 @@ export default function MyExchanges() {
               }
             }));
           }).catch(error => {
-            console.error('Error calculating total USDT value:', error);
+            console.error('[MY EXCHANGES] Error calculating total USDT value:', error);
             // Fallback to USDT-only value if price conversion fails
             setExchangeBalances(prev => ({
               ...prev,
@@ -144,7 +156,7 @@ export default function MyExchanges() {
       }
     },
     onError: (error) => {
-      console.error('WebSocket error:', error);
+      console.error('[MY EXCHANGES] WebSocket error:', error);
       if (currentExchangeId) {
         setExchangeBalances(prev => ({
           ...prev,
@@ -155,30 +167,39 @@ export default function MyExchanges() {
           }
         }));
       }
+    },
+    onConnect: () => {
+      console.log('[MY EXCHANGES] WebSocket connected successfully');
+      // Re-fetch balances for all active exchanges when connection is restored
+      if (exchanges && exchanges.length > 0) {
+        console.log('[MY EXCHANGES] WebSocket reconnected, refetching balances...');
+        setTimeout(() => {
+          exchanges.forEach(exchange => {
+            if (exchange.isActive && exchange.apiKey) {
+              fetchExchangeBalance(exchange);
+            }
+          });
+        }, 1000); // Small delay to ensure connection is stable
+      }
+    },
+    onDisconnect: () => {
+      console.log('[MY EXCHANGES] WebSocket disconnected');
     }
-  });
-
-  // Simple balance fetching function
+  });// Simple balance fetching function
   const fetchExchangeBalance = (exchange: Exchange) => {
     if (!exchange.isActive || !exchange.apiKey) return;
     
-    console.log(`Fetching balance for exchange: ${exchange.name}`);
-    
-    // Disconnect any existing connection first
-    userWs.disconnect();
+    console.log(`[MY EXCHANGES] Requesting balance for ${exchange.name} (ID: ${exchange.id})`);
     
     // Set loading state
     setExchangeBalances(prev => ({
       ...prev,
-      [exchange.id]: { balance: '0.00', loading: true }
+      [exchange.id]: { ...prev[exchange.id], balance: '0.00', loading: true, error: undefined }
     }));
-    
-    // Set current exchange for message handling
-    setCurrentExchangeId(exchange.id);
     
     // Set a timeout to prevent infinite loading
     const timeoutId = setTimeout(() => {
-      console.log(`Timeout fetching balance for exchange ${exchange.name}`);
+      console.log(`[MY EXCHANGES] Timeout fetching balance for exchange ${exchange.name}`);
       setExchangeBalances(prev => ({
         ...prev,
         [exchange.id]: { 
@@ -187,34 +208,80 @@ export default function MyExchanges() {
           error: 'Request timeout'
         }
       }));
-    }, 10000); // 10 second timeout
+    }, 15000); // 15 second timeout
     
-    // Connect and authenticate using WebSocket API
-    userWs.connect();
-    
-    // Send balance request after a brief delay to ensure connection is established
-    setTimeout(() => {
+    // Send balance request if WebSocket is connected, otherwise try to connect first
+    if (userWs.status === 'connected') {
+      console.log(`[MY EXCHANGES] Sending balance request for exchange ${exchange.id}`);
       userWs.sendMessage({
         type: 'get_balance',
         exchangeId: exchange.id
         // No asset parameter - this will request ALL balances
       });
       
-      // Clear timeout once request is sent
-      clearTimeout(timeoutId);
-    }, 500);
+      // Clear timeout once request is processed successfully (will be cleared by message handler)
+      setTimeout(() => clearTimeout(timeoutId), 1000);
+    } else {
+      console.log(`[MY EXCHANGES] WebSocket not connected (status: ${userWs.status}), attempting to reconnect and fetch balance for ${exchange.name}`);
+      
+      // Try to reconnect and then fetch balance
+      userWs.connect();
+      
+      // Wait a bit for connection and then try again
+      setTimeout(() => {
+        if (userWs.status === 'connected') {
+          console.log(`[MY EXCHANGES] Reconnected! Sending balance request for exchange ${exchange.id}`);
+          userWs.sendMessage({
+            type: 'get_balance',
+            exchangeId: exchange.id
+          });
+          setTimeout(() => clearTimeout(timeoutId), 1000);
+        } else {
+          console.log(`[MY EXCHANGES] Failed to reconnect, showing error for ${exchange.name}`);
+          setExchangeBalances(prev => ({
+            ...prev,
+            [exchange.id]: { 
+              balance: '0.00', 
+              loading: false, 
+              error: 'WebSocket connection failed'
+            }
+          }));
+          clearTimeout(timeoutId);
+        }
+      }, 3000); // Wait 3 seconds for connection
+    }
   };
-
-  // Auto-fetch balances when page loads (once only)
+  // Initialize WebSocket connection with retry logic
   useEffect(() => {
-    if (exchanges && exchanges.length > 0) {
+    console.log('[MY EXCHANGES] Initializing WebSocket connection...');
+    
+    const connectWithRetry = () => {
+      userWs.connect();
+      
+      // Check connection status after a delay and retry if needed
+      setTimeout(() => {
+        if (userWs.status !== 'connected') {
+          console.log('[MY EXCHANGES] Initial connection failed, retrying...');
+          userWs.connect();
+        }
+      }, 3000);
+    };
+    
+    connectWithRetry();
+  }, []);
+
+  // Auto-fetch balances when WebSocket connects and exchanges are loaded
+  useEffect(() => {
+    if (userWs.status === 'connected' && exchanges && exchanges.length > 0) {
+      console.log('[MY EXCHANGES] WebSocket connected, fetching balances for all exchanges...');
       exchanges.forEach(exchange => {
-        if (exchange.isActive && exchange.apiKey && exchange.wsApiEndpoint) {
-          fetchExchangeBalance(exchange);
+        if (exchange.isActive && exchange.apiKey) {
+          // Add a small delay between requests to avoid overwhelming the server
+          setTimeout(() => fetchExchangeBalance(exchange), Math.random() * 2000);
         }
       });
     }
-  }, [exchanges?.length]); // Only depend on length to prevent loops
+  }, [userWs.status, exchanges?.length]); // Depend on WebSocket connection status
 
   // Cleanup WebSocket connections when component unmounts
   useEffect(() => {

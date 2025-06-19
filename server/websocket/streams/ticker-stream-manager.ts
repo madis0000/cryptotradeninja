@@ -67,17 +67,23 @@ export class TickerStreamManager {
     }
 
     console.log('[UNIFIED WS] [TICKER STREAM] Starting ticker stream');
-    
-    // Get WebSocket URL from exchange configuration
+      // Get WebSocket URL from exchange configuration
     const baseWsUrl = await this.exchangeApiService.getWebSocketStreamUrl(this.currentExchangeId);
     if (!baseWsUrl) {
       console.error(`[TICKER STREAM] No WebSocket URL found for exchange ${this.currentExchangeId}`);
       return;
     }
 
-    // Use combined stream endpoint for multiple ticker subscriptions
-    // According to Binance docs: /stream?streams=<streamName1>/<streamName2>
-    const wsUrl = `${baseWsUrl}/stream`;
+    // Determine the correct WebSocket URL based on the endpoint
+    let wsUrl: string;
+    if (baseWsUrl.includes('testnet.binance.vision')) {
+      // For testnet, use the URL as-is (should be wss://stream.testnet.binance.vision)
+      wsUrl = baseWsUrl;
+    } else {
+      // For mainnet, append /stream for combined stream endpoint
+      // According to Binance docs: /stream?streams=<streamName1>/<streamName2>
+      wsUrl = `${baseWsUrl}/stream`;
+    }
     
     console.log(`[TICKER STREAM] Connecting to: ${wsUrl}`);
     this.tickerBinanceWs = new WebSocket(wsUrl);
@@ -95,10 +101,15 @@ export class TickerStreamManager {
       console.log(`[UNIFIED WS] [TICKER STREAM] Disconnected from exchange ${this.currentExchangeId} ticker stream`);
       this.tickerBinanceWs = null;
     });
-    
-    this.tickerBinanceWs.on('error', (error) => {
+      this.tickerBinanceWs.on('error', (error) => {
       console.error('[UNIFIED WS] [TICKER STREAM] Error:', error);
       this.tickerBinanceWs = null;
+      
+      // If this is a 404 error, clear the exchange API cache to force re-fetch of endpoints
+      if (error.message && error.message.includes('404')) {
+        console.log(`[TICKER STREAM] 404 error detected, clearing exchange ${this.currentExchangeId} cache`);
+        this.exchangeApiService.clearCache(this.currentExchangeId);
+      }
     });
   }
 

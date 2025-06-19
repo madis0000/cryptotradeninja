@@ -261,13 +261,13 @@ export default function MyExchanges() {
   };
 
   const getDefaultWsApiEndpoint = () => {
-    const baseUrl = mode === 'testnet' ? 'wss://testnet.binance.vision' : 'wss://ws-api.binance.com:443';
+    const baseUrl = mode === 'testnet' ? 'wss://ws-api.testnet.binance.vision' : 'wss://ws-api.binance.com:443';
     return `${baseUrl}/ws-api/v3`;
   };
 
   const getDefaultWsStreamEndpoint = () => {
-    const baseUrl = mode === 'testnet' ? 'wss://stream.testnet.binance.vision' : 'wss://stream.binance.com:9443';
-    return baseUrl;
+    const baseUrl = mode === 'testnet' ? 'wss://stream.binance.vision' : 'wss://stream.binance.com:9443';
+    return `${baseUrl}/ws`;
   };
 
   const getDefaultRestApiEndpoint = () => {

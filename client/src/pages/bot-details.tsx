@@ -22,25 +22,30 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
   // Stop bot mutation
   const stopBotMutation = useMutation({
     mutationFn: async (botId: number) => {
       return await apiRequest(`/api/bots/${botId}/stop`, 'POST');
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
       queryClient.invalidateQueries({ queryKey: ['/api/bots', bot.id] });
+      
+      const message = data?.message || "Trading bot has been stopped and safety orders cancelled.";
+      const details = [];
+      if (data?.cancelledOrders > 0) details.push(`${data.cancelledOrders} orders cancelled`);
+      if (data?.liquidated) details.push('position liquidated');
+      
       toast({
         title: "Bot Stopped",
-        description: "Trading bot has been stopped and safety orders cancelled.",
+        description: details.length > 0 ? `${message} (${details.join(', ')})` : message,
       });
       setShowStopDialog(false);
-    },
-    onError: (error: any) => {
+    },    onError: (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : "Failed to stop bot";
       toast({
         title: "Error",
-        description: error.message || "Failed to stop bot",
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -54,19 +59,25 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
     mutationFn: async (botId: number) => {
       return await apiRequest(`/api/bots/${botId}`, 'DELETE');
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      
+      const message = data?.message || "Trading bot has been permanently deleted.";
+      const details = [];
+      if (data?.cancelledOrders > 0) details.push(`${data.cancelledOrders} orders cancelled`);
+      if (data?.liquidated) details.push('position liquidated');
+      
       toast({
         title: "Bot Deleted",
-        description: "Trading bot has been permanently deleted.",
+        description: details.length > 0 ? `${message} (${details.join(', ')})` : message,
       });
       setShowDeleteDialog(false);
       onBack(); // Navigate back to bots list
-    },
-    onError: (error: any) => {
+    },    onError: (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : "Failed to delete bot";
       toast({
         title: "Error",
-        description: error.message || "Failed to delete bot",
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -228,6 +239,17 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
   }, 0);
   
   const averageEntryPrice = totalPositionSize > 0 ? totalInvested / totalPositionSize : 0;
+
+  // Calculate pending orders that will be cancelled
+  const pendingOrders = currentCycleOrders.filter(order => 
+    order.status === 'placed' || order.status === 'pending'
+  );
+  const pendingOrdersCount = pendingOrders.length;
+  const totalPendingValue = pendingOrders.reduce((total, order) => {
+    const price = parseFloat(order.price || '0');
+    const qty = parseFloat(order.quantity || '0');
+    return total + (price * qty);
+  }, 0);
 
   // Sort grouped cycles by cycle number (descending - newest first)
   const sortedCycleGroups = Object.entries(groupedHistoryOrders).sort(([a], [b]) => {
@@ -735,9 +757,8 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
                   <h4 className="text-yellow-400 font-medium mb-2">Warning: Assets will be sold at market price</h4>
                   <p className="text-crypto-light text-sm">
                     Stopping the bot will:
-                  </p>
-                  <ul className="text-crypto-light text-sm mt-2 list-disc list-inside space-y-1">
-                    <li>Cancel all unfilled safety orders</li>
+                  </p>                  <ul className="text-crypto-light text-sm mt-2 list-disc list-inside space-y-1">
+                    <li>Cancel all unfilled safety orders ({pendingOrdersCount} pending orders)</li>
                     <li>Sell any purchased assets at current market price</li>
                     <li>Complete the current cycle immediately</li>
                     <li>Change bot status to inactive</li>
@@ -749,6 +770,16 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
                       </p>
                       <p className="text-crypto-light text-sm">
                         Estimated market value: <span className="font-mono">${(totalPositionSize * parseFloat(currentMarketData?.price || '0')).toFixed(2)}</span>
+                      </p>
+                    </div>
+                  )}
+                  {pendingOrdersCount > 0 && (
+                    <div className="mt-3 p-2 bg-yellow-800/30 rounded">
+                      <p className="text-yellow-400 text-sm font-medium">
+                        {pendingOrdersCount} pending order{pendingOrdersCount > 1 ? 's' : ''} will be cancelled
+                      </p>
+                      <p className="text-crypto-light text-sm">
+                        Total pending value: <span className="font-mono">${totalPendingValue.toFixed(2)} USDT</span>
                       </p>
                     </div>
                   )}
@@ -794,9 +825,8 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
                   <h4 className="text-red-400 font-medium mb-2">Permanent Action: This cannot be undone</h4>
                   <p className="text-crypto-light text-sm">
                     Deleting the bot will:
-                  </p>
-                  <ul className="text-crypto-light text-sm mt-2 list-disc list-inside space-y-1">
-                    <li>Cancel all unfilled safety orders</li>
+                  </p>                  <ul className="text-crypto-light text-sm mt-2 list-disc list-inside space-y-1">
+                    <li>Cancel all unfilled safety orders ({pendingOrdersCount} pending orders)</li>
                     <li>Sell any purchased assets at current market price</li>
                     <li>Permanently delete all bot data and history</li>
                     <li>Remove all cycle and order records</li>
@@ -809,6 +839,16 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
                       </p>
                       <p className="text-crypto-light text-sm">
                         Estimated market value: <span className="font-mono">${(totalPositionSize * parseFloat(currentMarketData?.price || '0')).toFixed(2)}</span>
+                      </p>
+                    </div>
+                  )}
+                  {pendingOrdersCount > 0 && (
+                    <div className="mt-3 p-2 bg-red-800/30 rounded">
+                      <p className="text-red-400 text-sm font-medium">
+                        {pendingOrdersCount} pending order{pendingOrdersCount > 1 ? 's' : ''} will be cancelled
+                      </p>
+                      <p className="text-crypto-light text-sm">
+                        Total pending value: <span className="font-mono">${totalPendingValue.toFixed(2)} USDT</span>
                       </p>
                     </div>
                   )}

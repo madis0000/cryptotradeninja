@@ -1,5 +1,5 @@
 # Development Dockerfile for CryptoTradeNinja
-FROM node:20-alpine
+FROM node:20.18-alpine3.20
 
 # Install system dependencies
 RUN apk add --no-cache libc6-compat

@@ -272,18 +272,21 @@ export class TradingOperationsManager {
     } catch (error) {
       console.error(`[UNIFIED WS] [TRADING] Error cancelling order ${orderId}:`, error);
       throw error;
-    }
-  }
+    }  }
 
   // Cancel order for manual trading (by exchange ID and order ID)
   async cancelManualOrder(exchangeId: number, orderId: string, symbol: string): Promise<void> {
-    console.log(`[MANUAL TRADING] [CANCEL] 🚫 Cancelling order ${orderId} on ${symbol}...`);
+    console.log(`[MANUAL TRADING] [CANCEL] 🚫 ===== STARTING MANUAL ORDER CANCELLATION =====`);
+    console.log(`[MANUAL TRADING] [CANCEL] 🚫 Exchange ID: ${exchangeId}, Order ID: ${orderId}, Symbol: ${symbol}`);
     
     try {
       const exchange = await storage.getExchange(exchangeId);
       if (!exchange) {
+        console.error(`[MANUAL TRADING] [CANCEL] ❌ Exchange ${exchangeId} not found`);
         throw new Error('Exchange not found');
       }
+        console.log(`[MANUAL TRADING] [CANCEL] ✅ Exchange found: ${exchange.name} (${exchange.exchangeType})`);
+      console.log(`[MANUAL TRADING] [CANCEL] 📡 REST API Endpoint: ${exchange.restApiEndpoint}`);
 
       // Get API credentials
       const { apiKey, apiSecret } = decryptApiCredentials(
@@ -291,8 +294,9 @@ export class TradingOperationsManager {
         exchange.apiSecret,
         exchange.encryptionIv
       );
-
-      console.log(`[MANUAL TRADING] [CANCEL] 📡 Sending cancel request to ${exchange.name}...`);
+      
+      console.log(`[MANUAL TRADING] [CANCEL] � API credentials decrypted successfully`);
+      console.log(`[MANUAL TRADING] [CANCEL] �📡 Sending cancel request to ${exchange.name}...`);
 
       // Cancel order on exchange using REST API
       const cancelParams = new URLSearchParams({
@@ -307,8 +311,12 @@ export class TradingOperationsManager {
         .digest('hex');
       
       cancelParams.append('signature', signature);
+      
+      const requestUrl = `${exchange.restApiEndpoint}/api/v3/order?${cancelParams.toString()}`;
+      console.log(`[MANUAL TRADING] [CANCEL] 🌐 Request URL: ${exchange.restApiEndpoint}/api/v3/order`);
+      console.log(`[MANUAL TRADING] [CANCEL] 📋 Request params: ${JSON.stringify(Object.fromEntries(cancelParams))}`);
 
-      const cancelResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/order?${cancelParams.toString()}`, {
+      const cancelResponse = await fetch(requestUrl, {
         method: 'DELETE',
         headers: {
           'X-MBX-APIKEY': apiKey
@@ -317,16 +325,80 @@ export class TradingOperationsManager {
 
       const cancelResult = await cancelResponse.json();
       
+      console.log(`[MANUAL TRADING] [CANCEL] 📊 Exchange response status: ${cancelResponse.status} ${cancelResponse.statusText}`);
+      console.log(`[MANUAL TRADING] [CANCEL] 📊 Exchange response:`, cancelResult);
+      
       if (!cancelResponse.ok) {
-        console.log(`[MANUAL TRADING] [CANCEL] ❌ Cancel failed:`, cancelResult);
-        throw new Error(`Order cancellation failed: ${cancelResult.msg || 'Unknown error'}`);
+        console.log(`[MANUAL TRADING] [CANCEL] ❌ Cancel failed with status ${cancelResponse.status}:`, cancelResult);
+        throw new Error(`Order cancellation failed: ${cancelResult.msg || cancelResult.message || 'Unknown error'}`);
       }
 
-      console.log(`[MANUAL TRADING] [CANCEL] ✅ Order ${orderId} cancelled successfully!`);
-      console.log(`[MANUAL TRADING] [CANCEL] 📊 Cancel result:`, cancelResult);
+      console.log(`[MANUAL TRADING] [CANCEL] ✅ ===== ORDER CANCELLATION COMPLETED =====`);
+      console.log(`[MANUAL TRADING] [CANCEL] ✅ Order ${orderId} cancelled successfully on ${symbol}!`);
+      console.log(`[MANUAL TRADING] [CANCEL] 📊 Final result:`, cancelResult);
       
     } catch (error) {
-      console.error(`[MANUAL TRADING] [CANCEL] ❌ Error cancelling order ${orderId}:`, error);
+      console.error(`[MANUAL TRADING] [CANCEL] ❌ ===== ORDER CANCELLATION FAILED =====`);
+      console.error(`[MANUAL TRADING] [CANCEL] ❌ Error cancelling order ${orderId} on ${symbol}:`, error);
+      console.error(`[MANUAL TRADING] [CANCEL] ❌ Error details:`, {
+        exchangeId,
+        orderId,
+        symbol,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace'
+      });
+      console.error(`[MANUAL TRADING] [CANCEL] ❌ ===== ERROR END =====`);
+      throw error;
+    }
+  }
+
+  // Cancel all pending orders for a bot
+  async cancelAllBotOrders(botId: number): Promise<{ cancelledOrders: number; errors: string[] }> {
+    console.log(`[UNIFIED WS] [TRADING] Cancelling all pending orders for bot ${botId}`);
+    
+    try {
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        throw new Error('Bot not found');
+      }      // Use the more comprehensive method to get all cancellable orders
+      const cancellableOrders = await storage.getCancellableOrdersByBotId(botId);
+      let cancelledOrders = 0;
+      const errors: string[] = [];
+      
+      console.log(`[UNIFIED WS] [TRADING] Found ${cancellableOrders.length} cancellable orders for bot ${botId}`);
+      
+      for (const order of cancellableOrders) {
+        if (order.exchangeOrderId) {
+          try {
+            console.log(`[UNIFIED WS] [TRADING] 🚫 Cancelling order ${order.exchangeOrderId} (status: ${order.status})`);
+            
+            // Cancel order on exchange
+            await this.cancelOrder(botId, order.exchangeOrderId);
+            
+            // Update order status in database
+            await storage.updateCycleOrder(order.id, { 
+              status: 'cancelled',
+              filledAt: new Date()
+            });
+            
+            cancelledOrders++;
+            console.log(`[UNIFIED WS] [TRADING] ✅ Cancelled order ${order.exchangeOrderId}`);
+          } catch (cancelError) {
+            const errorMsg = `Failed to cancel order ${order.exchangeOrderId}: ${cancelError instanceof Error ? cancelError.message : 'Unknown error'}`;
+            console.error(`[UNIFIED WS] [TRADING] ❌ ${errorMsg}`);
+            errors.push(errorMsg);
+          }
+        } else {
+          console.log(`[UNIFIED WS] [TRADING] ⚠️ Skipping order ${order.id} - no exchangeOrderId`);
+        }
+      }
+      
+      console.log(`[UNIFIED WS] [TRADING] Order cancellation summary for bot ${botId}: ${cancelledOrders} cancelled, ${errors.length} errors`);
+      
+      return { cancelledOrders, errors };
+      
+    } catch (error) {
+      console.error(`[UNIFIED WS] [TRADING] Error cancelling bot orders for bot ${botId}:`, error);
       throw error;
     }
   }
@@ -529,9 +601,10 @@ export class TradingOperationsManager {
             'Content-Type': 'application/x-www-form-urlencoded'
           },
           body: orderParams
-        });
-
-        const orderResult = await orderResponse.json();
+        });        const orderResult = await orderResponse.json();
+        
+        // Debug: Log the complete order response
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📋 Full order response:`, JSON.stringify(orderResult, null, 2));
         
         if (!orderResponse.ok) {
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Order failed:`, orderResult);
@@ -541,27 +614,52 @@ export class TradingOperationsManager {
         if (!orderResult || !orderResult.orderId) {
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Invalid order response:`, orderResult);
           throw new Error('Invalid order response from exchange');
+        }        // Calculate actual average price for market orders
+        let actualFilledPrice: number;
+        let actualFilledQuantity: number;
+        
+        if (orderResult.executedQty && orderResult.cummulativeQuoteQty) {
+          // For market orders, calculate average price from total spent / quantity filled
+          actualFilledQuantity = parseFloat(orderResult.executedQty);
+          const totalSpent = parseFloat(orderResult.cummulativeQuoteQty);
+          actualFilledPrice = totalSpent / actualFilledQuantity;
+          
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ BASE ORDER SUCCESSFULLY PLACED!`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Filled Quantity: ${actualFilledQuantity.toFixed(filters.qtyDecimals)}`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Total Spent: $${totalSpent.toFixed(2)}`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Average Filled Price: $${actualFilledPrice.toFixed(filters.priceDecimals)}`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Expected Investment: $${baseOrderAmount}`);
+        } else {
+          // Fallback to current price if execution data is missing
+          console.warn(`[UNIFIED WS] [MARTINGALE STRATEGY] ⚠️ Missing execution data in order response:`);
+          console.warn(`[UNIFIED WS] [MARTINGALE STRATEGY]    executedQty: ${orderResult.executedQty || 'MISSING'}`);
+          console.warn(`[UNIFIED WS] [MARTINGALE STRATEGY]    cummulativeQuoteQty: ${orderResult.cummulativeQuoteQty || 'MISSING'}`);
+          console.warn(`[UNIFIED WS] [MARTINGALE STRATEGY]    price: ${orderResult.price || 'MISSING'}`);
+          console.warn(`[UNIFIED WS] [MARTINGALE STRATEGY]    Using current market price as fallback: $${currentPrice.toFixed(filters.priceDecimals)}`);
+          
+          actualFilledPrice = currentPrice;
+          actualFilledQuantity = quantity;
+          
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ BASE ORDER PLACED (using fallback data)!`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Estimated Filled Price: $${actualFilledPrice.toFixed(filters.priceDecimals)}`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Estimated Filled Quantity: ${actualFilledQuantity.toFixed(filters.qtyDecimals)}`);
         }
-
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ BASE ORDER SUCCESSFULLY PLACED!`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Exchange Order ID: ${orderResult.orderId}`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Filled Price: $${orderResult.price || currentPrice.toFixed(filters.priceDecimals)}`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Filled Quantity: ${orderResult.executedQty || quantity.toFixed(filters.qtyDecimals)}`);
-        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Total Investment: $${baseOrderAmount}`);
 
         // Update order record with fill information
         await storage.updateCycleOrder(baseOrder.id, {
           status: 'filled',
           exchangeOrderId: orderResult.orderId.toString(),
-          filledPrice: (orderResult.price || currentPrice).toString(),
-          filledQuantity: (orderResult.executedQty || quantity).toString(),
+          filledPrice: actualFilledPrice.toString(),
+          filledQuantity: actualFilledQuantity.toString(),
           filledAt: new Date()
         });        // Place take profit order after successful base order
         await this.placeTakeProfitOrder(
           botId, 
           cycleId, 
-          parseFloat(orderResult.price || currentPrice.toString()), 
-          parseFloat(orderResult.executedQty || quantity.toString())
+          actualFilledPrice, 
+          actualFilledQuantity
         );
 
         // Place safety orders based on bot configuration
@@ -614,9 +712,10 @@ export class TradingOperationsManager {
     // This method would coordinate with stream managers
     // Implementation pending - requires integration with stream managers
   }
-
   async placeLiquidationOrder(botId: number, cycleId: number): Promise<void> {
-    console.log(`[TRADING OPS] Placing liquidation order for bot ${botId}, cycle ${cycleId}`);
+    console.log(`[LIQUIDATION] 🔴 Starting liquidation order for bot ${botId}, cycle ${cycleId}`);
+    
+    let logger: any = null;
     
     try {
       const bot = await storage.getTradingBot(botId);
@@ -624,13 +723,190 @@ export class TradingOperationsManager {
         throw new Error('Bot not found');
       }
 
-      // Implementation pending - would handle position liquidation
-      console.log('[TRADING OPS] Liquidation order placement - implementation pending');
+      // Initialize logger
+      logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
+      logger.logStrategyAction('LIQUIDATION_START', { botId, cycleId });
+
+      const exchange = await storage.getExchange(bot.exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }      // Calculate total position from filled buy orders
+      const filledBuyOrders = await storage.getCycleOrdersByBotId(botId);
+      const buyOrders = filledBuyOrders.filter(order => 
+        order.side === 'BUY' && 
+        order.status === 'filled' && 
+        order.cycleId === cycleId
+      );
+
+      if (buyOrders.length === 0) {
+        console.log(`[LIQUIDATION] ℹ️ No filled buy orders found for cycle ${cycleId}, skipping liquidation`);
+        logger.logStrategyAction('LIQUIDATION_SKIP', { reason: 'No position to liquidate' });
+        return;
+      }
+
+      // Calculate total quantity to liquidate
+      let totalQuantity = 0;
+      let totalSpent = 0;
+      
+      for (const order of buyOrders) {
+        const qty = parseFloat(order.filledQuantity || order.quantity || '0');
+        const price = parseFloat(order.filledPrice || order.price || '0');
+        totalQuantity += qty;
+        totalSpent += (qty * price);
+      }
+
+      if (totalQuantity <= 0) {
+        console.log(`[LIQUIDATION] ℹ️ No quantity to liquidate for cycle ${cycleId}`);
+        logger.logStrategyAction('LIQUIDATION_SKIP', { reason: 'Zero quantity' });
+        return;
+      }
+
+      const averagePrice = totalSpent / totalQuantity;
+
+      console.log(`[LIQUIDATION] 📊 LIQUIDATION DETAILS:`);
+      console.log(`[LIQUIDATION]    Total Quantity: ${totalQuantity.toFixed(6)} ${bot.tradingPair?.replace('USDT', '')}`);
+      console.log(`[LIQUIDATION]    Average Entry Price: $${averagePrice.toFixed(6)}`);
+      console.log(`[LIQUIDATION]    Total Investment: $${totalSpent.toFixed(2)}`);
+
+      // Get exchange filters for the symbol
+      const filters = await getBinanceSymbolFilters(bot.tradingPair, exchange.restApiEndpoint || 'https://testnet.binance.vision');
+      
+      // Apply LOT_SIZE filter to ensure quantity compliance
+      const adjustedQuantity = adjustQuantity(totalQuantity, filters.stepSize, filters.minQty, filters.qtyDecimals);
+
+      console.log(`[LIQUIDATION] ⚙️ Adjusted quantity: ${adjustedQuantity.toFixed(filters.qtyDecimals)} (LOT_SIZE compliant)`);
+
+      // Create liquidation order record
+      const liquidationOrder = await storage.createCycleOrder({
+        cycleId: cycleId,
+        botId: botId,
+        userId: bot.userId,
+        orderType: 'liquidation',
+        side: 'SELL', // Always sell to liquidate position
+        orderCategory: 'MARKET',
+        symbol: bot.tradingPair,
+        quantity: adjustedQuantity.toFixed(filters.qtyDecimals),
+        price: '0', // Market orders don't have a fixed price
+        status: 'pending'
+      });
+
+      console.log(`[LIQUIDATION] ✓ Created liquidation order record (ID: ${liquidationOrder.id})`);
+
+      // Get API credentials
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.apiKey,
+        exchange.apiSecret,
+        exchange.encryptionIv
+      );
+
+      console.log(`[LIQUIDATION] 🚀 Placing market sell order on ${exchange.name}...`);
+      console.log(`[LIQUIDATION]    Order Type: MARKET SELL`);
+      console.log(`[LIQUIDATION]    Symbol: ${bot.tradingPair}`);
+      console.log(`[LIQUIDATION]    Quantity: ${adjustedQuantity.toFixed(filters.qtyDecimals)}`);
+
+      // Place market sell order for liquidation
+      const orderParams = new URLSearchParams({
+        symbol: bot.tradingPair,
+        side: 'SELL',
+        type: 'MARKET',
+        quantity: adjustedQuantity.toFixed(filters.qtyDecimals),
+        timestamp: Date.now().toString()
+      });
+
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(orderParams.toString())
+        .digest('hex');
+      
+      orderParams.append('signature', signature);
+
+      const orderResponse = await fetch(`${exchange.restApiEndpoint || 'https://testnet.binance.vision'}/api/v3/order`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: orderParams
+      });
+
+      const orderResult = await orderResponse.json();
+      
+      if (!orderResponse.ok) {
+        console.log(`[LIQUIDATION] ❌ Liquidation order failed:`, orderResult);
+        throw new Error(`Liquidation order failed: ${orderResult.msg || 'Unknown error'}`);
+      }
+
+      if (orderResult && orderResult.orderId) {
+        // Calculate liquidation price
+        let liquidationPrice = 0;
+        let actualQuantity = adjustedQuantity;
+        
+        if (orderResult.executedQty && orderResult.cummulativeQuoteQty) {
+          actualQuantity = parseFloat(orderResult.executedQty);
+          const totalReceived = parseFloat(orderResult.cummulativeQuoteQty);
+          liquidationPrice = totalReceived / actualQuantity;
+        }
+
+        // Update liquidation order record
+        await storage.updateCycleOrder(liquidationOrder.id, {
+          status: 'filled',
+          exchangeOrderId: orderResult.orderId.toString(),
+          filledPrice: liquidationPrice.toString(),
+          filledQuantity: actualQuantity.toString(),
+          filledAt: new Date()
+        });
+
+        const totalReceived = liquidationPrice * actualQuantity;
+        const profitLoss = totalReceived - totalSpent;
+        const profitPercentage = (profitLoss / totalSpent) * 100;
+
+        console.log(`[LIQUIDATION] ✅ LIQUIDATION ORDER EXECUTED SUCCESSFULLY!`);
+        console.log(`[LIQUIDATION]    Exchange Order ID: ${orderResult.orderId}`);
+        console.log(`[LIQUIDATION]    Liquidation Price: $${liquidationPrice.toFixed(filters.priceDecimals)}`);
+        console.log(`[LIQUIDATION]    Quantity Sold: ${actualQuantity.toFixed(filters.qtyDecimals)}`);
+        console.log(`[LIQUIDATION]    Total Received: $${totalReceived.toFixed(2)}`);
+        console.log(`[LIQUIDATION]    Profit/Loss: $${profitLoss.toFixed(2)} (${profitPercentage.toFixed(2)}%)`);
+
+        // Log the liquidation details
+        logger.logStrategyAction('LIQUIDATION_COMPLETED', {
+          orderId: orderResult.orderId,
+          quantity: actualQuantity.toFixed(filters.qtyDecimals),
+          price: liquidationPrice.toFixed(filters.priceDecimals),
+          totalReceived: totalReceived.toFixed(2),
+          profitLoss: profitLoss.toFixed(2),
+          profitPercentage: profitPercentage.toFixed(2)
+        });
+
+        // Broadcast liquidation notification
+        const wsService = getGlobalWebSocketService();
+        if (wsService) {
+          wsService.broadcastOrderFillNotification({
+            id: liquidationOrder.id,
+            exchangeOrderId: orderResult.orderId.toString(),
+            botId: botId,
+            orderType: 'liquidation',
+            symbol: bot.tradingPair,
+            side: 'SELL',
+            quantity: actualQuantity.toFixed(filters.qtyDecimals),
+            price: liquidationPrice.toFixed(filters.priceDecimals),
+            status: 'filled'
+          });
+        }
+
+      } else {
+        console.error(`[LIQUIDATION] ❌ Liquidation order result missing orderId:`, orderResult);
+        throw new Error('Liquidation order result missing orderId');
+      }
       
     } catch (error) {
-      console.error('[TRADING OPS] Liquidation order failed:', error);
+      console.error('[LIQUIDATION] ❌ Liquidation order execution failed:', error);
+      if (logger) {
+        logger.logError('LIQUIDATION_ERROR', { error: (error as Error).message });
+      }
       throw error;
     }
+    
+    console.log(`[LIQUIDATION] ===== LIQUIDATION ORDER COMPLETE =====`);
   }
 
   async generateListenKey(exchangeId: number): Promise<string> {
@@ -678,72 +954,86 @@ export class TradingOperationsManager {
         console.log(`[UNIFIED WS BALANCE FETCHING] API Key length: ${apiKey.length}, API Secret length: ${apiSecret.length}`);
       } catch (decryptError) {
         console.error(`[UNIFIED WS BALANCE FETCHING] Failed to decrypt credentials for exchange ${exchangeId}:`, decryptError);
-        throw new Error(`Failed to decrypt API credentials: ${decryptError instanceof Error ? decryptError.message : String(decryptError)}`);      }
+        throw new Error(`Failed to decrypt API credentials: ${decryptError instanceof Error ? decryptError.message : String(decryptError)}`);
+      }
 
       // Fetch actual balance from exchange API (works for both testnet and live)
       // The REST API endpoint determines whether it's testnet or live
       const environmentType = exchange.isTestnet ? 'Testnet' : 'Live';
-      try {
-        console.log(`[UNIFIED WS BALANCE FETCHING] Fetching real ${environmentType} balance from ${exchange.name}`);
-        
-        const baseUrl = exchange.restApiEndpoint || (exchange.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com');
-        const timestamp = Date.now();
-        
-        // Create query parameters
-        const params = new URLSearchParams({
-          timestamp: timestamp.toString()
-        });
+      console.log(`[UNIFIED WS BALANCE FETCHING] Fetching real ${environmentType} balance from ${exchange.name}`);
+      
+      const baseUrl = exchange.restApiEndpoint || (exchange.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com');
+      const timestamp = Date.now();
+      
+      // Create query parameters
+      const params = new URLSearchParams({
+        timestamp: timestamp.toString()
+      });
 
-        // Create signature
-        const signature = crypto
-          .createHmac('sha256', apiSecret)
-          .update(params.toString())
-          .digest('hex');
-        
-        params.append('signature', signature);
+      // Create signature
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(params.toString())
+        .digest('hex');
+      
+      params.append('signature', signature);
 
-        console.log(`[UNIFIED WS BALANCE FETCHING] Making API request to: ${baseUrl}/api/v3/account`);
-        console.log(`[UNIFIED WS BALANCE FETCHING] Request params: ${params.toString().replace(/signature=[^&]+/, 'signature=***')}`);
+      console.log(`[UNIFIED WS BALANCE FETCHING] Making API request to: ${baseUrl}/api/v3/account`);
+      console.log(`[UNIFIED WS BALANCE FETCHING] Request params: ${params.toString().replace(/signature=[^&]+/, 'signature=***')}`);
 
-        // Make API request
-        const response = await fetch(`${baseUrl}/api/v3/account?${params.toString()}`, {
-          method: 'GET',
-          headers: {
-            'X-MBX-APIKEY': apiKey,
-            'Content-Type': 'application/json'
-          }
-        });
+      // Make API request
+      const response = await fetch(`${baseUrl}/api/v3/account?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/json'
+        }
+      });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`[UNIFIED WS BALANCE FETCHING] API request failed: ${response.status} ${response.statusText}`);
-          console.error(`[UNIFIED WS BALANCE FETCHING] Error response: ${errorText}`);
-          throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
-        }        const accountData = await response.json();
-        
-        console.log(`[UNIFIED WS BALANCE FETCHING] Successfully fetched real ${environmentType} balance from ${exchange.name}`);
-        console.log(`[UNIFIED WS BALANCE FETCHING] Balance data contains ${accountData.balances?.length || 0} assets`);
-        
-        return {
-          data: {
-            balances: accountData.balances || []
-          },
-          timestamp: Date.now()
-        };
-        
-      } catch (apiError) {
-        console.error(`[UNIFIED WS BALANCE FETCHING] API request failed for exchange ${exchangeId}:`, apiError);
-        throw new Error(`Failed to fetch balance from exchange: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[UNIFIED WS BALANCE FETCHING] API request failed: ${response.status} ${response.statusText}`);
+        console.error(`[UNIFIED WS BALANCE FETCHING] Error response: ${errorText}`);
+        throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
+
+      const accountData = await response.json();
+      console.log(`[UNIFIED WS BALANCE FETCHING] Successfully fetched real ${environmentType} balance from ${exchange.name}`);
+      console.log(`[UNIFIED WS BALANCE FETCHING] Balance data contains ${accountData.balances?.length || 0} assets`);
+      
+      return {
+        success: true,
+        data: {
+          balances: accountData.balances || []
+        },
+        timestamp: Date.now()
+      };
       
     } catch (error) {
       console.error(`[UNIFIED WS BALANCE FETCHING] Account balance fetch failed for exchange ${exchangeId}, asset ${asset}:`, error);
-      throw error;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error fetching balance',
+        data: null,
+        timestamp: Date.now()
+      };
     }
   }
-
   async placeTakeProfitOrder(botId: number, cycleId: number, baseOrderPrice: number, baseOrderQuantity: number): Promise<void> {
     console.log(`\n[UNIFIED WS] [MARTINGALE STRATEGY] ===== PLACING TAKE PROFIT ORDER =====`);
+    
+    // Validate inputs
+    if (!baseOrderPrice || baseOrderPrice <= 0) {
+      const errorMsg = `Invalid base order price: ${baseOrderPrice}. Cannot calculate take profit.`;
+      console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+    
+    if (!baseOrderQuantity || baseOrderQuantity <= 0) {
+      const errorMsg = `Invalid base order quantity: ${baseOrderQuantity}. Cannot place take profit.`;
+      console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
     
     let logger: any = null;
     
@@ -795,8 +1085,14 @@ export class TradingOperationsManager {
           throw new Error(`Take profit filter compliance failed: ${retryCompliance.error}`);
         }
         adjustedTakeProfitPrice = retryCompliance.price;
-      } else {
-        adjustedTakeProfitPrice = compliance.price;
+      } else {        adjustedTakeProfitPrice = compliance.price;
+      }
+
+      // Final validation of take profit price
+      if (!adjustedTakeProfitPrice || adjustedTakeProfitPrice <= 0) {
+        const errorMsg = `Invalid take profit price after adjustments: ${adjustedTakeProfitPrice}. Base price: ${baseOrderPrice}, Percentage: ${takeProfitPercentage}%`;
+        console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ ${errorMsg}`);
+        throw new Error(errorMsg);
       }
 
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📊 TAKE PROFIT CALCULATION:`);
@@ -1515,8 +1811,7 @@ export class TradingOperationsManager {
       console.log(`[UNIFIED WS OPEN ORDERS] ✅ Retrieved ${openOrders.length} open orders for exchange ${exchangeId}`);
       
       // Log order details for debugging
-      if (openOrders.length > 0) {
-        console.log(`[UNIFIED WS OPEN ORDERS] 📋 Open orders summary:`);
+      if (openOrders.length > 0) {        console.log(`[UNIFIED WS OPEN ORDERS] 📋 Open orders summary:`);
         openOrders.forEach((order: any, index: number) => {
           console.log(`[UNIFIED WS OPEN ORDERS]   ${index + 1}. ${order.symbol} ${order.side} ${order.type} - Price: ${order.price || 'MARKET'}, Qty: ${order.origQty}, Status: ${order.status}`);
         });

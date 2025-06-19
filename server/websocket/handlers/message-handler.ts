@@ -62,6 +62,10 @@ export class MessageHandler {
       const message: WebSocketMessage = JSON.parse(data.toString());
       console.log(`[UNIFIED WS SERVER] Received raw message: ${data.toString()}`);
       console.log('[UNIFIED WS SERVER] Parsed message:', message);      switch (message.type) {
+        case 'authenticate':
+          await this.handleAuthenticate(ws, message, clientId);
+          break;
+        
         case 'change_subscription':
           await this.handleChangeSubscription(ws, message, clientId);
           break;
@@ -142,8 +146,39 @@ export class MessageHandler {
           message: 'Failed to process message'
         }));
       }
+    }  }
+
+  // Handle authentication messages from client
+  private async handleAuthenticate(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
+    const { userId, apiKey } = message;
+    
+    console.log(`[MESSAGE HANDLER] Authentication request from client ${clientId}: userId=${userId}`);
+    
+    if (!userId) {
+      console.error('[MESSAGE HANDLER] Authentication missing userId');
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          message: 'Authentication requires userId'
+        }));
+      }
+      return;
     }
+
+    // For now, we just acknowledge the authentication
+    // In the future, this could be extended to validate the user and set up user-specific streams
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'authenticated',
+        userId: userId,
+        clientId: clientId,
+        message: 'Successfully authenticated'
+      }));
+    }
+    
+    console.log(`[MESSAGE HANDLER] Client ${clientId} authenticated for user ${userId}`);
   }
+
   // Handle change subscription (symbol and interval change)
   private async handleChangeSubscription(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
     const { symbol, interval, exchangeId } = message;
@@ -276,76 +311,81 @@ export class MessageHandler {
 
   // Handle balance request
   private async handleGetBalance(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
-    const { exchangeId, asset } = message;
-    
-    const defaultExchangeId = await this.getDefaultExchangeId();
-    const targetExchangeId = exchangeId || defaultExchangeId;
-    
-    if (!targetExchangeId) {
-      console.error(`[UNIFIED WS BALANCE FETCHING] No available exchange found for balance request`);
-      ws.send(JSON.stringify({
-        type: 'balance_error',
-        error: 'No available exchange found',
-        exchangeId: exchangeId
-      }));
-      return;
-    }
-    
-    const isAllBalancesRequest = !asset || asset === 'ALL';
-    console.log(`[UNIFIED WS BALANCE FETCHING] Get balance request from client ${clientId}: exchangeId=${targetExchangeId}, asset=${asset || 'ALL'}, requestType=${isAllBalancesRequest ? 'ALL_BALANCES' : 'SINGLE_ASSET'}`);
-      try {
-      const balanceResult = await this.tradingOperationsManager.getAccountBalance(targetExchangeId, asset || 'ALL');
-      console.log(`[UNIFIED WS BALANCE FETCHING] Retrieved balance for exchange ${targetExchangeId}:`, balanceResult);
+    try {
+      const targetAsset = message.asset || 'USDT';
+      const targetExchangeId = message.exchangeId || await this.getDefaultExchangeId(message.userId || 1);
       
-      if (isAllBalancesRequest) {
-        // Return ALL balances (for My Exchange page)
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'balance_update',
-            exchangeId: targetExchangeId,
-            data: {
-              balances: balanceResult.data?.balances || []
-            },
-            timestamp: balanceResult.timestamp || Date.now(),
-            clientId
-          }));
-        }
-      } else {
-        // Return single asset balance (for Martingale bot)
-        const targetAsset = asset;
-        let assetBalance = null;
-        if (balanceResult.data && balanceResult.data.balances) {
-          assetBalance = balanceResult.data.balances.find((balance: any) => balance.asset === targetAsset);
-        }
-        
-        console.log(`[UNIFIED WS BALANCE FETCHING] Found ${targetAsset} balance:`, assetBalance);
-        
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'balance_update',
-            exchangeId: targetExchangeId,
-            asset: targetAsset,
-            balance: assetBalance || { asset: targetAsset, free: '0.00000000', locked: '0.00000000' },
-            timestamp: balanceResult.timestamp || Date.now(),
-            clientId
-          }));
-        }
+      // Determine if this is a request for ALL balances or a specific asset
+      const isAllBalancesRequest = !message.asset || message.asset === 'ALL';
+      const requestType = isAllBalancesRequest ? 'ALL_BALANCES' : 'SINGLE_ASSET';
+      
+      console.log(`[MESSAGE HANDLER] handleGetBalance - requestType=${requestType}, exchangeId=${targetExchangeId}, asset=${targetAsset}`);
+      
+      if (!targetExchangeId) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          error: 'No active exchange found',
+          requestId: message.requestId,
+          clientId
+        }));
+        return;
       }
-    } catch (error) {
-      console.error(`[UNIFIED WS BALANCE FETCHING] Error getting balance:`, error);
-      
-      // Send detailed error information
-      if (ws.readyState === WebSocket.OPEN) {        const errorMessage = error instanceof Error ? error.message : String(error);
-        const isDecryptionError = errorMessage.includes('decrypt') || errorMessage.includes('Decryption failed');
+
+      // Get balance from trading operations manager
+      const balanceResult = await this.tradingOperationsManager.getAccountBalance(
+        targetExchangeId,
+        targetAsset
+      );
+
+      console.log(`[MESSAGE HANDLER] Balance fetch result - success: ${balanceResult.success}, has data: ${!!balanceResult.data}, balances count: ${balanceResult.data?.balances?.length || 0}`);
+
+      if (!balanceResult.success) {
+        console.error(`[MESSAGE HANDLER] Balance fetch failed: ${balanceResult.error}`);
         ws.send(JSON.stringify({
           type: 'balance_error',
-          message: isDecryptionError ? 'Failed to decrypt API credentials. Please check your exchange configuration.' : 'Failed to fetch balance',
-          error: errorMessage,
+          error: balanceResult.error || 'Failed to fetch balance',
           exchangeId: targetExchangeId,
-          asset: asset || 'ALL',
-          errorType: isDecryptionError ? 'DECRYPTION_ERROR' : 'API_ERROR',
+          requestId: message.requestId,
           clientId
-        }));      }
+        }));
+        return;
+      }
+
+      // Send appropriate response based on request type
+      if (isAllBalancesRequest) {
+        // Return ALL balances (for My Exchange page)
+        ws.send(JSON.stringify({
+          type: 'balance_update',
+          exchangeId: targetExchangeId,
+          data: {
+            balances: balanceResult.data?.balances || []
+          },
+          timestamp: balanceResult.timestamp || Date.now(),
+          clientId
+        }));
+      } else {
+        // Return single asset balance (for Martingale bot)
+        const assetBalance = balanceResult.data.balances.find(
+          (balance: any) => balance.asset === targetAsset
+        );
+        
+        ws.send(JSON.stringify({
+          type: 'balance_update',
+          exchangeId: targetExchangeId,
+          asset: targetAsset,
+          balance: assetBalance || { asset: targetAsset, free: '0.00000000', locked: '0.00000000' },
+          timestamp: balanceResult.timestamp || Date.now(),
+          clientId
+        }));
+      }
+    } catch (error) {
+      console.error('[MESSAGE HANDLER] Error in handleGetBalance:', error);
+      ws.send(JSON.stringify({
+        type: 'balance_error',
+        error: error instanceof Error ? error.message : 'Unknown error fetching balance',
+        requestId: message.requestId,
+        clientId
+      }));
     }
   }
 

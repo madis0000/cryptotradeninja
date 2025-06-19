@@ -72,9 +72,7 @@ export class KlineStreamManager {
       console.log(`[KLINE STREAM] Kline stream already active, updating subscriptions`);
       this.updateKlineSubscriptions();
       return;
-    }
-
-    try {      console.log(`[UNIFIED WS] [KLINE STREAM] Starting kline stream for ${symbol} at ${interval} on exchange ${this.currentExchangeId}`);
+    }    try {      console.log(`[UNIFIED WS] [KLINE STREAM] Starting kline stream for ${symbol} at ${interval} on exchange ${this.currentExchangeId}`);
         // Get the WebSocket URL from the exchange API service
       const baseWsUrl = await this.exchangeApiService.getWebSocketStreamUrl(this.currentExchangeId);
       
@@ -82,9 +80,16 @@ export class KlineStreamManager {
         throw new Error(`No WebSocket URL found for exchange ${this.currentExchangeId}`);
       }
 
-      // Use combined stream endpoint for multiple kline subscriptions
-      // According to Binance docs: /stream?streams=<streamName1>/<streamName2>
-      const wsUrl = `${baseWsUrl}/stream`;
+      // Determine the correct WebSocket URL based on the endpoint
+      let wsUrl: string;
+      if (baseWsUrl.includes('testnet.binance.vision')) {
+        // For testnet, use the URL as-is (should be wss://stream.testnet.binance.vision)
+        wsUrl = baseWsUrl;
+      } else {
+        // For mainnet, append /stream for combined stream endpoint
+        // According to Binance docs: /stream?streams=<streamName1>/<streamName2>
+        wsUrl = `${baseWsUrl}/stream`;
+      }
       
       console.log(`[KLINE STREAM] Using WebSocket URL: ${wsUrl}`);
       this.klineBinanceWs = new WebSocket(wsUrl);
@@ -102,10 +107,15 @@ export class KlineStreamManager {
         console.log('[KLINE STREAM] Disconnected from exchange kline stream');
         this.klineBinanceWs = null;
       });
-      
-      this.klineBinanceWs.on('error', (error) => {
+        this.klineBinanceWs.on('error', (error) => {
         console.error('[KLINE STREAM] Error:', error);
         this.klineBinanceWs = null;
+        
+        // If this is a 404 error, clear the exchange API cache to force re-fetch of endpoints
+        if (error.message && error.message.includes('404')) {
+          console.log(`[KLINE STREAM] 404 error detected, clearing exchange ${this.currentExchangeId} cache`);
+          this.exchangeApiService.clearCache(this.currentExchangeId);
+        }
       });
     } catch (error) {
       console.error('[KLINE STREAM] Failed to start kline stream:', error);

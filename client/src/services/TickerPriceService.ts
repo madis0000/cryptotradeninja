@@ -1,3 +1,5 @@
+import { webSocketSingleton } from './WebSocketSingleton';
+
 interface MarketData {
   symbol: string;
   price: number;
@@ -125,39 +127,36 @@ class TickerPriceService {
     // This is a simplified check - in a real implementation,
     // you might want to track which subscribers need which symbols
     return this.requestedSymbols.has(symbol);
-  }
-  private ensureWebSocketSubscription(): void {
+  }  private ensureWebSocketSubscription(): void {
     if (this.isSubscribedToWebSocket) {
       // Already subscribed, just update the symbols we're interested in
       return;
     }
     
     console.log('[TICKER PRICE SERVICE] Setting up WebSocket subscription');
-    
-    // Import WebSocketSingleton dynamically to avoid circular dependencies
-    import('./WebSocketSingleton').then(({ webSocketSingleton }) => {
       // Subscribe to WebSocket messages - listen to all ticker messages
-      const unsubscribe = webSocketSingleton.subscribe((message) => {
-        if (message.type === 'market_update') {
-          this.handleMarketUpdate(message.data);
-        }
-      });
-      
-      // Store unsubscribe function for cleanup
-      this.unsubscribeFromWebSocket = unsubscribe;
-      
-      // Ensure WebSocket is connected and add reference
-      if (!webSocketSingleton.isConnected()) {
-        console.log('[TICKER PRICE SERVICE] WebSocket not connected, adding reference');
-        webSocketSingleton.addReference();
+    const unsubscribe = webSocketSingleton.subscribe((message) => {
+      if (message.type === 'market_update') {
+        this.handleMarketUpdate(message.data);
+      } else if (message.type === 'ticker_update') {
+        this.handleTickerUpdate(message.data);
       }
-      
-      // The ticker stream is already established by the main WebSocket connection
-      // We don't need to send separate subscribe_ticker messages
-      console.log('[TICKER PRICE SERVICE] Listening to existing ticker stream for symbols:', Array.from(this.requestedSymbols));
-      
-      this.isSubscribedToWebSocket = true;
     });
+    
+    // Store unsubscribe function for cleanup
+    this.unsubscribeFromWebSocket = unsubscribe;
+    
+    // Ensure WebSocket is connected and add reference
+    if (!webSocketSingleton.isConnected()) {
+      console.log('[TICKER PRICE SERVICE] WebSocket not connected, adding reference');
+      webSocketSingleton.addReference();
+    }
+    
+    // The ticker stream is already established by the main WebSocket connection
+    // We don't need to send separate subscribe_ticker messages
+    console.log('[TICKER PRICE SERVICE] Listening to existing ticker stream for symbols:', Array.from(this.requestedSymbols));
+    
+    this.isSubscribedToWebSocket = true;
   }
   private updateWebSocketSubscription(): void {
     // Since we're listening to the existing ticker stream,
@@ -183,10 +182,31 @@ class TickerPriceService {
         } catch (error) {
           console.error('[TICKER PRICE SERVICE] Error calling subscriber callback:', error);
         }
-      });
-    }
+      });    }
   }
-  /**
+
+  private handleTickerUpdate(data: any): void {
+    // Handle ticker_update messages from WebSocket
+    if (data && data.symbol && data.price) {
+      const price = typeof data.price === 'string' ? parseFloat(data.price) : data.price;
+      console.log(`[TICKER PRICE SERVICE] Received ticker update: ${data.symbol} = $${price}`);
+      
+      // Update price in our cache
+      this.prices[data.symbol] = price;
+      
+      // Only notify subscribers if they're tracking this symbol
+      if (this.requestedSymbols.has(data.symbol)) {
+        // Notify all subscribers
+        this.subscribers.forEach(callback => {
+          try {
+            callback(this.prices);
+          } catch (error) {
+            console.error('[TICKER PRICE SERVICE] Error calling subscriber callback:', error);
+          }
+        });
+      }
+    }
+  }  /**
    * Clear all cached prices and subscriptions
    */
   public reset(): void {
@@ -200,10 +220,8 @@ class TickerPriceService {
     this.isSubscribedToWebSocket = false;
     
     // Remove WebSocket reference when resetting
-    import('./WebSocketSingleton').then(({ webSocketSingleton }) => {
-      console.log('[TICKER PRICE SERVICE] Removing WebSocket reference during reset');
-      webSocketSingleton.removeReference();
-    });
+    console.log('[TICKER PRICE SERVICE] Removing WebSocket reference during reset');
+    webSocketSingleton.removeReference();
   }
 }
 

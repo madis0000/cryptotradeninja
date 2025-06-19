@@ -1,0 +1,108 @@
+#!/bin/bash
+
+# Bot Deletion Diagnostic Script
+# This script helps diagnose why orders might remain after bot deletion
+
+echo "🔍 Bot Deletion Diagnostic Script"
+echo "=================================="
+echo ""
+
+# Check if server is running
+echo "1. Checking if server is running..."
+SERVER_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/api/health 2>/dev/null || echo "000")
+if [ "$SERVER_STATUS" = "200" ]; then
+    echo "✅ Server is running"
+else
+    echo "❌ Server not responding (Status: $SERVER_STATUS)"
+    echo "Please start the server with 'npm run dev'"
+    exit 1
+fi
+echo ""
+
+# Check database connection
+echo "2. Checking database connection..."
+echo "You can verify database connectivity through the web interface or database studio."
+echo ""
+
+# Instructions for manual testing
+echo "3. Manual Testing Instructions"
+echo "=============================="
+echo ""
+echo "To test bot deletion functionality:"
+echo ""
+echo "A. Before deletion:"
+echo "   1. Open http://localhost:5000 in your browser"
+echo "   2. Login and navigate to your bots"
+echo "   3. Note the bot ID and check if it has any orders"
+echo "   4. You can also open the database studio (npm run db:studio) to see raw data"
+echo ""
+echo "B. Check current orders in database:"
+echo "   1. Open database studio: npm run db:studio"
+echo "   2. Look at the 'cycle_orders' table"
+echo "   3. Note any orders with your bot_id"
+echo ""
+echo "C. Delete the bot:"
+echo "   1. Use the web interface to delete the bot"
+echo "   2. Watch the browser's Developer Console (F12) for any errors"
+echo "   3. Check the server terminal for deletion logs"
+echo ""
+echo "D. After deletion verification:"
+echo "   1. Refresh the database studio"
+echo "   2. Check if any rows remain in 'cycle_orders' with your bot_id"
+echo "   3. Check if the bot still exists in 'trading_bots' table"
+echo ""
+echo "E. Expected logs in server terminal:"
+echo "   - '[DELETE BOT] Starting enhanced delete process for bot X'"
+echo "   - '[DELETE BOT] Cancelling N pending orders for bot X'"
+echo "   - '[DELETE BOT] Deleting bot X with N cycles, M orders, P trades'"
+echo "   - '[DELETE BOT] Bot X deleted successfully'"
+echo ""
+
+# Database direct queries (if sqlite/postgres CLI available)
+echo "4. Direct Database Queries"
+echo "========================="
+echo ""
+echo "If you have database CLI access, you can run these queries:"
+echo ""
+echo "-- Check remaining orders for a specific bot ID (replace X with bot ID):"
+echo "SELECT * FROM cycle_orders WHERE bot_id = X;"
+echo ""
+echo "-- Check all orders:"
+echo "SELECT bot_id, COUNT(*) as order_count FROM cycle_orders GROUP BY bot_id;"
+echo ""
+echo "-- Check if bot still exists:"
+echo "SELECT id, name, status FROM trading_bots WHERE id = X;"
+echo ""
+
+echo "5. Common Issues and Solutions"
+echo "============================="
+echo ""
+echo "If orders remain after deletion:"
+echo ""
+echo "❌ Issue: Orders visible in UI but not in database"
+echo "✅ Solution: Clear browser cache, refresh page, check for frontend caching"
+echo ""
+echo "❌ Issue: Orders exist in database after deletion"
+echo "✅ Solution: Check server logs for deletion errors, verify database transaction completion"
+echo ""
+echo "❌ Issue: Exchange orders not cancelled"
+echo "✅ Solution: Check API credentials, network connectivity, exchange API status"
+echo ""
+echo "❌ Issue: Database constraint errors"
+echo "✅ Solution: Check foreign key relationships, ensure proper deletion order"
+echo ""
+
+echo "6. Next Steps"
+echo "============"
+echo ""
+echo "After running the manual test above:"
+echo "1. If orders remain in database: Check server logs for errors during deletion"
+echo "2. If orders don't exist in database but show in UI: Clear browser cache"
+echo "3. If deletion fails entirely: Check authentication, API errors, database connectivity"
+echo ""
+echo "Report back with:"
+echo "- Bot ID that was deleted"
+echo "- Whether orders remain in database (from database studio)"
+echo "- Any error messages from server logs"
+echo "- Any error messages from browser console"
+echo ""

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Bot Deletion</title>
+    <style>
+        body { font-family: monospace; margin: 20px; background: #1a1a1a; color: #fff; }
+        .log { border: 1px solid #333; padding: 10px; margin: 10px 0; max-height: 400px; overflow-y: auto; }
+        .error { color: #ff6b6b; }
+        .success { color: #51cf66; }
+        .info { color: #339af0; }
+        button { padding: 10px 20px; margin: 5px; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #555; }
+        input { padding: 8px; margin: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>🐛 Debug Bot Deletion Issues</h1>
+    
+    <div>
+        <h3>Step 1: Check Authentication</h3>
+        <button onclick="checkAuth()">Check Auth Token</button>
+        <button onclick="checkServerConnection()">Test Server Connection</button>
+    </div>
+    
+    <div>
+        <h3>Step 2: Test Bot API</h3>
+        <label>Bot ID: <input type="number" id="botId" value="1" placeholder="Enter bot ID"></label><br>
+        <button onclick="listBots()">List All Bots</button>
+        <button onclick="testDeleteBot()">Test Delete Bot</button>
+    </div>
+    
+    <div>
+        <h3>Debug Logs</h3>
+        <button onclick="clearLog()">Clear Logs</button>
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = type;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        function getToken() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                log('❌ No token found in localStorage', 'error');
+                log('💡 Please login to CryptoTradeNinja first', 'info');
+                return null;
+            }
+            log(`✅ Token found: ${token.substring(0, 20)}...`, 'success');
+            return token;
+        }
+        
+        async function checkAuth() {
+            log('🔐 Checking authentication...', 'info');
+            
+            const token = getToken();
+            if (!token) return;
+            
+            try {
+                const response = await fetch('/api/auth/me', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                log(`Auth response status: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const user = await response.json();
+                    log(`✅ Authenticated as: ${user.username} (ID: ${user.id})`, 'success');
+                } else {
+                    const error = await response.text();
+                    log(`❌ Auth failed: ${error}`, 'error');
+                }
+            } catch (error) {
+                log(`💥 Auth error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function checkServerConnection() {
+            log('🌐 Testing server connection...', 'info');
+            
+            try {
+                const response = await fetch('/api/health');
+                log(`Server response: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    log('✅ Server is responding', 'success');
+                } else {
+                    log('❌ Server health check failed', 'error');
+                }
+            } catch (error) {
+                log(`💥 Connection error: ${error.message}`, 'error');
+                log('💡 Make sure server is running on localhost:5000', 'info');
+            }
+        }
+        
+        async function listBots() {
+            log('📋 Fetching bot list...', 'info');
+            
+            const token = getToken();
+            if (!token) return;
+            
+            try {
+                const response = await fetch('/api/bots', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                log(`Bots API response: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const bots = await response.json();
+                    log(`✅ Found ${bots.length} bots`, 'success');
+                    bots.forEach((bot, index) => {
+                        log(`   ${index + 1}. Bot ID: ${bot.id}, Name: ${bot.name}, Status: ${bot.status}`, 'info');
+                    });
+                } else {
+                    const error = await response.text();
+                    log(`❌ Failed to fetch bots: ${error}`, 'error');
+                }
+            } catch (error) {
+                log(`💥 Bots API error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testDeleteBot() {
+            const botId = document.getElementById('botId').value;
+            if (!botId) {
+                log('❌ Please enter a bot ID', 'error');
+                return;
+            }
+            
+            log(`🗑️ Testing DELETE /api/bots/${botId}...`, 'info');
+            
+            const token = getToken();
+            if (!token) return;
+            
+            try {
+                log(`📤 Sending DELETE request...`, 'info');
+                log(`   URL: /api/bots/${botId}`, 'info');
+                log(`   Method: DELETE`, 'info');
+                log(`   Headers: Authorization, Content-Type`, 'info');
+                
+                const response = await fetch(`/api/bots/${botId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                log(`📥 Response received: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+                
+                const responseText = await response.text();
+                
+                if (response.ok) {
+                    log(`✅ Bot deletion successful!`, 'success');
+                    try {
+                        const result = JSON.parse(responseText);
+                        log(`   Details: ${JSON.stringify(result, null, 2)}`, 'success');
+                    } catch {
+                        log(`   Response: ${responseText}`, 'success');
+                    }
+                } else {
+                    log(`❌ Bot deletion failed!`, 'error');
+                    log(`   Response: ${responseText}`, 'error');
+                    
+                    if (response.status === 401) {
+                        log(`💡 Try refreshing the page and logging in again`, 'info');
+                    } else if (response.status === 404) {
+                        log(`💡 Bot with ID ${botId} not found or doesn't belong to you`, 'info');
+                    } else if (response.status === 500) {
+                        log(`💡 Server error - check server logs for details`, 'info');
+                    }
+                }
+            } catch (error) {
+                log(`💥 Delete request failed: ${error.message}`, 'error');
+                log(`💡 This might be a network error or CORS issue`, 'info');
+            }
+        }
+        
+        // Auto-run initial checks
+        window.onload = function() {
+            log('🚀 Debug tool loaded', 'info');
+            log('💡 Make sure you are logged into CryptoTradeNinja in another tab', 'info');
+            checkAuth();
+        };
+    </script>
+</body>
+</html>

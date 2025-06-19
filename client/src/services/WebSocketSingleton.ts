@@ -1,4 +1,4 @@
-import { tickerPriceService } from './TickerPriceService';
+
 
 class WebSocketSingleton {
   private static instance: WebSocketSingleton;
@@ -141,14 +141,8 @@ class WebSocketSingleton {
       try {
         const data = JSON.parse(event.data);
         console.log('[WEBSOCKET SINGLETON] Received message:', data.type);
-        
-        // Handle different message types
-        if (data.type === 'ticker_update') {
-          // Store in ticker price service if available
-          if (data.data && data.data.symbol && data.data.price) {
-            tickerPriceService.updatePrice(data.data.symbol, parseFloat(data.data.price));
-          }
-        }
+          // Handle different message types
+        // Note: TickerPriceService will handle ticker updates through its own subscription
         
         // Broadcast to all subscribers
         this.subscribers.forEach(callback => {

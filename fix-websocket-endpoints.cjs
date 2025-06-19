@@ -47,11 +47,34 @@ async function fixWebSocketEndpoints() {
 
       // Fix testnet endpoints
       if (exchange.isTestnet || exchange.name.toLowerCase().includes('testnet')) {
-        if (exchange.wsStreamEndpoint !== 'wss://testnet.binance.vision') {
-          newWsStreamEndpoint = 'wss://testnet.binance.vision';
-          needsUpdate = true;
-          console.log(`   ✅ Fixing testnet endpoint to: ${newWsStreamEndpoint}`);
+        let needsWsStreamUpdate = false;
+        let needsWsApiUpdate = false;
+        let needsRestApiUpdate = false;
+
+        // Check and fix wsStreamEndpoint
+        if (exchange.wsStreamEndpoint !== 'wss://stream.binance.vision/ws') {
+          newWsStreamEndpoint = 'wss://stream.binance.vision/ws';
+          needsWsStreamUpdate = true;
+          console.log(`   ✅ Fixing testnet wsStreamEndpoint to: ${newWsStreamEndpoint}`);
         }
+
+        // Check and fix wsApiEndpoint
+        if (exchange.wsApiEndpoint !== 'wss://ws-api.testnet.binance.vision/ws-api/v3') {
+          await db.update(exchanges)
+            .set({ wsApiEndpoint: 'wss://ws-api.testnet.binance.vision/ws-api/v3' })
+            .where(eq(exchanges.id, exchange.id));
+          console.log(`   ✅ Fixed testnet wsApiEndpoint`);
+        }
+
+        // Check and fix restApiEndpoint
+        if (exchange.restApiEndpoint !== 'https://testnet.binance.vision') {
+          await db.update(exchanges)
+            .set({ restApiEndpoint: 'https://testnet.binance.vision' })
+            .where(eq(exchanges.id, exchange.id));
+          console.log(`   ✅ Fixed testnet restApiEndpoint`);
+        }
+
+        needsUpdate = needsWsStreamUpdate;
       }
       // Fix live endpoints
       else if (exchange.exchangeType === 'binance') {

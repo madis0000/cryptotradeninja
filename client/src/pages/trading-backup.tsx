@@ -200,17 +200,6 @@ export default function Trading() {
     );
   };
 
-    // Set initial status
-    setConnectionStatus(webSocketSingleton.getStatus() as any);
-
-    return () => {
-      unsubscribeData();
-      unsubscribeConnect();
-      unsubscribeDisconnect();
-      unsubscribeError();
-    };
-  }, []);
-
   const handleSymbolSelect = (symbol: string) => {
     console.log(`[TRADING] Symbol selected: ${symbol}`);
     setSelectedSymbol(symbol);

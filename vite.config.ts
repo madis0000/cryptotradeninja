@@ -22,6 +22,24 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1000, // Increase chunk size warning limit to 1MB
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split vendor libraries into separate chunks
+          vendor: ['react', 'react-dom'],
+          ui: ['@radix-ui/react-slot', '@radix-ui/react-tabs', '@radix-ui/react-dropdown-menu'],
+          query: ['@tanstack/react-query'],
+          // Split WebSocket and services into a separate chunk
+          services: [
+            './client/src/services/WebSocketSingleton.ts',
+            './client/src/services/TickerPriceService.ts'
+          ],
+          // Split utilities into separate chunk
+          utils: ['./client/src/utils/websocket-helpers.ts', './client/src/utils/balance-utils.ts']
+        }
+      }
+    }
   },
   server: {
     fs: {

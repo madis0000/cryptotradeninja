@@ -516,31 +516,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const botId = parseInt(req.params.id);
       const userId = req.user!.id;
       
+      console.log(`\n[BOT STOP] ===== STARTING BOT STOP PROCESS =====`);
+      console.log(`[BOT STOP] 🛑 Bot ID: ${botId}, User ID: ${userId}`);
+      console.log(`[BOT STOP] 📝 Request Details: ${JSON.stringify({ botId, userId, timestamp: new Date().toISOString() })}`);
+      
       // Verify bot ownership
       const bot = await storage.getTradingBot(botId);
       if (!bot || bot.userId !== userId) {
+        console.log(`[BOT STOP] ❌ AUTHORIZATION FAILED - Bot ${botId} not found or access denied for user ${userId}`);
         return res.status(404).json({ error: "Bot not found" });
       }
 
-      console.log(`[BOT STOP] Starting enhanced stop process for bot ${botId}`);
+      console.log(`[BOT STOP] ✅ AUTHORIZATION PASSED - Bot Details:`);
+      console.log(`[BOT STOP]    Name: ${bot.name}`);
+      console.log(`[BOT STOP]    Trading Pair: ${bot.tradingPair}`);
+      console.log(`[BOT STOP]    Strategy: ${bot.strategy}`);
+      console.log(`[BOT STOP]    Current Status: ${bot.status}`);
+      console.log(`[BOT STOP]    Is Active: ${bot.isActive}`);
+      console.log(`[BOT STOP]    Exchange ID: ${bot.exchangeId}`);
       
-      // Get active cycle and pending orders
+      // Get active cycle and cancellable orders
       const activeCycle = await storage.getActiveBotCycle(botId);
-      const pendingOrders = await storage.getPendingCycleOrders(botId);
+      
+      // Get ALL orders for this bot and filter cancellable ones
+      const allBotOrders = await storage.getCycleOrdersByBotId(botId);
+      const cancellableOrders = allBotOrders.filter(order => 
+        order.exchangeOrderId && 
+        !['filled', 'cancelled', 'failed'].includes(order.status)
+      );
+      console.log(`[BOT STOP] � DEBUG - ALL ORDERS FOR BOT ${botId}:`);
+      if (allBotOrders.length > 0) {
+        allBotOrders.forEach((order, index) => {
+          console.log(`[BOT STOP]      ${index + 1}. Order ${order.id} - ${order.orderType} (${order.side}) - Status: ${order.status} - Exchange ID: ${order.exchangeOrderId || 'N/A'} - Created: ${order.createdAt}`);
+        });
+      } else {
+        console.log(`[BOT STOP]      No orders found in database for bot ${botId}`);
+      }
+      
+      console.log(`[BOT STOP] �📊 CURRENT BOT STATE:`);
+      console.log(`[BOT STOP]    Active Cycle: ${activeCycle ? `#${activeCycle.id} (${activeCycle.cycleNumber})` : 'none'}`);
+      console.log(`[BOT STOP]    Total Orders: ${allBotOrders.length}`);
+      console.log(`[BOT STOP]    Cancellable Orders: ${cancellableOrders.length}`);
+      
+      if (cancellableOrders.length > 0) {
+        console.log(`[BOT STOP] 📋 CANCELLABLE ORDERS TO CANCEL:`);
+        cancellableOrders.forEach((order, index) => {
+          console.log(`[BOT STOP]      ${index + 1}. Order ${order.id} (${order.orderType}) - ${order.status} - Exchange ID: ${order.exchangeOrderId || 'N/A'}`);
+        });
+      }
       
       let cancelledOrders = 0;
       let liquidated = false;
       
-      // Step 1: Cancel all pending safety orders
-      if (pendingOrders.length > 0) {
-        console.log(`[BOT STOP] Cancelling ${pendingOrders.length} pending orders for bot ${botId}`);
+      // Step 1: Cancel all cancellable safety orders using the same proven logic as Trading page
+      if (cancellableOrders.length > 0) {
+        console.log(`[BOT STOP] 🚫 ===== STARTING ORDER CANCELLATION =====`);
+        console.log(`[BOT STOP] 🚫 Using Trading page logic to cancel ${cancellableOrders.length} cancellable orders for bot ${botId}`);
         
-        for (const order of pendingOrders) {
-          if (order.exchangeOrderId && order.status === 'placed') {
+        const cancelErrors: string[] = [];
+        
+        for (const order of cancellableOrders) {
+          if (order.exchangeOrderId) {
             try {
-              // Cancel order on exchange
-              // TODO: Move to TradingOperationsManager
-              await wsService.cancelOrder(bot.id, order.exchangeOrderId);
+              console.log(`[BOT STOP] 🚫 Cancelling order ${order.exchangeOrderId} (Order ID: ${order.id}, Type: ${order.orderType}, Status: ${order.status})`);
+              
+              // Use the same proven cancellation logic as Trading page
+              await wsService.getTradingOperationsManager().cancelManualOrder(
+                bot.exchangeId, 
+                order.exchangeOrderId, 
+                bot.tradingPair
+              );
               
               // Update order status in database
               await storage.updateCycleOrder(order.id, { 
@@ -549,49 +594,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
               
               cancelledOrders++;
-              console.log(`[BOT STOP] Cancelled order ${order.exchangeOrderId}`);
-            } catch (cancelError) {
-              console.error(`[BOT STOP] Failed to cancel order ${order.exchangeOrderId}:`, cancelError);
+              console.log(`[BOT STOP] ✅ Order ${order.exchangeOrderId} cancelled successfully`);
+              
+            } catch (orderError) {
+              const errorMsg = `Failed to cancel order ${order.exchangeOrderId}: ${orderError instanceof Error ? orderError.message : 'Unknown error'}`;
+              cancelErrors.push(errorMsg);
+              console.error(`[BOT STOP] ❌ ${errorMsg}`);
             }
+          } else {
+            console.warn(`[BOT STOP] ⚠️ Skipping order ${order.id} - no exchange order ID`);
           }
         }
+        
+        console.log(`[BOT STOP] ✅ ORDER CANCELLATION COMPLETED:`);
+        console.log(`[BOT STOP]    Total Orders Processed: ${cancellableOrders.length}`);
+        console.log(`[BOT STOP]    Successfully Cancelled: ${cancelledOrders} orders`);
+        console.log(`[BOT STOP]    Failed to Cancel: ${cancelErrors.length} orders`);
+        
+        if (cancelErrors.length > 0) {
+          console.warn(`[BOT STOP] ⚠️ CANCELLATION ERRORS:`);
+          cancelErrors.forEach((error, index) => {
+            console.warn(`[BOT STOP]      ${index + 1}. ${error}`);
+          });
+        }
+      } else {
+        console.log(`[BOT STOP] ℹ️ No cancellable orders to cancel for bot ${botId}`);
       }
       
       // Step 2: Calculate total position to liquidate
+      console.log(`[BOT STOP] 💰 ===== CHECKING POSITION FOR LIQUIDATION =====`);
       if (activeCycle && activeCycle.totalQuantity && parseFloat(activeCycle.totalQuantity) > 0) {
         const totalQuantity = parseFloat(activeCycle.totalQuantity);
-        console.log(`[BOT STOP] Liquidating position: ${totalQuantity} ${bot.tradingPair?.replace('USDT', '')}`);
+        console.log(`[BOT STOP] 💰 POSITION FOUND TO LIQUIDATE:`);
+        console.log(`[BOT STOP]    Quantity: ${totalQuantity} ${bot.tradingPair?.replace('USDT', '')}`);
+        console.log(`[BOT STOP]    Cycle: #${activeCycle.id} (${activeCycle.cycleNumber})`);
+        console.log(`[BOT STOP]    Estimated Value: Calculating from orders...`);
         
         try {
           // Place market sell order to liquidate position
-          // TODO: Move to TradingOperationsManager
-          await wsService.placeLiquidationOrder(bot.id, activeCycle.id);
+          console.log(`[BOT STOP] 🔴 Initiating liquidation order...`);
+          await wsService.getTradingOperationsManager().placeLiquidationOrder(bot.id, activeCycle.id);
           liquidated = true;
-          console.log(`[BOT STOP] Liquidation order placed for cycle ${activeCycle.id}`);
+          console.log(`[BOT STOP] ✅ LIQUIDATION COMPLETED - Position successfully liquidated for cycle ${activeCycle.id}`);
           
           // Complete the cycle
           await storage.completeBotCycle(activeCycle.id);
+          console.log(`[BOT STOP] ✅ CYCLE COMPLETED - Cycle ${activeCycle.id} marked as completed`);
         } catch (liquidationError) {
-          console.error(`[BOT STOP] Failed to liquidate position:`, liquidationError);
+          console.error(`[BOT STOP] ❌ LIQUIDATION FAILED:`, liquidationError);
+          console.error(`[BOT STOP] ❌ Liquidation Error Details:`, {
+            message: liquidationError instanceof Error ? liquidationError.message : 'Unknown error',
+            stack: liquidationError instanceof Error ? liquidationError.stack : 'No stack trace'
+          });
+        }
+      } else {
+        console.log(`[BOT STOP] ℹ️ NO POSITION TO LIQUIDATE:`);
+        if (!activeCycle) {
+          console.log(`[BOT STOP]    Reason: No active cycle found`);
+        } else if (!activeCycle.totalQuantity) {
+          console.log(`[BOT STOP]    Reason: No quantity in active cycle`);
+        } else {
+          console.log(`[BOT STOP]    Reason: Zero quantity (${activeCycle.totalQuantity})`);
         }
       }
       
       // Step 3: Deactivate bot
+      console.log(`[BOT STOP] 🔄 ===== DEACTIVATING BOT =====`);
+      console.log(`[BOT STOP] 🔄 Updating bot ${botId} status...`);
       await storage.updateTradingBot(botId, {
         isActive: false,
         status: 'inactive'
       });
+      console.log(`[BOT STOP] ✅ BOT DEACTIVATED - Bot ${botId} status updated to inactive`);
       
       // Clean up any pending cycle start timers for stopped bot
-      console.log(`[BOT STOP] Cleaning up pending timers for bot ${botId}`);
-      await wsService.cleanupBot(botId);
+      console.log(`[BOT STOP] 🧹 ===== CLEANING UP RESOURCES =====`);
+      console.log(`[BOT STOP] 🧹 Cleaning up pending timers and resources for bot ${botId}...`);
+      await wsService.getTradingOperationsManager().cleanupBot(botId);
+      console.log(`[BOT STOP] ✅ CLEANUP COMPLETED - All resources cleaned up for bot ${botId}`);
       
       // Log bot stop
       const logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
-      logger.logBotStopped(`Manual stop - ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}`);
+      const stopMessage = `Manual stop - ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}`;
+      logger.logBotStopped(stopMessage);
+      console.log(`[BOT STOP] 📝 LOGGED - Bot stop event recorded: ${stopMessage}`);
       
       // Broadcast bot stop status to all connected clients
-      console.log(`[WEBSOCKET] Broadcasting bot stop for bot ${botId}`);
+      console.log(`[BOT STOP] 📡 ===== BROADCASTING STATUS UPDATES =====`);
+      console.log(`[BOT STOP] 📡 Broadcasting bot stop status to WebSocket clients...`);
       wsService.broadcastBotStatusUpdate({
         botId: botId,
         status: 'inactive',
@@ -606,44 +696,229 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bot: updatedBot
       });
       
-      console.log(`[BOT STOP] Bot ${botId} stopped successfully. Cancelled: ${cancelledOrders} orders, Liquidated: ${liquidated}`);
+      console.log(`[BOT STOP] ✅ WEBSOCKET BROADCASTS COMPLETED`);
+      
+      const responseMessage = `Bot stopped successfully - ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}`;
+      console.log(`[BOT STOP] ===== BOT STOP PROCESS COMPLETED =====`);
+      console.log(`[BOT STOP] 📊 FINAL SUMMARY:`);
+      console.log(`[BOT STOP]    Bot ID: ${botId}`);
+      console.log(`[BOT STOP]    Orders Cancelled: ${cancelledOrders}`);
+      console.log(`[BOT STOP]    Position Liquidated: ${liquidated ? 'YES' : 'NO'}`);
+      console.log(`[BOT STOP]    Final Status: inactive`);
+      console.log(`[BOT STOP]    Response: ${responseMessage}`);
+      console.log(`[BOT STOP] ===== PROCESS COMPLETE =====\n`);
       
       res.json({
         success: true,
         cancelledOrders,
         liquidated,
-        message: `Bot stopped. ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}.`
+        message: responseMessage
       });
       
     } catch (error) {
-      console.error('Error stopping trading bot:', error);
+      console.error('\n[BOT STOP] ===== CRITICAL ERROR =====');
+      console.error('[BOT STOP] ❌ Error stopping trading bot:', error);
+      console.error('[BOT STOP] ❌ Error Details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace'
+      });
+      console.error('[BOT STOP] ===== ERROR END =====\n');
       res.status(500).json({ error: "Failed to stop trading bot" });
     }
   });
 
   app.delete("/api/bots/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+    console.log(`\n[DELETE BOT] 🔥 ===== ENDPOINT HIT - REQUEST RECEIVED =====`);
+    console.log(`[DELETE BOT] 🔥 Request method: ${req.method}`);
+    console.log(`[DELETE BOT] 🔥 Request URL: ${req.url}`);
+    console.log(`[DELETE BOT] 🔥 Request params:`, req.params);
+    console.log(`[DELETE BOT] 🔥 Request headers:`, req.headers);
+    console.log(`[DELETE BOT] 🔥 User from auth:`, req.user);
+    
     try {
       const id = parseInt(req.params.id);
       const userId = req.user!.id;
       
+      console.log(`\n[DELETE BOT] ===== STARTING BOT DELETION PROCESS =====`);
+      console.log(`[DELETE BOT] 🗑️ Bot ID: ${id}, User ID: ${userId}`);
+      console.log(`[DELETE BOT] 📝 Request Details: ${JSON.stringify({ botId: id, userId, timestamp: new Date().toISOString() })}`);
+      
       // Verify bot belongs to user
       const bot = await storage.getTradingBot(id);
       if (!bot || bot.userId !== userId) {
+        console.log(`[DELETE BOT] ❌ AUTHORIZATION FAILED - Bot ${id} not found or access denied for user ${userId}`);
         return res.status(404).json({ error: "Trading bot not found" });
       }
+      
+      console.log(`[DELETE BOT] ✅ AUTHORIZATION PASSED - Bot Details:`);
+      console.log(`[DELETE BOT]    Name: ${bot.name}`);
+      console.log(`[DELETE BOT]    Trading Pair: ${bot.tradingPair}`);
+      console.log(`[DELETE BOT]    Strategy: ${bot.strategy}`);
+      console.log(`[DELETE BOT]    Current Status: ${bot.status}`);
+      console.log(`[DELETE BOT]    Is Active: ${bot.isActive}`);
+      console.log(`[DELETE BOT]    Exchange ID: ${bot.exchangeId}`);
       
       // Get counts of related data before deletion
       const cycles = await storage.getBotCyclesByBotId(id);
       const orders = await storage.getCycleOrdersByBotId(id);
       const trades = await storage.getTradesByBotId(id);
       
-      console.log(`[DELETE BOT] Deleting bot ${id} with ${cycles.length} cycles, ${orders.length} orders, ${trades.length} trades`);
+      console.log(`[DELETE BOT] 📊 DATA TO BE DELETED:`);
+      console.log(`[DELETE BOT]    Bot Cycles: ${cycles.length}`);
+      console.log(`[DELETE BOT]    Cycle Orders: ${orders.length}`);
+      console.log(`[DELETE BOT]    Trades: ${trades.length}`);
       
-      // Clean up any pending timers and resources for this bot
-      console.log(`[DELETE BOT] Cleaning up bot resources for bot ${id}`);
-      await wsService.cleanupBot(id);
+      // Get active cycle and cancellable orders for cancellation
+      const activeCycle = await storage.getActiveBotCycle(id);
       
+      // Get ALL orders for this bot and filter cancellable ones
+      const allBotOrders = await storage.getCycleOrdersByBotId(id);
+      const cancellableOrders = allBotOrders.filter(order => 
+        order.exchangeOrderId && 
+        !['filled', 'cancelled', 'failed'].includes(order.status)
+      );
+      console.log(`[DELETE BOT] 🔍 DEBUG - ALL ORDERS FOR BOT ${id}:`);
+      if (allBotOrders.length > 0) {
+        allBotOrders.forEach((order, index) => {
+          console.log(`[DELETE BOT]      ${index + 1}. Order ${order.id} - ${order.orderType} (${order.side}) - Status: ${order.status} - Exchange ID: ${order.exchangeOrderId || 'N/A'} - Created: ${order.createdAt}`);
+        });
+      } else {
+        console.log(`[DELETE BOT]      No orders found in database for bot ${id}`);
+      }
+      
+      console.log(`[DELETE BOT] 📊 CURRENT BOT STATE:`);
+      console.log(`[DELETE BOT]    Active Cycle: ${activeCycle ? `#${activeCycle.id} (${activeCycle.cycleNumber})` : 'none'}`);
+      console.log(`[DELETE BOT]    Total Orders: ${allBotOrders.length}`);
+      console.log(`[DELETE BOT]    Cancellable Orders: ${cancellableOrders.length}`);
+      
+      if (cancellableOrders.length > 0) {
+        console.log(`[DELETE BOT] 📋 CANCELLABLE ORDERS TO CANCEL:`);
+        cancellableOrders.forEach((order, index) => {
+          console.log(`[DELETE BOT]      ${index + 1}. Order ${order.id} (${order.orderType}) - ${order.status} - Exchange ID: ${order.exchangeOrderId || 'N/A'}`);
+        });
+      }
+      
+      let cancelledOrders = 0;
+      let liquidated = false;
+      
+      // Step 1: Cancel all cancellable orders using the same proven logic as Trading page
+      if (cancellableOrders.length > 0) {
+        console.log(`[DELETE BOT] 🚫 ===== STARTING ORDER CANCELLATION =====`);
+        console.log(`[DELETE BOT] 🚫 Using Trading page logic to cancel ${cancellableOrders.length} cancellable orders for bot ${id}`);
+        
+        const cancelErrors: string[] = [];
+        
+        for (const order of cancellableOrders) {
+          if (order.exchangeOrderId) {
+            try {
+              console.log(`[DELETE BOT] 🚫 Cancelling order ${order.exchangeOrderId} (Order ID: ${order.id}, Type: ${order.orderType}, Status: ${order.status})`);
+              
+              // Use the same proven cancellation logic as Trading page
+              await wsService.getTradingOperationsManager().cancelManualOrder(
+                bot.exchangeId, 
+                order.exchangeOrderId, 
+                bot.tradingPair
+              );
+              
+              // Update order status in database
+              await storage.updateCycleOrder(order.id, { 
+                status: 'cancelled',
+                filledAt: new Date()
+              });
+              
+              cancelledOrders++;
+              console.log(`[DELETE BOT] ✅ Order ${order.exchangeOrderId} cancelled successfully`);
+              
+            } catch (orderError) {
+              const errorMsg = `Failed to cancel order ${order.exchangeOrderId}: ${orderError instanceof Error ? orderError.message : 'Unknown error'}`;
+              cancelErrors.push(errorMsg);
+              console.error(`[DELETE BOT] ❌ ${errorMsg}`);
+            }
+          } else {
+            console.warn(`[DELETE BOT] ⚠️ Skipping order ${order.id} - no exchange order ID`);
+          }
+        }
+        
+        console.log(`[DELETE BOT] ✅ ORDER CANCELLATION COMPLETED:`);
+        console.log(`[DELETE BOT]    Total Orders Processed: ${cancellableOrders.length}`);
+        console.log(`[DELETE BOT]    Successfully Cancelled: ${cancelledOrders} orders`);
+        console.log(`[DELETE BOT]    Failed to Cancel: ${cancelErrors.length} orders`);
+        
+        if (cancelErrors.length > 0) {
+          console.warn(`[DELETE BOT] ⚠️ CANCELLATION ERRORS:`);
+          cancelErrors.forEach((error, index) => {
+            console.warn(`[DELETE BOT]      ${index + 1}. ${error}`);
+          });
+        }
+      } else {
+        console.log(`[DELETE BOT] ℹ️ No cancellable orders to cancel for bot ${id}`);
+      }
+      
+      // Step 2: Calculate total position to liquidate (same as stop bot logic)
+      console.log(`[DELETE BOT] 💰 ===== CHECKING POSITION FOR LIQUIDATION =====`);
+      if (activeCycle && activeCycle.totalQuantity && parseFloat(activeCycle.totalQuantity) > 0) {
+        const totalQuantity = parseFloat(activeCycle.totalQuantity);
+        console.log(`[DELETE BOT] 💰 POSITION FOUND TO LIQUIDATE:`);
+        console.log(`[DELETE BOT]    Quantity: ${totalQuantity} ${bot.tradingPair?.replace('USDT', '')}`);
+        console.log(`[DELETE BOT]    Cycle: #${activeCycle.id} (${activeCycle.cycleNumber})`);
+        console.log(`[DELETE BOT]    Estimated Value: Calculating from orders...`);
+        
+        try {
+          // Place market sell order to liquidate position
+          console.log(`[DELETE BOT] 🔴 Initiating liquidation order before deletion...`);
+          await wsService.getTradingOperationsManager().placeLiquidationOrder(bot.id, activeCycle.id);
+          liquidated = true;
+          console.log(`[DELETE BOT] ✅ LIQUIDATION COMPLETED - Position successfully liquidated for cycle ${activeCycle.id}`);
+          
+          // Complete the cycle
+          await storage.completeBotCycle(activeCycle.id);
+          console.log(`[DELETE BOT] ✅ CYCLE COMPLETED - Cycle ${activeCycle.id} marked as completed`);
+        } catch (liquidationError) {
+          console.error(`[DELETE BOT] ❌ LIQUIDATION FAILED:`, liquidationError);
+          console.error(`[DELETE BOT] ❌ Liquidation Error Details:`, {
+            message: liquidationError instanceof Error ? liquidationError.message : 'Unknown error',
+            stack: liquidationError instanceof Error ? liquidationError.stack : 'No stack trace'
+          });
+          // Continue with deletion even if liquidation fails
+          console.log(`[DELETE BOT] ⚠️ Continuing with deletion despite liquidation failure`);
+        }
+      } else {
+        console.log(`[DELETE BOT] ℹ️ NO POSITION TO LIQUIDATE:`);
+        if (!activeCycle) {
+          console.log(`[DELETE BOT]    Reason: No active cycle found`);
+        } else if (!activeCycle.totalQuantity) {
+          console.log(`[DELETE BOT]    Reason: No quantity in active cycle`);
+        } else {
+          console.log(`[DELETE BOT]    Reason: Zero quantity (${activeCycle.totalQuantity})`);
+        }
+      }
+      
+      console.log(`[DELETE BOT] 🗑️ ===== STARTING DATA DELETION =====`);
+      console.log(`[DELETE BOT] 🗑️ Deleting bot ${id} with ${cycles.length} cycles, ${orders.length} orders, ${trades.length} trades`);
+      
+      // Step 3: Clean up any pending timers and resources for this bot
+      console.log(`[DELETE BOT] 🧹 ===== CLEANING UP RESOURCES =====`);
+      console.log(`[DELETE BOT] 🧹 Cleaning up bot resources for bot ${id}...`);
+      await wsService.getTradingOperationsManager().cleanupBot(id);
+      console.log(`[DELETE BOT] ✅ RESOURCE CLEANUP COMPLETED`);
+      
+      // Step 4: Delete the bot and all related data
+      console.log(`[DELETE BOT] 🗑️ Executing database deletion...`);
       await storage.deleteTradingBot(id);
+      console.log(`[DELETE BOT] ✅ DATABASE DELETION COMPLETED - Bot and all related data deleted`);
+      
+      // Log deletion action
+      const logger = BotLoggerManager.getLogger(id, bot.tradingPair);
+      logger.logBotDeleted();
+      const deletionMessage = `Bot deletion completed - ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}`;
+      logger.logCustom('INFO', 'BOT_LIFECYCLE', deletionMessage, {
+        botId: id,
+        cancelledOrders,
+        liquidated,
+        cyclesDeleted: cycles.length,
+        ordersDeleted: orders.length,
+        tradesDeleted: trades.length
+      });
       
       // Broadcast bot deletion to all connected clients
       console.log(`[WEBSOCKET] Broadcasting bot deletion for bot ${id}`);
@@ -652,8 +927,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bot: { id: id, userId: userId } // Only send minimal data since bot is deleted
       });
       
+      console.log(`[DELETE BOT] Bot ${id} deleted successfully. Cancelled: ${cancelledOrders} orders, Liquidated: ${liquidated}`);
+      
       res.json({ 
         success: true,
+        cancelledOrders,
+        liquidated,
+        message: `Bot deleted. ${cancelledOrders} orders cancelled${liquidated ? ', position liquidated' : ''}.`,
         deletedData: {
           cycles: cycles.length,
           orders: orders.length,
@@ -661,8 +941,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (error) {
-      console.error('Error deleting trading bot:', error);
-      res.status(500).json({ error: "Failed to delete trading bot" });
+      console.error(`\n[DELETE BOT] 💥 ===== FATAL ERROR IN DELETE ENDPOINT =====`);
+      console.error('[DELETE BOT] 💥 Error deleting trading bot:', error);
+      console.error(`[DELETE BOT] 💥 Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
+      console.error(`[DELETE BOT] 💥 Request details:`, {
+        params: req.params,
+        userId: req.user?.id,
+        method: req.method,
+        url: req.url
+      });
+      console.error(`[DELETE BOT] 💥 ===== ERROR END =====\n`);
+      
+      res.status(500).json({ 
+        error: "Failed to delete trading bot",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
@@ -1075,19 +1368,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { exchangeId, symbol } = req.body;
       
       if (!exchangeId || !symbol) {
+        console.error(`[CANCEL ORDER] ❌ Missing required parameters: exchangeId=${exchangeId}, symbol=${symbol}`);
         return res.status(400).json({ error: "exchangeId and symbol are required" });
       }
 
-      console.log(`[CANCEL ORDER] 🚫 Cancel request for order ${orderId} on ${symbol}`);
+      console.log(`[CANCEL ORDER] 🚫 ===== STARTING MANUAL ORDER CANCELLATION =====`);
+      console.log(`[CANCEL ORDER] 🚫 Order ID: ${orderId}`);
+      console.log(`[CANCEL ORDER] 🚫 Exchange ID: ${exchangeId}`);
+      console.log(`[CANCEL ORDER] 🚫 Symbol: ${symbol}`);
+      console.log(`[CANCEL ORDER] 🚫 User ID: ${req.user!.id}`);
+      console.log(`[CANCEL ORDER] 🚫 Request Details: ${JSON.stringify({ orderId, exchangeId, symbol, userId: req.user!.id, timestamp: new Date().toISOString() })}`);
+      
+      console.log(`[CANCEL ORDER] 🚫 Using TradingOperationsManager.cancelManualOrder()...`);
       
       // Use the trading operations manager to cancel the order
       await wsService.getTradingOperationsManager().cancelManualOrder(exchangeId, orderId, symbol);
       
-      console.log(`[CANCEL ORDER] ✅ Order ${orderId} cancelled successfully`);
+      console.log(`[CANCEL ORDER] ✅ ===== ORDER CANCELLATION COMPLETED =====`);
+      console.log(`[CANCEL ORDER] ✅ Order ${orderId} cancelled successfully on ${symbol}`);
+      console.log(`[CANCEL ORDER] ✅ Response: Order cancelled successfully`);
+      
       res.json({ message: "Order cancelled successfully", orderId });
       
     } catch (error) {
+      console.error(`[CANCEL ORDER] ❌ ===== ORDER CANCELLATION FAILED =====`);
       console.error('[CANCEL ORDER] ❌ Error cancelling order:', error);
+      console.error(`[CANCEL ORDER] ❌ Error Details:`, {
+        orderId: req.params.orderId,
+        exchangeId: req.body.exchangeId,
+        symbol: req.body.symbol,
+        userId: req.user!.id,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace'
+      });
+      console.error(`[CANCEL ORDER] ❌ ===== ERROR END =====`);
+      
       res.status(500).json({ 
         error: "Failed to cancel order",
         details: error instanceof Error ? error.message : 'Unknown error'

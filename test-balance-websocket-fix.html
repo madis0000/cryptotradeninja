@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Balance WebSocket Fix</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #1a1a1a; 
+            color: white; 
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+        }
+        .status { 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 5px; 
+        }
+        .connected { 
+            background: #0f5132; 
+            color: #d1e7dd; 
+        }
+        .disconnected { 
+            background: #842029; 
+            color: #f8d7da; 
+        }
+        .connecting { 
+            background: #664d03; 
+            color: #fff3cd; 
+        }
+        .error { 
+            background: #721c24; 
+            color: #f8d7da; 
+        }
+        .log { 
+            background: #212529; 
+            border: 1px solid #495057; 
+            padding: 10px; 
+            height: 400px; 
+            overflow-y: auto; 
+            font-family: monospace; 
+            font-size: 12px; 
+        }
+        button {
+            background: #0d6efd;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0b5ed7;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .balance-display {
+            background: #0f3460;
+            border: 1px solid #0f5132;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Balance WebSocket Fix Test</h1>
+        
+        <div>
+            <h3>Connection Status</h3>
+            <div id="status" class="status disconnected">Disconnected</div>
+        </div>
+
+        <div>
+            <h3>Actions</h3>
+            <button onclick="connect()">Connect</button>
+            <button onclick="authenticate()">Authenticate</button>
+            <button onclick="requestBalance(5)">Get Balance - Exchange 5 (Live)</button>
+            <button onclick="requestBalance(4)">Get Balance - Exchange 4 (Testnet)</button>
+            <button onclick="disconnect()">Disconnect</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+
+        <div>
+            <h3>Balance Results</h3>
+            <div id="balanceDisplay" class="balance-display">No balance data yet</div>
+        </div>
+
+        <div>
+            <h3>📝 WebSocket Log</h3>
+            <div id="log" class="log">Ready to test balance fix...</div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+        let authenticated = false;
+
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(status, className) {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = `Status: ${status}`;
+            statusElement.className = `status ${className}`;
+        }
+
+        function updateBalanceDisplay(data) {
+            const displayElement = document.getElementById('balanceDisplay');
+            
+            if (data.type === 'balance_update') {
+                let html = `<h4>Exchange ${data.exchangeId} Balance Update:</h4>`;
+                
+                if (data.data && data.data.balances) {
+                    const balances = data.data.balances;
+                    const nonZeroBalances = balances.filter(b => 
+                        parseFloat(b.free || '0') > 0 || parseFloat(b.locked || '0') > 0
+                    );
+                    
+                    html += `<p><strong>Total Assets:</strong> ${balances.length}</p>`;
+                    html += `<p><strong>Non-Zero Balances:</strong> ${nonZeroBalances.length}</p>`;
+                    
+                    // Show important assets
+                    const importantAssets = ['USDT', 'BTC', 'ETH', 'BNB', 'ICP'];
+                    html += '<h5>Important Assets:</h5>';
+                    
+                    importantAssets.forEach(asset => {
+                        const balance = balances.find(b => b.asset === asset);
+                        if (balance) {
+                            const free = parseFloat(balance.free || '0');
+                            const locked = parseFloat(balance.locked || '0');
+                            const total = free + locked;
+                            
+                            if (total > 0) {
+                                html += `<div><strong>${asset}:</strong> ${free.toFixed(8)} (Free) + ${locked.toFixed(8)} (Locked) = ${total.toFixed(8)}</div>`;
+                            } else {
+                                html += `<div><strong>${asset}:</strong> 0.00000000</div>`;
+                            }
+                        } else {
+                            html += `<div><strong>${asset}:</strong> Not found</div>`;
+                        }
+                    });
+                } else if (data.balance) {
+                    // Single asset balance
+                    html += `<p><strong>Asset:</strong> ${data.asset}</p>`;
+                    html += `<p><strong>Free:</strong> ${data.balance.free}</p>`;
+                    html += `<p><strong>Locked:</strong> ${data.balance.locked}</p>`;
+                } else {
+                    html += '<p>No balance data in response</p>';
+                }
+                
+                displayElement.innerHTML = html;
+            } else if (data.type === 'balance_error') {
+                displayElement.innerHTML = `<div style="color: #f8d7da;"><h4>Balance Error:</h4><p>${data.error}</p></div>`;
+            }
+        }
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('❌ Already connected');
+                return;
+            }
+
+            const url = 'ws://localhost:3001/api/ws';
+            log(`🔌 Connecting to: ${url}`);
+            updateStatus('Connecting...', 'connecting');
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = function(event) {
+                    connected = true;
+                    authenticated = false;
+                    log('✅ Connected successfully');
+                    updateStatus('Connected', 'connected');
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log(`📨 Received: ${JSON.stringify(data, null, 2)}`);
+                        
+                        if (data.type === 'authenticated') {
+                            authenticated = true;
+                            log('🔐 Authentication successful');
+                        } else if (data.type === 'balance_update' || data.type === 'balance_error') {
+                            updateBalanceDisplay(data);
+                        }
+                    } catch (e) {
+                        log(`📨 Received (raw): ${event.data}`);
+                    }
+                };
+
+                ws.onclose = function(event) {
+                    connected = false;
+                    authenticated = false;
+                    log(`🔒 Connection closed - Code: ${event.code}, Reason: ${event.reason}`);
+                    updateStatus('Disconnected', 'disconnected');
+                };
+
+                ws.onerror = function(error) {
+                    log(`❌ Error: ${error}`);
+                    updateStatus('Error', 'error');
+                };
+
+            } catch (error) {
+                log(`❌ Connection failed: ${error.message}`);
+                updateStatus('Error', 'error');
+            }
+        }
+
+        function authenticate() {
+            if (!connected || !ws) {
+                log('❌ Not connected');
+                return;
+            }
+
+            const authMessage = {
+                type: 'authenticate',
+                userId: 1  // Test with user ID 1
+            };
+
+            log(`🔐 Sending authentication: ${JSON.stringify(authMessage)}`);
+            ws.send(JSON.stringify(authMessage));
+        }
+
+        function requestBalance(exchangeId) {
+            if (!connected || !ws) {
+                log('❌ Not connected');
+                return;
+            }
+
+            const balanceMessage = {
+                type: 'get_balance',
+                exchangeId: exchangeId
+            };
+
+            log(`💰 Requesting balance for exchange ${exchangeId}: ${JSON.stringify(balanceMessage)}`);
+            ws.send(JSON.stringify(balanceMessage));
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+                connected = false;
+                authenticated = false;
+                log('🔌 Disconnected manually');
+                updateStatus('Disconnected', 'disconnected');
+            } else {
+                log('❌ No connection to disconnect');
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 Balance WebSocket Fix Test Page Loaded');
+            log('Click "Connect" to start testing the balance fix');
+        };
+    </script>
+</body>
+</html>

@@ -18,11 +18,12 @@
         
         // Test different Binance WebSocket URLs
         const urlsToTest = [
-            'wss://stream.testnet.binance.vision:9443/ws',           // Current (failing)
-            'wss://testnet.binance.vision/ws',                      // Without port
-            'wss://stream.testnet.binance.vision/ws',               // Without port 9443
-            'wss://testnet.binance.vision:9443/ws',                 // With port but different subdomain
-            'wss://stream.binance.com:9443/ws',                     // Mainnet for comparison
+            'wss://stream.binance.vision/ws',                       // New testnet stream endpoint
+            'wss://ws-api.testnet.binance.vision/ws-api/v3',       // New testnet WS-API endpoint
+            'wss://stream.testnet.binance.vision:9443/ws',         // Old testnet (for comparison)
+            'wss://testnet.binance.vision/ws',                     // Alternative testnet
+            'wss://stream.binance.com:9443/ws',                    // Mainnet stream
+            'wss://ws-api.binance.com:443/ws-api/v3',             // Mainnet WS-API
         ];
         
         async function testWebSocketUrl(url, timeout = 5000) {

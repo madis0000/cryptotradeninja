@@ -34,9 +34,9 @@ export class ExchangeApiService {
       }
 
       const endpoints: ExchangeEndpoints = {
-        wsStreamEndpoint: exchange.wsStreamEndpoint || '',
-        wsApiEndpoint: exchange.wsApiEndpoint || '',
-        restApiEndpoint: exchange.restApiEndpoint || '',
+        wsStreamEndpoint: exchange.wsStreamEndpoint || (exchange.isTestnet ? 'wss://testnet.binance.vision/ws' : 'wss://stream.binance.com:9443/ws'),
+        wsApiEndpoint: exchange.wsApiEndpoint || (exchange.isTestnet ? 'wss://ws-api.testnet.binance.vision/ws-api/v3' : 'wss://ws-api.binance.com:443/ws-api/v3'),
+        restApiEndpoint: exchange.restApiEndpoint || (exchange.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com'),
         exchangeType: exchange.exchangeType || 'binance',
         isTestnet: exchange.isTestnet || false
       };
@@ -115,5 +115,69 @@ export class ExchangeApiService {
   async getRestApiUrl(exchangeId: number): Promise<string | null> {
     const endpoints = await this.getExchangeEndpoints(exchangeId);
     return endpoints ? endpoints.restApiEndpoint : null;
+  }
+
+  private getEndpoints(exchange: any): ExchangeEndpoints {
+    const isTestnet = exchange.isTestnet || false;
+    
+    if (exchange.exchangeType === 'binance' || exchange.name.toLowerCase().includes('binance')) {
+      return {
+        isTestnet,
+        restApiEndpoint: isTestnet 
+          ? 'https://testnet.binance.vision'
+          : 'https://api.binance.com',
+        wsStreamEndpoint: isTestnet
+          ? 'wss://testnet.binance.vision/ws'
+          : 'wss://stream.binance.com:9443/ws'
+      };
+    }
+    
+    // Default endpoints if custom ones not provided
+    return {
+      isTestnet,
+      restApiEndpoint: exchange.restApiEndpoint || (isTestnet 
+        ? 'https://testnet.binance.vision'
+        : 'https://api.binance.com'),
+      wsStreamEndpoint: exchange.wsStreamEndpoint || (isTestnet
+        ? 'wss://testnet.binance.vision/ws'
+        : 'wss://stream.binance.com:9443/ws')
+    };
+  }
+
+  async fetchAccountBalance(exchange: any): Promise<any> {
+    const endpoints = this.getEndpoints(exchange);
+    const baseUrl = endpoints.restApiEndpoint;
+    
+    console.log(`[EXCHANGE API] Fetching balance from ${baseUrl} (${endpoints.isTestnet ? 'testnet' : 'mainnet'})`);
+    
+    try {
+      const timestamp = Date.now();
+      const queryString = `timestamp=${timestamp}`;
+      
+      // Decrypt credentials
+      const apiKey = decrypt(exchange.apiKey, exchange.encryptionIv);
+      const apiSecret = decrypt(exchange.apiSecret, exchange.encryptionIv);
+      
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(queryString)
+        .digest('hex');
+
+      const response = await fetch(`${baseUrl}/api/v3/account?${queryString}&signature=${signature}`, {
+        headers: {
+          'X-MBX-APIKEY': apiKey
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`API Error: ${response.status} - ${error}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[EXCHANGE API] Balance fetch error:', error);
+      throw error;
+    }
   }
 }
