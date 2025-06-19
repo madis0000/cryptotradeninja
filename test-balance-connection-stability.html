@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Balance Connection Stability</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #1a1a1a; 
+            color: white; 
+        }
+        .container { 
+            max-width: 900px; 
+            margin: 0 auto; 
+        }
+        .status { 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 5px; 
+        }
+        .connected { 
+            background: #0f5132; 
+            color: #d1e7dd; 
+        }
+        .disconnected { 
+            background: #842029; 
+            color: #f8d7da; 
+        }
+        .connecting { 
+            background: #664d03; 
+            color: #fff3cd; 
+        }
+        .error { 
+            background: #721c24; 
+            color: #f8d7da; 
+        }
+        .log { 
+            background: #212529; 
+            border: 1px solid #495057; 
+            padding: 10px; 
+            height: 400px; 
+            overflow-y: auto; 
+            font-family: monospace; 
+            font-size: 12px; 
+        }
+        button {
+            background: #0d6efd;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0b5ed7;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .test-section {
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .test-results {
+            background: #1a202c;
+            border: 1px solid #2d3748;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Balance Connection Stability Test</h1>
+        
+        <div class="test-section">
+            <h3>Connection Status</h3>
+            <div id="status" class="status disconnected">Disconnected</div>
+            <div>Connection Duration: <span id="connectionDuration">0s</span></div>
+            <div>Messages Received: <span id="messageCount">0</span></div>
+            <div>Balance Requests Sent: <span id="balanceRequestCount">0</span></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Actions</h3>
+            <button onclick="connect()">Connect</button>
+            <button onclick="authenticate()">Authenticate</button>
+            <button onclick="requestBalance(5, 'Live Exchange')">Get Balance - Exchange 5 (Live)</button>
+            <button onclick="requestBalance(4, 'Testnet Exchange')">Get Balance - Exchange 4 (Testnet)</button>
+            <button onclick="sendKeepAlive()">Send Keep-Alive</button>
+            <button onclick="disconnect()">Disconnect</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+
+        <div class="test-section">
+            <h3>Connection Monitoring</h3>
+            <label>
+                <input type="checkbox" id="autoReconnect" checked> Auto-reconnect on disconnect
+            </label>
+            <br>
+            <label>
+                <input type="checkbox" id="periodicKeepAlive"> Send periodic keep-alive (every 30s)
+            </label>
+            <br>
+            <label>
+                <input type="checkbox" id="monitorAfterBalance" checked> Monitor connection for 60s after balance fetch
+            </label>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Results</h3>
+            <div id="testResults" class="test-results">No tests run yet</div>
+        </div>
+
+        <div class="test-section">
+            <h3>📝 Connection Log</h3>
+            <div id="log" class="log">Ready to test connection stability...</div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+        let authenticated = false;
+        let connectionStartTime = null;
+        let connectionDurationInterval = null;
+        let messageCount = 0;
+        let balanceRequestCount = 0;
+        let keepAliveInterval = null;
+        let balanceMonitorTimeout = null;
+
+        function log(message, type = 'info') {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : '📝';
+            logElement.innerHTML += `[${timestamp}] ${prefix} ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(status, className) {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = `Status: ${status}`;
+            statusElement.className = `status ${className}`;
+        }
+
+        function updateStats() {
+            document.getElementById('messageCount').textContent = messageCount;
+            document.getElementById('balanceRequestCount').textContent = balanceRequestCount;
+        }
+
+        function updateConnectionDuration() {
+            if (connectionStartTime && connected) {
+                const duration = Math.floor((Date.now() - connectionStartTime) / 1000);
+                document.getElementById('connectionDuration').textContent = `${duration}s`;
+            } else {
+                document.getElementById('connectionDuration').textContent = '0s';
+            }
+        }
+
+        function logTestResult(test, result, details) {
+            const resultsElement = document.getElementById('testResults');
+            const timestamp = new Date().toLocaleTimeString();
+            const status = result ? '✅ PASS' : '❌ FAIL';
+            resultsElement.innerHTML += `[${timestamp}] ${test}: ${status} - ${details}\n`;
+        }
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('Already connected', 'warning');
+                return;
+            }
+
+            const url = 'ws://localhost:3001/api/ws';
+            log(`Connecting to: ${url}`);
+            updateStatus('Connecting...', 'connecting');
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = function(event) {
+                    connected = true;
+                    authenticated = false;
+                    connectionStartTime = Date.now();
+                    log('Connected successfully', 'success');
+                    updateStatus('Connected', 'connected');
+                    
+                    // Start duration counter
+                    connectionDurationInterval = setInterval(updateConnectionDuration, 1000);
+                    
+                    // Start periodic keep-alive if enabled
+                    if (document.getElementById('periodicKeepAlive').checked) {
+                        keepAliveInterval = setInterval(sendKeepAlive, 30000);
+                        log('Started periodic keep-alive (30s intervals)');
+                    }
+                    
+                    logTestResult('WebSocket Connection', true, 'Successfully established connection');
+                };
+
+                ws.onmessage = function(event) {
+                    messageCount++;
+                    updateStats();
+                    
+                    try {
+                        const data = JSON.parse(event.data);
+                        log(`Received: ${data.type || 'unknown'} - ${JSON.stringify(data)}`, 'success');
+                        
+                        if (data.type === 'authenticated') {
+                            authenticated = true;
+                            log('Authentication successful', 'success');
+                            logTestResult('Authentication', true, 'Successfully authenticated with server');
+                        } else if (data.type === 'balance_update') {
+                            log(`Balance data received for exchange ${data.exchangeId}: ${data.data?.balances?.length || 0} assets`, 'success');
+                            logTestResult('Balance Fetch', true, `Received balance data with ${data.data?.balances?.length || 0} assets`);
+                            
+                            // Start monitoring connection stability after balance fetch
+                            if (document.getElementById('monitorAfterBalance').checked) {
+                                monitorConnectionAfterBalance();
+                            }
+                        } else if (data.type === 'balance_error') {
+                            log(`Balance error: ${data.error}`, 'error');
+                            logTestResult('Balance Fetch', false, `Error: ${data.error}`);
+                        }
+                    } catch (e) {
+                        log(`Received (raw): ${event.data}`, 'info');
+                    }
+                };
+
+                ws.onclose = function(event) {
+                    const wasConnected = connected;
+                    connected = false;
+                    authenticated = false;
+                    
+                    // Clear intervals
+                    if (connectionDurationInterval) {
+                        clearInterval(connectionDurationInterval);
+                        connectionDurationInterval = null;
+                    }
+                    if (keepAliveInterval) {
+                        clearInterval(keepAliveInterval);
+                        keepAliveInterval = null;
+                    }
+                    if (balanceMonitorTimeout) {
+                        clearTimeout(balanceMonitorTimeout);
+                        balanceMonitorTimeout = null;
+                    }
+                    
+                    const duration = connectionStartTime ? Math.floor((Date.now() - connectionStartTime) / 1000) : 0;
+                    connectionStartTime = null;
+                    
+                    log(`Connection closed - Code: ${event.code}, Reason: ${event.reason || 'none'}, Duration: ${duration}s`, 'error');
+                    updateStatus('Disconnected', 'disconnected');
+                    updateConnectionDuration();
+                    
+                    if (wasConnected) {
+                        logTestResult('Connection Stability', event.code === 1000, 
+                            `Connection lasted ${duration}s, closed with code ${event.code} (${event.reason || 'no reason'})`);
+                        
+                        // Auto-reconnect if enabled and not a manual disconnect
+                        if (document.getElementById('autoReconnect').checked && event.code !== 1000) {
+                            log('Auto-reconnecting in 3 seconds...', 'warning');
+                            setTimeout(connect, 3000);
+                        }
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    log(`WebSocket error: ${error}`, 'error');
+                    updateStatus('Error', 'error');
+                    logTestResult('Connection Error', false, `WebSocket error occurred: ${error}`);
+                };
+
+            } catch (error) {
+                log(`Connection failed: ${error.message}`, 'error');
+                updateStatus('Error', 'error');
+                logTestResult('WebSocket Connection', false, `Failed to create connection: ${error.message}`);
+            }
+        }
+
+        function authenticate() {
+            if (!connected || !ws) {
+                log('Not connected - cannot authenticate', 'error');
+                return;
+            }
+
+            const authMessage = {
+                type: 'authenticate',
+                userId: 1
+            };
+
+            log(`Sending authentication: ${JSON.stringify(authMessage)}`);
+            ws.send(JSON.stringify(authMessage));
+        }
+
+        function requestBalance(exchangeId, exchangeName) {
+            if (!connected || !ws) {
+                log('Not connected - cannot request balance', 'error');
+                return;
+            }
+
+            balanceRequestCount++;
+            updateStats();
+
+            const balanceMessage = {
+                type: 'get_balance',
+                exchangeId: exchangeId
+            };
+
+            log(`Requesting balance for ${exchangeName} (ID: ${exchangeId}): ${JSON.stringify(balanceMessage)}`);
+            ws.send(JSON.stringify(balanceMessage));
+        }
+
+        function sendKeepAlive() {
+            if (!connected || !ws) {
+                log('Not connected - cannot send keep-alive', 'error');
+                return;
+            }
+
+            const keepAliveMessage = {
+                type: 'test',
+                message: 'keep-alive',
+                timestamp: Date.now()
+            };
+
+            log(`Sending keep-alive: ${JSON.stringify(keepAliveMessage)}`);
+            ws.send(JSON.stringify(keepAliveMessage));
+        }
+
+        function monitorConnectionAfterBalance() {
+            log('Starting 60-second post-balance connection monitoring...', 'warning');
+            
+            balanceMonitorTimeout = setTimeout(() => {
+                if (connected) {
+                    log('✅ Connection stable for 60 seconds after balance fetch!', 'success');
+                    logTestResult('Post-Balance Stability', true, 'Connection remained stable for 60 seconds after balance fetch');
+                } else {
+                    log('❌ Connection lost during 60-second monitoring period', 'error');
+                    logTestResult('Post-Balance Stability', false, 'Connection lost during monitoring period');
+                }
+            }, 60000);
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+                connected = false;
+                authenticated = false;
+                log('Disconnected manually', 'info');
+                updateStatus('Disconnected', 'disconnected');
+            } else {
+                log('No connection to disconnect', 'warning');
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+            document.getElementById('testResults').innerHTML = 'Log cleared...';
+            messageCount = 0;
+            balanceRequestCount = 0;
+            updateStats();
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('Balance Connection Stability Test Page Loaded', 'success');
+            log('Click "Connect" to start testing connection stability');
+            updateStats();
+            
+            // Start with auto-connect after 2 seconds
+            setTimeout(() => {
+                log('Auto-connecting...', 'info');
+                connect();
+            }, 2000);
+        };
+
+        // Update duration every second
+        setInterval(updateConnectionDuration, 1000);
+    </script>
+</body>
+</html>

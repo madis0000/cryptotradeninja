@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -185,8 +185,8 @@ export default function MyExchanges() {
     onDisconnect: () => {
       console.log('[MY EXCHANGES] WebSocket disconnected');
     }
-  });// Simple balance fetching function
-  const fetchExchangeBalance = (exchange: Exchange) => {
+  });  // Simple balance fetching function wrapped in useCallback to prevent excessive re-renders
+  const fetchExchangeBalance = useCallback((exchange: Exchange) => {
     if (!exchange.isActive || !exchange.apiKey) return;
     
     console.log(`[MY EXCHANGES] Requesting balance for ${exchange.name} (ID: ${exchange.id})`);
@@ -210,86 +210,48 @@ export default function MyExchanges() {
       }));
     }, 15000); // 15 second timeout
     
-    // Send balance request if WebSocket is connected, otherwise try to connect first
-    if (userWs.status === 'connected') {
+    // Function to send balance request
+    const sendBalanceRequest = () => {
       console.log(`[MY EXCHANGES] Sending balance request for exchange ${exchange.id}`);
       userWs.sendMessage({
         type: 'get_balance',
         exchangeId: exchange.id
         // No asset parameter - this will request ALL balances
       });
-      
-      // Clear timeout once request is processed successfully (will be cleared by message handler)
+      // Clear timeout once request is sent
       setTimeout(() => clearTimeout(timeoutId), 1000);
-    } else {
-      console.log(`[MY EXCHANGES] WebSocket not connected (status: ${userWs.status}), attempting to reconnect and fetch balance for ${exchange.name}`);
-      
-      // Try to reconnect and then fetch balance
-      userWs.connect();
-      
-      // Wait a bit for connection and then try again
-      setTimeout(() => {
-        if (userWs.status === 'connected') {
-          console.log(`[MY EXCHANGES] Reconnected! Sending balance request for exchange ${exchange.id}`);
-          userWs.sendMessage({
-            type: 'get_balance',
-            exchangeId: exchange.id
-          });
-          setTimeout(() => clearTimeout(timeoutId), 1000);
-        } else {
-          console.log(`[MY EXCHANGES] Failed to reconnect, showing error for ${exchange.name}`);
-          setExchangeBalances(prev => ({
-            ...prev,
-            [exchange.id]: { 
-              balance: '0.00', 
-              loading: false, 
-              error: 'WebSocket connection failed'
-            }
-          }));
-          clearTimeout(timeoutId);
-        }
-      }, 3000); // Wait 3 seconds for connection
-    }
-  };
-  // Initialize WebSocket connection with retry logic
-  useEffect(() => {
-    console.log('[MY EXCHANGES] Initializing WebSocket connection...');
-    
-    const connectWithRetry = () => {
-      userWs.connect();
-      
-      // Check connection status after a delay and retry if needed
-      setTimeout(() => {
-        if (userWs.status !== 'connected') {
-          console.log('[MY EXCHANGES] Initial connection failed, retrying...');
-          userWs.connect();
-        }
-      }, 3000);
     };
     
-    connectWithRetry();
-  }, []);
-
-  // Auto-fetch balances when WebSocket connects and exchanges are loaded
+    // Send balance request if WebSocket is connected, otherwise wait for connection
+    if (userWs.status === 'connected') {
+      sendBalanceRequest();
+    } else {
+      console.log(`[MY EXCHANGES] WebSocket not connected (status: ${userWs.status}), waiting for connection for ${exchange.name}`);
+      clearTimeout(timeoutId); // Don't timeout while waiting for connection
+    }
+  }, [userWs.status, userWs.sendMessage]);  // Initialize WebSocket connection once when component mounts
+  useEffect(() => {
+    console.log('[MY EXCHANGES] Initializing WebSocket connection...');
+    userWs.connect();
+  }, []); // Empty dependency array - only run once on mount  // Auto-fetch balances when WebSocket connects and exchanges are loaded
   useEffect(() => {
     if (userWs.status === 'connected' && exchanges && exchanges.length > 0) {
       console.log('[MY EXCHANGES] WebSocket connected, fetching balances for all exchanges...');
-      exchanges.forEach(exchange => {
+      exchanges.forEach((exchange, index) => {
         if (exchange.isActive && exchange.apiKey) {
           // Add a small delay between requests to avoid overwhelming the server
-          setTimeout(() => fetchExchangeBalance(exchange), Math.random() * 2000);
+          setTimeout(() => fetchExchangeBalance(exchange), index * 500); // Staggered requests
         }
       });
     }
-  }, [userWs.status, exchanges?.length]); // Depend on WebSocket connection status
-
-  // Cleanup WebSocket connections when component unmounts
+  }, [userWs.status, exchanges, fetchExchangeBalance]);
+  // Cleanup WebSocket connection when component unmounts
   useEffect(() => {
     return () => {
       console.log('[MY EXCHANGES] Component unmounting - disconnecting WebSocket');
       userWs.disconnect();
     };
-  }, []);
+  }, [userWs.disconnect]);
   // Conditional ticker price subscription - only when we have balances that need price conversion
   useEffect(() => {
     console.log('[MY EXCHANGES] Checking if ticker price subscription is needed...');

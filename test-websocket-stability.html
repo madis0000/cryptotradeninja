@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Stability Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        .status { font-weight: bold; padding: 5px 10px; border-radius: 3px; }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.connecting { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Stability Test</h1>
+    <p>This test monitors the WebSocket connection stability after balance fetching.</p>
+    
+    <div>
+        <button onclick="startTest()">Start Connection Test</button>
+        <button onclick="fetchBalance()">Fetch Balance</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+    
+    <div>
+        <strong>Status: </strong>
+        <span id="status" class="status disconnected">Disconnected</span>
+    </div>
+    
+    <div id="logs"></div>
+
+    <script>
+        let ws = null;
+        let connectionStart = null;
+        let balanceFetchTime = null;
+        let pingInterval = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logDiv = document.createElement('div');
+            logDiv.className = `log ${type}`;
+            logDiv.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            document.getElementById('logs').appendChild(logDiv);
+            logDiv.scrollIntoView();
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function updateStatus(status) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = status;
+            statusEl.className = `status ${status.toLowerCase()}`;
+        }
+
+        function startTest() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('WebSocket already connected', 'warning');
+                return;
+            }
+
+            log('Starting WebSocket connection test...', 'info');
+            connectionStart = Date.now();
+            updateStatus('Connecting');
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const hostname = window.location.hostname;
+            const isDev = window.location.port === '5173' || hostname === 'localhost';
+            const wsUrl = isDev ? `${protocol}//${hostname}:3001/api/ws` : `${protocol}//${hostname}:${window.location.port}/api/ws`;
+            
+            log(`Connecting to: ${wsUrl}`, 'info');
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                const duration = Date.now() - connectionStart;
+                log(`✅ Connected in ${duration}ms`, 'success');
+                updateStatus('Connected');
+                reconnectAttempts = 0;
+
+                // Authenticate immediately
+                ws.send(JSON.stringify({
+                    type: 'authenticate',
+                    userId: 1
+                }));
+
+                // Start ping/pong to monitor connection health
+                startPingPong();
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`📨 Received: ${data.type} - ${JSON.stringify(data).substring(0, 100)}...`, 'info');
+                    
+                    if (data.type === 'balance_update') {
+                        balanceFetchTime = Date.now();
+                        log(`💰 Balance received (${data.data?.balances?.length || 0} assets)`, 'success');
+                    } else if (data.type === 'authenticated') {
+                        log('🔑 Authentication successful', 'success');
+                    } else if (data.type === 'pong') {
+                        log('🏓 Pong received', 'info');
+                    }
+                } catch (error) {
+                    log(`❌ Error parsing message: ${error.message}`, 'error');
+                }
+            };
+
+            ws.onclose = (event) => {
+                const duration = connectionStart ? Date.now() - connectionStart : 0;
+                const balanceDuration = balanceFetchTime ? Date.now() - balanceFetchTime : 0;
+                
+                log(`❌ Connection closed (code: ${event.code}, reason: ${event.reason})`, 'error');
+                log(`⏱️ Connection lasted ${duration}ms`, 'info');
+                if (balanceFetchTime) {
+                    log(`⏱️ Time since balance fetch: ${balanceDuration}ms`, 'info');
+                }
+                
+                updateStatus('Disconnected');
+                stopPingPong();
+
+                // Attempt reconnection
+                if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+                    log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1}/${maxReconnectAttempts})`, 'warning');
+                    reconnectAttempts++;
+                    setTimeout(() => startTest(), delay);
+                }
+            };
+
+            ws.onerror = (error) => {
+                log(`❌ WebSocket error: ${error.message || 'Unknown error'}`, 'error');
+                updateStatus('Error');
+                stopPingPong();
+            };
+        }
+
+        function fetchBalance() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not connected', 'error');
+                return;
+            }
+
+            log('📊 Requesting balance for exchange 5...', 'info');
+            ws.send(JSON.stringify({
+                type: 'get_balance',
+                exchangeId: 5
+            }));
+        }
+
+        function startPingPong() {
+            if (pingInterval) clearInterval(pingInterval);
+            
+            pingInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    log('🏓 Sending ping', 'info');
+                    ws.send(JSON.stringify({ type: 'ping' }));
+                } else {
+                    stopPingPong();
+                }
+            }, 30000); // Ping every 30 seconds
+        }
+
+        function stopPingPong() {
+            if (pingInterval) {
+                clearInterval(pingInterval);
+                pingInterval = null;
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+            }
+            stopPingPong();
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            disconnect();
+        });
+    </script>
+</body>
+</html>

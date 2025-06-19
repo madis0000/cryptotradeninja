@@ -255,14 +255,25 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [lastMessage, setLastMessage] = useState<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttempts = useRef(0);
   const { user } = useAuth();
 
   const connect = useCallback((apiKey?: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // Prevent multiple simultaneous connections
+    if (wsRef.current?.readyState === WebSocket.OPEN || status === 'connecting') {
+      console.log('[USER WS] Already connected or connecting, skipping connection attempt');
       return;
     }
 
+    // Clear any existing reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     setStatus('connecting');
+    console.log('[USER WS] Attempting to connect...');
     
     // Connect to our unified WebSocket service
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -286,66 +297,109 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     wsRef.current = ws;
 
     ws.onopen = () => {
+      console.log('[USER WS] WebSocket opened, setting status to connected');
+      setStatus('connected');
+      reconnectAttempts.current = 0; // Reset reconnect attempts on successful connection
+      
       // Authenticate with user ID and optional API key for WebSocket API
       if (user?.id) {
+        console.log('[USER WS] Sending authentication for user:', user.id);
         ws.send(JSON.stringify({
           type: 'authenticate',
           userId: user.id,
           apiKey: apiKey || undefined
         }));
       }
+      
+      // Call onConnect immediately when socket opens
+      options.onConnect?.();
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('User WebSocket data:', data);
+        console.log('[USER WS] Received message:', data);
         setLastMessage(data);
         
         if (data.type === 'authenticated') {
+          console.log('[USER WS] Authentication confirmed');
+          // Don't change status here since we already set it to connected in onopen
+          // This just confirms authentication worked
+        } else if (data.type === 'connected') {
+          console.log('[USER WS] Connection confirmed');
           setStatus('connected');
-          options.onConnect?.();
         } else if (data.type === 'user_stream_connected') {
-          console.log('User data stream connected successfully');
+          console.log('[USER WS] User data stream connected successfully');
           options.onMessage?.(data);
         } else if (data.type === 'user_stream_unavailable') {
-          console.log('User stream unavailable:', data.message);
+          console.log('[USER WS] User stream unavailable:', data.message);
           // Still consider connection successful for public data
-          setStatus('connected');
           options.onMessage?.(data);
         } else if (data.type === 'user_stream_error') {
-          console.log('User stream error:', data.message);
+          console.log('[USER WS] User stream error:', data.message);
           // Connection to our service succeeded, but user stream failed
-          setStatus('connected');
           options.onMessage?.(data);
         } else if (data.type === 'error') {
+          console.error('[USER WS] Received error message:', data.message);
           setStatus('error');
           options.onError?.(new Event(data.message));
         } else {
+          // Pass all other messages to the handler
           options.onMessage?.(data);
         }
       } catch (error) {
-        console.error('Error parsing user WebSocket message:', error);
+        console.error('[USER WS] Error parsing WebSocket message:', error);
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      console.log('[USER WS] WebSocket closed:', event.code, event.reason);
       setStatus('disconnected');
       options.onDisconnect?.();
+      
+      // Only attempt automatic reconnection if:
+      // 1. It wasn't a manual close (code 1000)
+      // 2. We haven't exceeded max attempts
+      // 3. The component is still mounted (check if wsRef.current is not null)
+      if (event.code !== 1000 && reconnectAttempts.current < 5 && wsRef.current !== null) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000); // Exponential backoff, max 10s
+        console.log(`[USER WS] Attempting reconnection in ${delay}ms (attempt ${reconnectAttempts.current + 1}/5)`);
+        
+        reconnectAttempts.current++;
+        reconnectTimeoutRef.current = setTimeout(() => {
+          console.log('[USER WS] Reconnecting...');
+          connect(apiKey);
+        }, delay);
+      } else if (reconnectAttempts.current >= 5) {
+        console.error('[USER WS] Max reconnection attempts reached');
+        setStatus('error');
+      }
     };
 
     ws.onerror = (error) => {
+      console.error('[USER WS] WebSocket error:', error);
       setStatus('error');
       options.onError?.(error);
     };
-  }, [user, options]);
+  }, [user?.id, options, status]); // Stable dependencies
 
   const disconnect = useCallback(() => {
+    console.log('[USER WS] Disconnecting WebSocket...');
+    
+    // Clear any pending reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    // Close the WebSocket connection
     if (wsRef.current) {
-      wsRef.current.close();
+      wsRef.current.close(1000, 'Manual disconnect'); // Use code 1000 to prevent auto-reconnect
       wsRef.current = null;
     }
+    
     setStatus('disconnected');
+    reconnectAttempts.current = 0; // Reset reconnect attempts
   }, []);
 
   const authenticate = useCallback((userId: number, apiKey?: string) => {

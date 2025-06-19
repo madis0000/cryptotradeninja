@@ -1,4 +1,6 @@
+import crypto from 'crypto';
 import { storage } from '../../storage';
+import { decrypt } from '../../encryption';
 
 interface ExchangeEndpoints {
   wsStreamEndpoint: string;
@@ -116,31 +118,39 @@ export class ExchangeApiService {
     const endpoints = await this.getExchangeEndpoints(exchangeId);
     return endpoints ? endpoints.restApiEndpoint : null;
   }
-
   private getEndpoints(exchange: any): ExchangeEndpoints {
     const isTestnet = exchange.isTestnet || false;
+    const exchangeType = exchange.exchangeType || 'binance';
     
     if (exchange.exchangeType === 'binance' || exchange.name.toLowerCase().includes('binance')) {
       return {
         isTestnet,
+        exchangeType,
         restApiEndpoint: isTestnet 
           ? 'https://testnet.binance.vision'
           : 'https://api.binance.com',
         wsStreamEndpoint: isTestnet
           ? 'wss://testnet.binance.vision/ws'
-          : 'wss://stream.binance.com:9443/ws'
+          : 'wss://stream.binance.com:9443/ws',
+        wsApiEndpoint: isTestnet
+          ? 'wss://ws-api.testnet.binance.vision/ws-api/v3'
+          : 'wss://ws-api.binance.com:443/ws-api/v3'
       };
     }
     
     // Default endpoints if custom ones not provided
     return {
       isTestnet,
+      exchangeType,
       restApiEndpoint: exchange.restApiEndpoint || (isTestnet 
         ? 'https://testnet.binance.vision'
         : 'https://api.binance.com'),
       wsStreamEndpoint: exchange.wsStreamEndpoint || (isTestnet
         ? 'wss://testnet.binance.vision/ws'
-        : 'wss://stream.binance.com:9443/ws')
+        : 'wss://stream.binance.com:9443/ws'),
+      wsApiEndpoint: exchange.wsApiEndpoint || (isTestnet
+        ? 'wss://ws-api.testnet.binance.vision/ws-api/v3'
+        : 'wss://ws-api.binance.com:443/ws-api/v3')
     };
   }
 
