@@ -2118,6 +2118,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('🧪 [TEST] Manual broadcasting test triggered');
 
+      // Check if user is authenticated
+      if (!req.user || !req.user.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
       // Get existing bots for testing
       const bots = await storage.getTradingBotsByUserId(req.user.id);
       
