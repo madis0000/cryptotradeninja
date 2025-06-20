@@ -7,6 +7,7 @@ import { KlineStreamManager } from './streams/kline-stream-manager';
 import { UserDataStreamManager } from './streams/user-data-stream-manager';
 import { TradingOperationsManager } from './managers/trading-operations-manager';
 import { MessageHandler } from './handlers/message-handler';
+import { broadcastManager } from './services/broadcast-manager';
 
 // Global WebSocket service singleton for broadcasting
 let globalWebSocketService: WebSocketService | null = null;
@@ -67,7 +68,7 @@ export class WebSocketService {
   private lowPriorityConnections = new Set<string>(); // For stats, non-critical updates
 
   // Client tracking
-  private activeConnectionsLegacy = new Map<string, WebSocket>();  constructor() {
+  private activeConnectionsLegacy = new Map<string, WebSocket>();  constructor(server: Server) {
     console.log('[UNIFIED WS] [WEBSOCKET SERVICE] Initializing enhanced WebSocket service with performance optimizations');
       // Initialize managers
     this.tickerStreamManager = new TickerStreamManager();
@@ -81,6 +82,10 @@ export class WebSocketService {
       this.klineStreamManager,
       this.tradingOperationsManager
     );
+    
+    // Create channels for different broadcast types
+    broadcastManager.createChannel('order_updates', 'order');
+    broadcastManager.createChannel('balance_updates', 'balance');
     
     // Start high-performance message processing
     this.startMessageQueueProcessor();
@@ -159,9 +164,7 @@ export class WebSocketService {
         await this.messageHandler.handleMessage(ws, data, clientId);
       });      // Handle connection close
       ws.on('close', () => {
-        console.log(`[UNIFIED WS] [WEBSOCKET] Client ${clientId} disconnected`);
-        this.activeConnections.delete(clientId);
-        this.messageHandler.handleClientDisconnect(clientId);
+        this.handleClientDisconnection(ws, clientId);
       });
 
       // Handle errors
@@ -807,5 +810,74 @@ export class WebSocketService {
     };
     
     this.messageQueue.push(queuedMessage);
+  }
+
+  private handleClientDisconnection(ws: WebSocket, clientId: string): void {
+    console.log(`[WEBSOCKET] Client ${clientId} disconnected`);
+    
+    // Remove from all managers
+    this.clients.delete(clientId);
+    this.clientRoles.delete(clientId);
+    this.tickerStreamManager.removeClient(clientId);
+    this.klineStreamManager.removeClient(clientId);
+    
+    // Remove from broadcast manager
+    broadcastManager.removeClient(clientId);
+    
+    // Clean up user data stream if exists
+    const userStream = this.userDataStreams.get(clientId);
+    if (userStream) {
+      userStream.stop();
+      this.userDataStreams.delete(clientId);
+    }
+  }
+  
+  // Enhanced broadcast methods using broadcast manager
+  public broadcastOrderUpdate(order: any): void {
+    broadcastManager.broadcast('order_updates', {
+      type: 'order_update',
+      data: order
+    }, 'high');
+  }
+  
+  public broadcastOrderFillNotification(notification: any): void {
+    // Ultra-high priority for order fills
+    const message = {
+      type: 'order_fill_notification',
+      data: notification,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Send directly to all connected clients for ultra-low latency
+    this.clients.forEach((ws, clientId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(message));
+        } catch (error) {
+          console.error(`[WEBSOCKET] Error sending order fill to ${clientId}:`, error);
+        }
+      }
+    });
+    
+    console.log('[WEBSOCKET] Broadcasted order fill notification with ultra-high priority');
+  }
+  
+  public broadcastBalanceUpdate(exchangeId: number, balance: any): void {
+    broadcastManager.broadcast('balance_updates', {
+      type: 'balance_update',
+      exchangeId,
+      data: balance
+    }, 'normal');
+  }
+  
+  // Get broadcast statistics
+  public getBroadcastStats(): any {
+    return {
+      connectedClients: this.clients.size,
+      tickerClients: this.tickerStreamManager.getActiveClientsCount(),
+      klineClients: this.klineStreamManager.getActiveClientsCount(),
+      userDataStreams: this.userDataStreams.size,
+      broadcastStats: broadcastManager.getStats()
+    };
   }
 }

@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { KlineClient, KlineUpdate } from '../types';
 import { ExchangeApiService } from '../services/exchange-api-service';
 import { HistoricalKlinesService } from '../services/historical-klines-service';
+import { broadcastManager } from '../services/broadcast-manager';
 
 export class KlineStreamManager {
   private klineClients = new Map<string, KlineClient>();
@@ -16,6 +17,9 @@ export class KlineStreamManager {
     this.exchangeApiService = new ExchangeApiService();
     this.historicalKlinesService = new HistoricalKlinesService();
     console.log('[UNIFIED WS] [KLINE STREAM MANAGER] Initialized');
+    
+    // Create kline channel in broadcast manager
+    broadcastManager.createChannel('kline_updates', 'kline');
   }
   // Setup kline client
   async setupKlineClient(ws: WebSocket, clientId: string, symbol: string, interval: string, exchangeId: number = 1): Promise<void> {
@@ -23,6 +27,10 @@ export class KlineStreamManager {
     
     // Store exchange ID for this session
     this.currentExchangeId = exchangeId;
+    
+    // Subscribe to broadcast manager with symbol+interval filter
+    const filterKey = `${symbol.toUpperCase()}_${interval}`;
+    broadcastManager.subscribe(clientId, ws, 'kline_updates', [filterKey]);
     
     // Remove existing client if it exists
     if (this.klineClients.has(clientId)) {
@@ -53,6 +61,7 @@ export class KlineStreamManager {
       const client = this.klineClients.get(clientId)!;
       console.log(`[KLINE CLIENT] Removing client ${clientId} for ${client.symbol} at ${client.interval}`);
       this.klineClients.delete(clientId);
+      broadcastManager.unsubscribe(clientId, 'kline_updates');
       this.updateKlineSubscriptions();
     }
   }
@@ -242,7 +251,14 @@ export class KlineStreamManager {
         console.log(`[KLINE STREAM] Kline update: ${klineUpdate.symbol} ${klineUpdate.interval} - OHLC: ${klineUpdate.open}/${klineUpdate.high}/${klineUpdate.low}/${klineUpdate.close}`);
         
         this.storeHistoricalKlineData(klineUpdate);
-        this.broadcastToKlineClients(klineUpdate);
+        
+        // Broadcast using the broadcast manager
+        broadcastManager.broadcast('kline_updates', {
+          type: 'kline_update',
+          data: klineUpdate
+        }, 'normal');
+        
+        console.log(`[KLINE STREAM] Broadcasted ${klineUpdate.symbol} ${klineUpdate.interval} update via broadcast manager`);
       }
     } catch (error) {
       console.error('[KLINE STREAM] Error processing message:', error);
@@ -404,6 +420,7 @@ export class KlineStreamManager {
       if (historicalKlines.length > 0) {
         console.log(`[KLINE STREAM] Sending ${historicalKlines.length} historical klines for ${symbol} ${interval}`);
         
+        // Send directly to the specific client, not via broadcast
         ws.send(JSON.stringify({
           type: 'historical_klines',
           data: {

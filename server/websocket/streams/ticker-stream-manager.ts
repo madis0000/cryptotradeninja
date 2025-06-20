@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { TickerClient, MarketUpdate } from '../types';
 import { ExchangeApiService } from '../services/exchange-api-service';
+import { broadcastManager } from '../services/broadcast-manager';
 
 export class TickerStreamManager {
   private clients: Map<string, TickerClient> = new Map();
@@ -13,12 +14,19 @@ export class TickerStreamManager {
   constructor() {
     this.exchangeApiService = new ExchangeApiService();
     console.log('[UNIFIED WS] [TICKER STREAM MANAGER] Initialized');
+    
+    // Create ticker channel in broadcast manager
+    broadcastManager.createChannel('ticker_updates', 'ticker');
   }  // Setup ticker client
   async setupTickerClient(ws: WebSocket, clientId: string, symbols: string[], exchangeId: number = 1): Promise<void> {
     console.log(`[UNIFIED WS] [TICKER CLIENT] Setting up ticker client ${clientId} for symbols: ${symbols.join(', ')} on exchange ${exchangeId}`);
     
     // Store exchange ID for this session
     this.currentExchangeId = exchangeId;
+    
+    // Subscribe to broadcast manager with symbol filters
+    const filters = symbols.length > 0 ? symbols.map(s => s.toUpperCase()) : undefined;
+    broadcastManager.subscribe(clientId, ws, 'ticker_updates', filters);
     
     // Remove existing client if it exists
     if (this.clients.has(clientId)) {
@@ -46,6 +54,7 @@ export class TickerStreamManager {
     if (this.clients.has(clientId)) {
       console.log(`[UNIFIED WS] [TICKER CLIENT] Removing client ${clientId}`);
       this.clients.delete(clientId);
+      broadcastManager.unsubscribe(clientId, 'ticker_updates');
       this.updateTickerSubscriptions();
     }
   }
@@ -203,31 +212,41 @@ export class TickerStreamManager {
     try {
       const message = JSON.parse(data.toString());
       
-      if (message.result !== undefined && message.id !== undefined) {
-        console.log('[TICKER STREAM] Subscription confirmation');
-        return;
+      // Handle different message formats
+      let tickerData = null;
+      
+      if (message.stream && message.data) {
+        tickerData = message.data;
+      } else if (message.s && message.c) {
+        tickerData = message;
       }
       
-      if (message.e === '24hrTicker' || (message.stream && message.data && message.data.e === '24hrTicker')) {
-        const tickerData = message.data || message;
-        
+      if (tickerData && tickerData.s) {
         const marketUpdate: MarketUpdate = {
           symbol: tickerData.s,
-          price: parseFloat(tickerData.c),
-          priceChange: parseFloat(tickerData.P),
-          priceChangePercent: parseFloat(tickerData.P),
-          highPrice: parseFloat(tickerData.h),
-          lowPrice: parseFloat(tickerData.l),
-          volume: parseFloat(tickerData.v),
-          quoteVolume: parseFloat(tickerData.q),
+          price: tickerData.c,
+          priceChange: tickerData.p,
+          priceChangePercent: tickerData.P,
+          volume: tickerData.v,
+          quoteVolume: tickerData.q,
+          high: tickerData.h,
+          low: tickerData.l,
           timestamp: Date.now()
         };
         
-        console.log(`[TICKER STREAM] Market update: ${marketUpdate.symbol} = $${marketUpdate.price.toFixed(8)}`);
-        this.broadcastToTickerClients(marketUpdate);
+        // Cache the price
+        this.cachedPrices.set(marketUpdate.symbol, marketUpdate);
+        
+        // Broadcast using the broadcast manager
+        broadcastManager.broadcast('ticker_updates', {
+          type: 'market_update',
+          data: marketUpdate
+        }, 'normal');
+        
+        console.log(`[TICKER STREAM] Broadcasted ${marketUpdate.symbol} update via broadcast manager`);
       }
     } catch (error) {
-      console.error('[TICKER STREAM] Error processing message:', error);
+      console.error('[TICKER STREAM] Error processing ticker message:', error);
     }
   }  // Enhanced broadcast to ticker clients with performance optimization
   private broadcastToTickerClients(marketUpdate: MarketUpdate): void {
