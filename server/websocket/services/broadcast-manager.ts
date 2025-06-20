@@ -2,6 +2,10 @@ import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { Worker } from 'worker_threads';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface BroadcastChannel {
   id: string;
@@ -34,11 +38,10 @@ export class BroadcastManager extends EventEmitter {
     this.startProcessing();
     console.log('[BROADCAST MANAGER] Initialized with pub/sub pattern');
   }
-
   private initializeWorkers(): void {
     // Create worker threads for parallel broadcasting
     for (let i = 0; i < this.WORKER_COUNT; i++) {
-      const worker = new Worker(path.join(__dirname, 'broadcast-worker.js'), {
+      const worker = new Worker(path.join(__dirname, 'broadcast-worker.cjs'), {
         workerData: { workerId: i }
       });
       
@@ -57,9 +60,8 @@ export class BroadcastManager extends EventEmitter {
       this.workers.push(worker);
     }
   }
-
   private restartWorker(index: number): void {
-    const worker = new Worker(path.join(__dirname, 'broadcast-worker.js'), {
+    const worker = new Worker(path.join(__dirname, 'broadcast-worker.cjs'), {
       workerData: { workerId: index }
     });
     this.workers[index] = worker;

@@ -116,10 +116,9 @@ class WebSocketSingleton {
         // Send test message to verify connection
       console.log('[WS SINGLETON] Sending connection test message');
       this.sendMessage({ type: 'test', message: 'connection_test' });
-      
-      // Only restore previous subscriptions if we have a valid current symbol
+        // Only restore previous subscriptions if we have valid subscriptions
       if (this.currentSymbol && this.currentSymbol.trim().length > 0) {
-        console.log(`[WS SINGLETON] Restoring subscriptions for ${this.currentSymbol}`);
+        console.log(`[WS SINGLETON] Restoring kline subscription for ${this.currentSymbol}@${this.currentInterval}`);
         this.sendMessage({
           type: 'subscribe',
           symbols: [this.currentSymbol]
@@ -131,8 +130,17 @@ class WebSocketSingleton {
           symbols: [this.currentSymbol],
           interval: this.currentInterval
         });
-      } else {
-        console.log('[WS SINGLETON] No current symbol set, skipping kline stream restoration');
+      }
+      
+      // Restore ticker subscriptions
+      if (this.subscribedTickerSymbols.size > 0) {
+        const tickerSymbols = Array.from(this.subscribedTickerSymbols);
+        console.log(`[WS SINGLETON] Restoring ticker subscriptions for: ${tickerSymbols.join(', ')}`);
+        this.sendMessage({
+          type: 'subscribe_ticker',
+          symbols: tickerSymbols,
+          exchangeId: 4 // Default to testnet exchange
+        });
       }
     };
 
@@ -262,7 +270,6 @@ class WebSocketSingleton {
     this.referenceCount++;
     console.log(`[WS SINGLETON] Reference added, count: ${this.referenceCount}`);
   }
-
   public removeReference(): void {
     this.referenceCount = Math.max(0, this.referenceCount - 1);
     console.log(`[WS SINGLETON] Reference removed, count: ${this.referenceCount}`);
@@ -270,13 +277,13 @@ class WebSocketSingleton {
     // Only disconnect if no references remain
     if (this.referenceCount === 0) {
       console.log('[WS SINGLETON] No references remaining, scheduling disconnect');
-      // Delay disconnect to allow for quick remounts
+      // Delay disconnect to allow for quick remounts - increased delay for page transitions
       setTimeout(() => {
         if (this.referenceCount === 0) {
           console.log('[WS SINGLETON] Still no references, disconnecting');
           this.performDisconnect();
         }
-      }, 500); // 500ms delay - shorter than before
+      }, 1000); // Increased from 500ms to 1000ms for better page transition handling
     }
   }
 
@@ -326,31 +333,53 @@ class WebSocketSingleton {
   }
   public getCurrentInterval(): string {
     return this.currentInterval;
-  }
-  public subscribeToTickers(symbols: string[], exchangeId: number = 4): void {
+  }  public subscribeToTickers(symbols: string[], exchangeId: number = 4): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('[WEBSOCKET SINGLETON] Cannot subscribe - not connected');
+      console.warn('[WEBSOCKET SINGLETON] Cannot subscribe - not connected, queueing request');
+      // Queue the subscription request to be sent when connected
+      this.messageQueue.push({
+        type: 'subscribe_ticker',
+        symbols: symbols,
+        exchangeId: exchangeId
+      });
       return;
     }
 
     console.log('[WEBSOCKET SINGLETON] Subscribing to tickers:', symbols, 'on exchange:', exchangeId);
+    
+    // Store subscribed symbols for reconnection purposes
+    symbols.forEach(symbol => this.subscribedTickerSymbols.add(symbol.toUpperCase()));
+    
     this.sendMessage({
       type: 'subscribe_ticker',
       symbols: symbols,
       exchangeId: exchangeId
     });
   }
-
   public unsubscribeFromTickers(symbols?: string[]): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.log('[WEBSOCKET SINGLETON] Cannot unsubscribe - not connected');
       return;
     }
 
-    this.sendMessage({
-      type: 'unsubscribe',
-      symbols: symbols || [],
-      dataType: 'ticker'
-    });
+    if (symbols && symbols.length > 0) {
+      console.log('[WEBSOCKET SINGLETON] Unsubscribing from specific tickers:', symbols);
+      // Remove from tracked subscriptions
+      symbols.forEach(symbol => this.subscribedTickerSymbols.delete(symbol.toUpperCase()));
+      
+      this.sendMessage({
+        type: 'unsubscribe_ticker',
+        symbols: symbols
+      });
+    } else {
+      console.log('[WEBSOCKET SINGLETON] Unsubscribing from all tickers');
+      // Clear all tracked ticker subscriptions
+      this.subscribedTickerSymbols.clear();
+      
+      this.sendMessage({
+        type: 'unsubscribe_ticker'
+      });
+    }
   }
   
   private setupPageVisibilityHandler(): void {

@@ -85,12 +85,15 @@ function useMarketData() {
     
     // Ensure WebSocket is connected first
     if (!webSocketSingleton.isConnected()) {
+      console.log('[MARKET DATA HOOK] WebSocket not connected, connecting first...');
       webSocketSingleton.connect().then(() => {
         // Subscribe to ticker data after connection is established
+        console.log('[MARKET DATA HOOK] WebSocket connected, subscribing to tickers...');
         webSocketSingleton.subscribeToTickers(symbols, exchangeId);
       });
     } else {
-      // Subscribe to ticker data immediately
+      // Subscribe to ticker data immediately - connection already exists
+      console.log('[MARKET DATA HOOK] WebSocket already connected, subscribing immediately...');
       webSocketSingleton.subscribeToTickers(symbols, exchangeId);
     }
   };

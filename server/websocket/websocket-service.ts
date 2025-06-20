@@ -52,6 +52,11 @@ export class WebSocketService {
   private activeConnections = new Map<string, WebSocket>();
   private connectionMetrics = new Map<string, ConnectionMetrics>();
   
+  // Add missing properties
+  private clients = new Map<string, WebSocket>();
+  private clientRoles = new Map<string, string>();
+  private userDataStreams = new Map<string, any>();
+  
   // High-performance message queue system
   private messageQueue: QueuedMessage[] = [];
   private isProcessingQueue = false;
@@ -815,11 +820,16 @@ export class WebSocketService {
   private handleClientDisconnection(ws: WebSocket, clientId: string): void {
     console.log(`[WEBSOCKET] Client ${clientId} disconnected`);
     
-    // Remove from all managers
+    // Remove from all tracking maps
+    this.activeConnections.delete(clientId);
+    this.connectionMetrics.delete(clientId);
     this.clients.delete(clientId);
     this.clientRoles.delete(clientId);
+    
+    // Remove from all managers
     this.tickerStreamManager.removeClient(clientId);
     this.klineStreamManager.removeClient(clientId);
+    this.messageHandler.handleClientDisconnect(clientId);
     
     // Remove from broadcast manager
     broadcastManager.removeClient(clientId);
@@ -831,36 +841,8 @@ export class WebSocketService {
       this.userDataStreams.delete(clientId);
     }
   }
-  
-  // Enhanced broadcast methods using broadcast manager
-  public broadcastOrderUpdate(order: any): void {
-    broadcastManager.broadcast('order_updates', {
-      type: 'order_update',
-      data: order
-    }, 'high');
-  }
-  
-  public broadcastOrderFillNotification(notification: any): void {
-    // Ultra-high priority for order fills
-    const message = {
-      type: 'order_fill_notification',
-      data: notification,
-      timestamp: new Date().toISOString()
-    };
-    
-    // Send directly to all connected clients for ultra-low latency
-    this.clients.forEach((ws, clientId) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        try {
-          ws.send(JSON.stringify(message));
-        } catch (error) {
-          console.error(`[WEBSOCKET] Error sending order fill to ${clientId}:`, error);
-        }
-      }
-    });
-    
-    console.log('[WEBSOCKET] Broadcasted order fill notification with ultra-high priority');
-  }
+    // Remove duplicate broadcastOrderUpdate method at line 836
+  // Remove duplicate broadcastOrderFillNotification method at line 843
   
   public broadcastBalanceUpdate(exchangeId: number, balance: any): void {
     broadcastManager.broadcast('balance_updates', {

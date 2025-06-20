@@ -72,13 +72,13 @@ export interface OrderResponse {
 
 export interface MarketUpdate {
   symbol: string;
-  price: number;
-  priceChange: number;
-  priceChangePercent: number;
-  highPrice: number;
-  lowPrice: number;
-  volume: number;
-  quoteVolume: number;
+  price: string;
+  priceChange: string;
+  priceChangePercent: string;
+  highPrice: string;
+  lowPrice: string;
+  volume: string;
+  quoteVolume: string;
   timestamp: number;
 }
 

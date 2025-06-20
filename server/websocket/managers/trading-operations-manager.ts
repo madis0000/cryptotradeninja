@@ -1806,6 +1806,44 @@ export class TradingOperationsManager {
       if (!bot) {
         throw new Error('Bot not found');
       }
+
+      // Cancel all pending safety orders before starting new cycle
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚫 CANCELLING PENDING SAFETY ORDERS...`);
+      const allOrders = await storage.getCycleOrders(cycleId);
+      const pendingSafetyOrders = allOrders.filter((order: any) => 
+        order.orderType === 'safety_order' && 
+        (order.status === 'pending' || order.status === 'active') &&
+        order.exchangeOrderId
+      );
+
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] Found ${pendingSafetyOrders.length} pending safety orders to cancel`);
+        for (const order of pendingSafetyOrders) {
+        try {
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] Cancelling safety order ${order.id} (Exchange ID: ${order.exchangeOrderId})`);
+          
+          // Cancel order on exchange (with null check)
+          if (order.exchangeOrderId) {
+            await this.cancelOrder(botId, order.exchangeOrderId);
+          }
+          
+          // Update order status in database
+          await storage.updateCycleOrder(order.id, { 
+            status: 'cancelled',
+            filledAt: new Date()
+          });
+          
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Successfully cancelled safety order ${order.exchangeOrderId} on exchange`);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Updated safety order ${order.id} status to cancelled`);
+        } catch (cancelError) {
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⚠️ Safety order ${order.exchangeOrderId} might already be cancelled: ${cancelError instanceof Error ? cancelError.message : 'Unknown error'}`);
+        }
+      }
+      
+      if (pendingSafetyOrders.length === 0) {
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ No pending safety orders found for cycle ${cycleId}`);
+      } else {
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ All pending safety orders have been cancelled`);
+      }
       
       // Mark current cycle as completed
       const completedCycle = await storage.updateBotCycle(cycleId, {

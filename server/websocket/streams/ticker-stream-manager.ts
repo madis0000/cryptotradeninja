@@ -42,9 +42,11 @@ export class TickerStreamManager {
       symbols: new Set(symbols.map(s => s.toUpperCase())),
       isActive: true
     };
-    
-    console.log(`[UNIFIED WS] [TICKER CLIENT] Created new client ${clientId} with symbols: ${Array.from(client.symbols).join(', ')}`);
+      console.log(`[UNIFIED WS] [TICKER CLIENT] Created new client ${clientId} with symbols: ${Array.from(client.symbols).join(', ')}`);
     this.clients.set(clientId, client);
+    
+    // Send current cached market data immediately to new client
+    this.sendCurrentMarketData(ws, symbols);
     
     // Ensure ticker stream is running
     await this.ensureTickerStream();
@@ -169,14 +171,22 @@ export class TickerStreamManager {
       
       this.tickerBinanceWs.send(JSON.stringify(subscribeMessage));
       tickerStreams.forEach(stream => this.activeTickerSubscriptions.add(stream));
-    }
-
-    // Close connection if no streams are needed
+    }    // Close connection if no streams are needed - but add a small delay to avoid rapid reconnections
     if (currentlyNeeded.size === 0 && this.tickerBinanceWs) {
-      console.log('[TICKER STREAM] No streams needed, closing connection');
-      this.tickerBinanceWs.close();
-      this.tickerBinanceWs = null;
-      this.activeTickerSubscriptions.clear();
+      console.log('[TICKER STREAM] No streams needed, scheduling connection close in 2 seconds...');
+      // Use setTimeout to avoid immediate disconnection during page transitions
+      setTimeout(() => {
+        // Re-check if streams are still not needed
+        const stillNeeded = this.getActiveTickerSymbols();
+        if (stillNeeded.size === 0 && this.tickerBinanceWs) {
+          console.log('[TICKER STREAM] Still no streams needed, closing connection');
+          this.tickerBinanceWs.close();
+          this.tickerBinanceWs = null;
+          this.activeTickerSubscriptions.clear();
+        } else {
+          console.log('[TICKER STREAM] Streams now needed again, keeping connection open');
+        }
+      }, 2000); // 2 second delay to handle page transitions
     }
   }
 
@@ -198,10 +208,9 @@ export class TickerStreamManager {
 
   // Get active ticker symbols
   private getActiveTickerSymbols(): Set<string> {
-    const activeSymbols = new Set<string>();
-    this.clients.forEach(client => {
+    const activeSymbols = new Set<string>();    this.clients.forEach(client => {
       if (client.isActive) {
-        client.symbols.forEach(symbol => activeSymbols.add(symbol.toUpperCase()));
+        client.symbols.forEach((symbol: string) => activeSymbols.add(symbol.toUpperCase()));
       }
     });
     return activeSymbols;
@@ -221,16 +230,15 @@ export class TickerStreamManager {
         tickerData = message;
       }
       
-      if (tickerData && tickerData.s) {
-        const marketUpdate: MarketUpdate = {
+      if (tickerData && tickerData.s) {        const marketUpdate: MarketUpdate = {
           symbol: tickerData.s,
           price: tickerData.c,
           priceChange: tickerData.p,
           priceChangePercent: tickerData.P,
           volume: tickerData.v,
           quoteVolume: tickerData.q,
-          high: tickerData.h,
-          low: tickerData.l,
+          highPrice: tickerData.h,
+          lowPrice: tickerData.l,
           timestamp: Date.now()
         };
         
@@ -322,8 +330,40 @@ export class TickerStreamManager {
 
   // Send current market data to specific client
   sendCurrentMarketData(ws: WebSocket, symbols: string[]): void {
-    // This would typically retrieve and send current market data
-    // Implementation depends on your data storage strategy
     console.log(`[TICKER STREAM] Sending current market data for symbols: ${symbols.join(', ')}`);
+    
+    // Send cached market data immediately to new clients
+    symbols.forEach(symbol => {
+      const cachedData = this.cachedPrices.get(symbol.toUpperCase());
+      if (cachedData && ws.readyState === WebSocket.OPEN) {
+        try {
+          // Send both market_update and ticker_update formats for compatibility
+          const marketUpdateMessage = JSON.stringify({
+            type: 'market_update',
+            data: cachedData
+          });
+          
+          const tickerUpdateMessage = JSON.stringify({
+            type: 'ticker_update',
+            data: {
+              symbol: cachedData.symbol,
+              price: cachedData.price,
+              priceChange: cachedData.priceChange,
+              priceChangePercent: cachedData.priceChangePercent,
+              volume: cachedData.volume,
+              timestamp: new Date().toISOString()
+            }
+          });
+          
+          ws.send(marketUpdateMessage);
+          ws.send(tickerUpdateMessage);
+          console.log(`[TICKER STREAM] Sent cached data for ${symbol}: $${cachedData.price}`);
+        } catch (error) {
+          console.error(`[TICKER STREAM] Error sending cached data for ${symbol}:`, error);
+        }
+      } else {
+        console.log(`[TICKER STREAM] No cached data available for ${symbol}`);
+      }
+    });
   }
 }

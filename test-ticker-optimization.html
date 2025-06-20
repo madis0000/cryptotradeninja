@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticker Optimization Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #4caf50;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .connected { background: #4caf50; color: white; }
+        .disconnected { background: #f44336; color: white; }
+        .connecting { background: #ff9800; color: white; }
+        button {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        .ticker-data {
+            background: #0a0a0a;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border-left: 3px solid #2196f3;
+        }
+        .log {
+            background: #0a0a0a;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .test-results {
+            background: #1e3a5f;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Ticker Broadcasting Optimization Test</h1>
+        <p>Testing immediate ticker data delivery and subscription persistence</p>
+
+        <div class="section">
+            <h3>Connection Status</h3>
+            <div id="status" class="status disconnected">Disconnected</div>
+            
+            <button onclick="connectAndTest()">Start Test</button>
+            <button onclick="simulatePageSwitch()">Simulate Page Switch</button>
+            <button onclick="disconnect()">Disconnect</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+
+        <div class="section">
+            <h3>📊 Real-time Ticker Data</h3>
+            <div id="tickerData" class="ticker-data">No ticker data received yet...</div>
+        </div>
+
+        <div class="section">
+            <h3>🧪 Test Results</h3>
+            <div id="testResults" class="test-results">
+                <div>Immediate Data Delivery: <span id="immediateDataTest">Pending</span></div>
+                <div>Page Switch Speed: <span id="pageSwitchTest">Pending</span></div>
+                <div>Subscription Persistence: <span id="persistenceTest">Pending</span></div>
+                <div>Cached Data Available: <span id="cachedDataTest">Pending</span></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📝 WebSocket Log</h3>
+            <div id="log" class="log">Ready to test ticker optimizations...</div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let tickerData = {};
+        let testStartTime = null;
+        let firstDataReceived = false;
+        let testResults = {
+            immediateData: false,
+            pageSwitch: false,
+            persistence: false,
+            cachedData: false
+        };
+
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+
+        function updateStatus(status, className = 'info') {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = `Status: ${status}`;
+            statusElement.className = `status ${className}`;
+        }
+
+        function updateTickerDisplay() {
+            const tickerElement = document.getElementById('tickerData');
+            if (Object.keys(tickerData).length === 0) {
+                tickerElement.innerHTML = 'No ticker data yet...';
+            } else {
+                let html = '<h4>Current Prices:</h4>';
+                for (const [symbol, data] of Object.entries(tickerData)) {
+                    const changeColor = parseFloat(data.priceChangePercent) >= 0 ? '#4caf50' : '#f44336';
+                    html += `
+                        <div style="margin: 10px 0; padding: 10px; background: #333; border-radius: 4px;">
+                            <strong>${symbol}:</strong> 
+                            $${parseFloat(data.price).toFixed(4)} 
+                            <span style="color: ${changeColor};">
+                                (${data.priceChangePercent}%)
+                            </span>
+                            <div style="font-size: 0.8em; color: #999;">
+                                Vol: ${parseFloat(data.volume).toFixed(0)}
+                            </div>
+                        </div>
+                    `;
+                }
+                tickerElement.innerHTML = html;
+            }
+        }
+
+        function updateTestResults() {
+            document.getElementById('immediateDataTest').textContent = testResults.immediateData ? '✅ PASS' : '❌ FAIL';
+            document.getElementById('pageSwitchTest').textContent = testResults.pageSwitch ? '✅ PASS' : '❌ FAIL';
+            document.getElementById('persistenceTest').textContent = testResults.persistence ? '✅ PASS' : '❌ FAIL';
+            document.getElementById('cachedDataTest').textContent = testResults.cachedData ? '✅ PASS' : '❌ FAIL';
+        }
+
+        function connectAndTest() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('⚠️ Already connected');
+                return;
+            }
+
+            updateStatus('Connecting...', 'connecting');
+            log('🔌 Starting optimized ticker test...');
+            testStartTime = Date.now();
+            firstDataReceived = false;
+
+            try {
+                ws = new WebSocket('ws://localhost:3001/api/ws');
+
+                ws.onopen = function(event) {
+                    log('✅ WebSocket connected successfully');
+                    updateStatus('Connected', 'connected');
+                    
+                    // Test immediate ticker subscription
+                    log('📡 Subscribing to ticker data...');
+                    const subscribeTime = Date.now();
+                    
+                    ws.send(JSON.stringify({
+                        type: 'subscribe_ticker',
+                        symbols: ['ICPUSDT', 'BTCUSDT', 'ETHUSDT'],
+                        exchangeId: 4
+                    }));
+
+                    // Test if we receive data within 1 second (immediate cached data)
+                    setTimeout(() => {
+                        if (firstDataReceived) {
+                            testResults.immediateData = true;
+                            log('✅ Immediate data delivery test PASSED');
+                        } else {
+                            log('❌ Immediate data delivery test FAILED');
+                        }
+                        updateTestResults();
+                    }, 1000);
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'market_update' || data.type === 'ticker_update') {
+                            const update = data.data;
+                            const receiveTime = Date.now();
+                            
+                            if (!firstDataReceived) {
+                                firstDataReceived = true;
+                                const timeDiff = receiveTime - testStartTime;
+                                log(`⚡ First ticker data received in ${timeDiff}ms`);
+                                
+                                if (timeDiff < 500) {
+                                    testResults.cachedData = true;
+                                    log('✅ Cached data test PASSED (received within 500ms)');
+                                } else {
+                                    log('❌ Cached data test FAILED (took longer than 500ms)');
+                                }
+                            }
+                            
+                            tickerData[update.symbol] = update;
+                            updateTickerDisplay();
+                            
+                            log(`📈 ${data.type}: ${update.symbol} = $${update.price} (${update.priceChangePercent}%)`);
+                            
+                        } else if (data.type === 'ticker_subscription_confirmed') {
+                            log(`✅ Subscription confirmed for: ${data.symbols ? data.symbols.join(', ') : 'symbols'}`);
+                            testResults.persistence = true;
+                            updateTestResults();
+                        } else {
+                            log(`📨 Other message: ${data.type}`);
+                        }
+                    } catch (e) {
+                        log(`📨 Raw message: ${event.data}`);
+                    }
+                };
+
+                ws.onclose = function(event) {
+                    log(`🔒 Connection closed - Code: ${event.code}, Reason: ${event.reason}`);
+                    updateStatus('Disconnected', 'disconnected');
+                };
+
+                ws.onerror = function(error) {
+                    log(`❌ WebSocket error: ${error}`);
+                    updateStatus('Error', 'disconnected');
+                };
+
+            } catch (error) {
+                log(`❌ Failed to create WebSocket: ${error}`);
+                updateStatus('Error', 'disconnected');
+            }
+        }
+
+        function simulatePageSwitch() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ Not connected');
+                return;
+            }
+
+            log('🔄 Simulating page switch (my-bots -> bot-details)...');
+            const switchStartTime = Date.now();
+            
+            // Simulate unsubscribe from my-bots page
+            ws.send(JSON.stringify({
+                type: 'unsubscribe_ticker',
+                symbols: ['ICPUSDT', 'BTCUSDT', 'ETHUSDT']
+            }));
+
+            // Small delay to simulate page transition
+            setTimeout(() => {
+                // Simulate subscribe from bot-details page
+                log('📡 Re-subscribing after page switch...');
+                const resubscribeStartTime = Date.now();
+                let dataReceivedAfterSwitch = false;
+                
+                ws.send(JSON.stringify({
+                    type: 'subscribe_ticker',
+                    symbols: ['ICPUSDT'],
+                    exchangeId: 4
+                }));
+
+                // Check if we receive data quickly after re-subscription
+                const originalOnMessage = ws.onmessage;
+                ws.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    
+                    if ((data.type === 'market_update' || data.type === 'ticker_update') && !dataReceivedAfterSwitch) {
+                        dataReceivedAfterSwitch = true;
+                        const timeDiff = Date.now() - resubscribeStartTime;
+                        log(`⚡ Data received after page switch in ${timeDiff}ms`);
+                        
+                        if (timeDiff < 300) {
+                            testResults.pageSwitch = true;
+                            log('✅ Page switch speed test PASSED');
+                        } else {
+                            log('❌ Page switch speed test FAILED');
+                        }
+                        updateTestResults();
+                        
+                        // Restore original handler
+                        ws.onmessage = originalOnMessage;
+                    }
+                    
+                    // Call original handler
+                    originalOnMessage(event);
+                };
+                
+            }, 100); // 100ms page transition delay
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+            }
+            updateStatus('Disconnected', 'disconnected');
+            log('🔌 WebSocket disconnected manually');
+        }
+
+        function clearLog() {
+            document.getElementById('log').textContent = 'Log cleared...\n';
+        }
+
+        // Auto-start test after page load
+        window.onload = function() {
+            log('🚀 Page loaded. Ready to test ticker optimizations.');
+            
+            // Auto-connect after 1 second
+            setTimeout(() => {
+                connectAndTest();
+            }, 1000);
+        };
+
+        // Clean up on page unload
+        window.onbeforeunload = function() {
+            if (ws) {
+                ws.close();
+            }
+        };
+    </script>
+</body>
+</html>
