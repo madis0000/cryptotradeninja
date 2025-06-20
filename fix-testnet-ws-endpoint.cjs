@@ -22,26 +22,30 @@ async function fixTestnetEndpoint() {
       console.log(`- WS Stream Endpoint: ${ex.wsStreamEndpoint}`);
       console.log(`- REST API Endpoint: ${ex.restApiEndpoint}`);
       
-      if (ex.isTestnet) {
-        console.log('\n=== UPDATING TESTNET WEBSOCKET ENDPOINT ===');
-          // Update with correct testnet WebSocket endpoint
-        // According to frontend code, testnet stream endpoint is: wss://stream.testnet.binance.vision
-        const correctWsStreamEndpoint = 'wss://stream.testnet.binance.vision';
-        const correctWsApiEndpoint = 'wss://testnet.binance.vision/ws-api/v3';
-          await db.update(exchanges)
-          .set({ 
-            wsStreamEndpoint: correctWsStreamEndpoint,
-            wsApiEndpoint: correctWsApiEndpoint
-          })
-          .where(eq(exchanges.id, 4));
+      if (ex.isTestnet) {        console.log('\n=== UPDATING TESTNET ENDPOINTS ===');
+        // Update with correct testnet endpoints from Binance documentation (2025-04-01 changelog)
+        // New endpoints as per https://developers.binance.com/docs/binance-spot-api-docs/testnet
+        const correctWsStreamEndpoint = 'wss://stream.testnet.binance.vision/ws';
+        const correctWsApiEndpoint = 'wss://ws-api.testnet.binance.vision/ws-api/v3';
+        const correctRestApiEndpoint = 'https://testnet.binance.vision';
         
+        await db.update(exchanges)
+        .set({ 
+          wsStreamEndpoint: correctWsStreamEndpoint,
+          wsApiEndpoint: correctWsApiEndpoint,
+          restApiEndpoint: correctRestApiEndpoint
+        })
+        .where(eq(exchanges.id, 4));        
         console.log(`✅ Updated WebSocket stream endpoint to: ${correctWsStreamEndpoint}`);
         console.log(`✅ Updated WebSocket API endpoint to: ${correctWsApiEndpoint}`);
+        console.log(`✅ Updated REST API endpoint to: ${correctRestApiEndpoint}`);
         
         // Verify the update
         const updatedExchange = await db.select().from(exchanges).where(eq(exchanges.id, 4));
-        console.log('\n=== VERIFICATION ===');        console.log(`New WS Stream Endpoint: ${updatedExchange[0].wsStreamEndpoint}`);
+        console.log('\n=== VERIFICATION ===');
+        console.log(`New WS Stream Endpoint: ${updatedExchange[0].wsStreamEndpoint}`);
         console.log(`New WS API Endpoint: ${updatedExchange[0].wsApiEndpoint}`);
+        console.log(`New REST API Endpoint: ${updatedExchange[0].restApiEndpoint}`);
       } else {
         console.log('Exchange 4 is not marked as testnet - no changes needed');
       }

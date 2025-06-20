@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Balance Issue</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .error { color: red; }
+        .success { color: green; }
+        .loading { color: orange; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; font-size: 12px; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        #logs { max-height: 400px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>🐛 Debug Balance Display Issue</h1>
+    
+    <div class="section">
+        <h3>WebSocket Connection Test</h3>
+        <button onclick="testWebSocketConnection()">Test WebSocket</button>
+        <div id="ws-status">Not connected</div>
+    </div>
+    
+    <div class="section">
+        <h3>Balance Fetch Test</h3>
+        <button onclick="testBalanceFetch()">Fetch Balance</button>
+        <div id="balance-status">Ready</div>
+        <pre id="balance-data"></pre>
+    </div>
+    
+    <div class="section">
+        <h3>Ticker Price Service Test</h3>
+        <button onclick="testTickerPrices()">Test Ticker Prices</button>
+        <div id="ticker-status">Ready</div>
+        <pre id="ticker-data"></pre>
+    </div>
+    
+    <div class="section">
+        <h3>Debug Logs</h3>
+        <button onclick="clearLogs()">Clear Logs</button>
+        <pre id="logs"></pre>
+    </div>
+
+    <script>
+        let ws = null;
+        let logs = [];
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logs.push(logEntry);
+            console.log(logEntry);
+            updateLogsDisplay();
+        }
+        
+        function updateLogsDisplay() {
+            document.getElementById('logs').textContent = logs.slice(-50).join('\n');
+        }
+        
+        function clearLogs() {
+            logs = [];
+            updateLogsDisplay();
+        }
+        
+        function testWebSocketConnection() {
+            const wsUrl = 'ws://localhost:3001';
+            log(`🔌 Attempting to connect to ${wsUrl}`);
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('✅ WebSocket already connected');
+                document.getElementById('ws-status').innerHTML = '<span class="success">Connected</span>';
+                return;
+            }
+            
+            document.getElementById('ws-status').innerHTML = '<span class="loading">Connecting...</span>';
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                log('✅ WebSocket connected successfully');
+                document.getElementById('ws-status').innerHTML = '<span class="success">Connected</span>';
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`📨 Received: ${data.type} - ${JSON.stringify(data).substring(0, 100)}...`);
+                    
+                    if (data.type === 'balance_update') {
+                        document.getElementById('balance-data').textContent = JSON.stringify(data, null, 2);
+                        document.getElementById('balance-status').innerHTML = '<span class="success">Balance received</span>';
+                    }
+                } catch (error) {
+                    log(`❌ Error parsing message: ${error.message}`);
+                }
+            };
+            
+            ws.onerror = function(error) {
+                log(`❌ WebSocket error: ${error}`);
+                document.getElementById('ws-status').innerHTML = '<span class="error">Connection failed</span>';
+            };
+            
+            ws.onclose = function(event) {
+                log(`🔌 WebSocket closed: Code ${event.code}, Reason: ${event.reason}`);
+                document.getElementById('ws-status').innerHTML = '<span class="error">Disconnected</span>';
+            };
+        }
+        
+        function testBalanceFetch() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not connected. Connect first.');
+                document.getElementById('balance-status').innerHTML = '<span class="error">WebSocket not connected</span>';
+                return;
+            }
+            
+            // Fetch exchanges first to get exchange ID
+            fetch('/api/exchanges')
+                .then(response => response.json())
+                .then(exchanges => {
+                    log(`📊 Found ${exchanges.length} exchanges`);
+                    
+                    const activeExchange = exchanges.find(e => e.isActive && e.apiKey);
+                    if (!activeExchange) {
+                        log('❌ No active exchange found');
+                        document.getElementById('balance-status').innerHTML = '<span class="error">No active exchange</span>';
+                        return;
+                    }
+                    
+                    log(`🎯 Testing balance fetch for exchange: ${activeExchange.name} (ID: ${activeExchange.id})`);
+                    document.getElementById('balance-status').innerHTML = '<span class="loading">Fetching balance...</span>';
+                    
+                    const message = {
+                        type: 'get_balance',
+                        exchangeId: activeExchange.id
+                    };
+                    
+                    log(`📤 Sending balance request: ${JSON.stringify(message)}`);
+                    ws.send(JSON.stringify(message));
+                })
+                .catch(error => {
+                    log(`❌ Error fetching exchanges: ${error.message}`);
+                    document.getElementById('balance-status').innerHTML = '<span class="error">Failed to fetch exchanges</span>';
+                });
+        }
+        
+        function testTickerPrices() {
+            log('🎯 Testing ticker price data...');
+            document.getElementById('ticker-status').innerHTML = '<span class="loading">Testing...</span>';
+            
+            // Test if we can access ticker prices (this would need to access the frontend app)
+            // For now, just check if ticker WebSocket messages are coming through
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not connected for ticker test');
+                document.getElementById('ticker-status').innerHTML = '<span class="error">WebSocket not connected</span>';
+                return;
+            }
+            
+            // Listen for ticker updates for 10 seconds
+            let tickerCount = 0;
+            const startTime = Date.now();
+            
+            const originalOnMessage = ws.onmessage;
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'ticker_update' || data.type === 'market_update') {
+                        tickerCount++;
+                        log(`📈 Ticker update #${tickerCount}: ${data.symbol || data.data?.symbol} = $${data.price || data.data?.price}`);
+                    }
+                    
+                    // Also call original handler
+                    if (originalOnMessage) {
+                        originalOnMessage(event);
+                    }
+                } catch (error) {
+                    log(`❌ Error parsing ticker message: ${error.message}`);
+                }
+            };
+            
+            setTimeout(() => {
+                log(`📊 Ticker test complete: Received ${tickerCount} ticker updates in 10 seconds`);                document.getElementById('ticker-status').innerHTML = `<span class="success">Received ${tickerCount} ticker updates</span>`;
+                document.getElementById('ticker-data').textContent = `Ticker updates received: ${tickerCount}`;
+                
+                // Restore original handler
+                ws.onmessage = originalOnMessage;
+            }, 10000);
+        }
+        
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 Debug page loaded, auto-connecting WebSocket...');
+            setTimeout(testWebSocketConnection, 1000);
+        };
+    </script>
+</body>
+</html>

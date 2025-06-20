@@ -78,17 +78,20 @@ export class KlineStreamManager {
       
       if (!baseWsUrl) {
         throw new Error(`No WebSocket URL found for exchange ${this.currentExchangeId}`);
-      }
-
-      // Determine the correct WebSocket URL based on the endpoint
-      let wsUrl: string;
-      if (baseWsUrl.includes('testnet.binance.vision')) {
-        // For testnet, use the URL as-is (should be wss://stream.testnet.binance.vision)
-        wsUrl = baseWsUrl;
+      }      // Determine the correct WebSocket URL based on the endpoint
+      let wsUrl: string;      if (baseWsUrl.includes('testnet.binance.vision')) {
+        // For testnet public streams, use wss://stream.testnet.binance.vision/ws
+        wsUrl = 'wss://stream.testnet.binance.vision/ws';
+      } else if (baseWsUrl.includes('stream.binance.com')) {
+        // For mainnet public streams, use combined stream endpoint
+        wsUrl = 'wss://stream.binance.com:9443/stream';
       } else {
-        // For mainnet, append /stream for combined stream endpoint
-        // According to Binance docs: /stream?streams=<streamName1>/<streamName2>
-        wsUrl = `${baseWsUrl}/stream`;
+        // Generic handling for other endpoints
+        if (baseWsUrl.endsWith('/stream')) {
+          wsUrl = baseWsUrl;
+        } else {
+          wsUrl = `${baseWsUrl}/stream`;
+        }
       }
       
       console.log(`[KLINE STREAM] Using WebSocket URL: ${wsUrl}`);

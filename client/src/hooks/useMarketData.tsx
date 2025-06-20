@@ -80,18 +80,18 @@ function useMarketData() {
     };
   }, []);
 
-  const connectToMarketData = (symbols: string[]) => {
-    console.log('[MARKET DATA HOOK] Connecting to market data for symbols:', symbols);
+  const connectToMarketData = (symbols: string[], exchangeId: number = 4) => {
+    console.log('[MARKET DATA HOOK] Connecting to market data for symbols:', symbols, 'on exchange:', exchangeId);
     
     // Ensure WebSocket is connected first
     if (!webSocketSingleton.isConnected()) {
       webSocketSingleton.connect().then(() => {
         // Subscribe to ticker data after connection is established
-        webSocketSingleton.subscribeToTickers(symbols);
+        webSocketSingleton.subscribeToTickers(symbols, exchangeId);
       });
     } else {
       // Subscribe to ticker data immediately
-      webSocketSingleton.subscribeToTickers(symbols);
+      webSocketSingleton.subscribeToTickers(symbols, exchangeId);
     }
   };
 

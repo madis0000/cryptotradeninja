@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bot Order Fill Monitoring Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: white; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #0f5132; color: #d1e7dd; }
+        .disconnected { background: #842029; color: #f8d7da; }
+        .log { background: #212529; border: 1px solid #495057; padding: 10px; height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .controls { margin: 20px 0; }
+        .controls button { margin: 5px; padding: 8px 15px; background: #0d6efd; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        .controls button:hover { background: #0b5ed7; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 20px 0; }
+        .stat-card { background: #2d3748; padding: 15px; border-radius: 5px; }
+        .stat-card h4 { margin-top: 0; color: #4dabf7; }
+        .input-group { margin: 10px; }
+        .input-group input { padding: 5px; margin: 0 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Bot Order Fill Monitoring Debug</h1>
+        
+        <div id="connectionStatus" class="status disconnected">
+            Disconnected from WebSocket
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn">Connect WebSocket</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+            <button id="clearLogBtn">Clear Log</button>
+            <button id="testSafetyOrderFillBtn">Test Safety Order Fill</button>
+            <button id="checkOrderStatusBtn">Check Order Status</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <h4>📊 Order Fill Events</h4>
+                <div>Total Received: <span id="orderFillCount">0</span></div>
+                <div>Safety Order Fills: <span id="safetyOrderFillCount">0</span></div>
+                <div>Take Profit Fills: <span id="takeProfitFillCount">0</span></div>
+            </div>
+            <div class="stat-card">
+                <h4>🔄 Bot Activity</h4>
+                <div>Bot Updates: <span id="botUpdateCount">0</span></div>
+                <div>Cycle Updates: <span id="cycleUpdateCount">0</span></div>
+                <div>Active Bots: <span id="activeBotCount">-</span></div>
+            </div>
+            <div class="stat-card">
+                <h4>🎯 Martingale Actions</h4>
+                <div>TP Updates: <span id="takeProfitUpdateCount">0</span></div>
+                <div>SO Placements: <span id="safetyOrderPlacementCount">0</span></div>
+                <div>Last Action: <span id="lastAction">None</span></div>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <h3>Test Safety Order Fill Simulation</h3>
+            <label>Bot ID:</label>
+            <input type="number" id="botId" value="1" style="width: 80px;">
+            <label>Cycle ID:</label>
+            <input type="number" id="cycleId" value="1" style="width: 80px;">
+            <label>Order ID:</label>
+            <input type="text" id="orderId" value="507190" style="width: 100px;">
+            <label>Fill Price:</label>
+            <input type="number" id="fillPrice" value="6.070" step="0.001" style="width: 100px;">
+            <label>Fill Quantity:</label>
+            <input type="number" id="fillQuantity" value="3.3" step="0.1" style="width: 100px;">
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let orderFillCount = 0;
+        let safetyOrderFillCount = 0;
+        let takeProfitFillCount = 0;
+        let botUpdateCount = 0;
+        let cycleUpdateCount = 0;
+        let takeProfitUpdateCount = 0;
+        let safetyOrderPlacementCount = 0;
+
+        const elements = {
+            connectionStatus: document.getElementById('connectionStatus'),
+            connectBtn: document.getElementById('connectBtn'),
+            disconnectBtn: document.getElementById('disconnectBtn'),
+            clearLogBtn: document.getElementById('clearLogBtn'),
+            testSafetyOrderFillBtn: document.getElementById('testSafetyOrderFillBtn'),
+            checkOrderStatusBtn: document.getElementById('checkOrderStatusBtn'),
+            log: document.getElementById('log'),
+            orderFillCount: document.getElementById('orderFillCount'),
+            safetyOrderFillCount: document.getElementById('safetyOrderFillCount'),
+            takeProfitFillCount: document.getElementById('takeProfitFillCount'),
+            botUpdateCount: document.getElementById('botUpdateCount'),
+            cycleUpdateCount: document.getElementById('cycleUpdateCount'),
+            activeBotCount: document.getElementById('activeBotCount'),
+            takeProfitUpdateCount: document.getElementById('takeProfitUpdateCount'),
+            safetyOrderPlacementCount: document.getElementById('safetyOrderPlacementCount'),
+            lastAction: document.getElementById('lastAction')
+        };
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.style.color = type === 'success' ? '#4ade80' : type === 'error' ? '#f87171' : type === 'warning' ? '#fbbf24' : '#a1a1aa';
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            elements.log.appendChild(logEntry);
+            elements.log.scrollTop = elements.log.scrollHeight;
+        }
+
+        function updateStats() {
+            elements.orderFillCount.textContent = orderFillCount;
+            elements.safetyOrderFillCount.textContent = safetyOrderFillCount;
+            elements.takeProfitFillCount.textContent = takeProfitFillCount;
+            elements.botUpdateCount.textContent = botUpdateCount;
+            elements.cycleUpdateCount.textContent = cycleUpdateCount;
+            elements.takeProfitUpdateCount.textContent = takeProfitUpdateCount;
+            elements.safetyOrderPlacementCount.textContent = safetyOrderPlacementCount;
+        }
+
+        function updateConnectionStatus(status, statusClass) {
+            elements.connectionStatus.textContent = status;
+            elements.connectionStatus.className = `status ${statusClass}`;
+            
+            const isConnected = statusClass === 'connected';
+            elements.connectBtn.disabled = isConnected;
+            elements.disconnectBtn.disabled = !isConnected;
+        }
+
+        function connectWebSocket() {
+            try {
+                updateConnectionStatus('Connecting...', 'connecting');
+                log('🔌 Attempting WebSocket connection...');
+                
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}`;
+                
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function() {
+                    log('✅ WebSocket connected successfully', 'success');
+                    updateConnectionStatus('Connected to WebSocket', 'connected');
+                    
+                    // Subscribe to all relevant events
+                    log('📊 Subscribing to order fill notifications...');
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'order_fill_notification') {
+                            orderFillCount++;
+                            
+                            const orderData = data.data;
+                            const isSafetyOrder = orderData.orderType === 'safety_order' || orderData.orderSubType === 'SAFETY_ORDER';
+                            const isTakeProfit = orderData.orderType === 'take_profit' || orderData.orderSubType === 'TAKE_PROFIT';
+                            
+                            if (isSafetyOrder) {
+                                safetyOrderFillCount++;
+                                log(`🎯 SAFETY ORDER FILLED: Bot ${orderData.botId} - ${orderData.symbol} ${orderData.side} ${orderData.quantity} at ${orderData.price}`, 'success');
+                                elements.lastAction.textContent = `Safety Order Fill (${new Date().toLocaleTimeString()})`;
+                            } else if (isTakeProfit) {
+                                takeProfitFillCount++;
+                                log(`💰 TAKE PROFIT FILLED: Bot ${orderData.botId} - ${orderData.symbol} ${orderData.side} ${orderData.quantity} at ${orderData.price}`, 'success');
+                                elements.lastAction.textContent = `Take Profit Fill (${new Date().toLocaleTimeString()})`;
+                            } else {
+                                log(`📋 ORDER FILLED: ${orderData.orderType} - ${orderData.symbol} ${orderData.side} ${orderData.quantity} at ${orderData.price}`, 'info');
+                            }
+                            
+                            updateStats();
+                        } else if (data.type === 'bot_status_update') {
+                            botUpdateCount++;
+                            log(`🤖 BOT UPDATE: Bot ${data.data.botId} status: ${data.data.status}`, 'info');
+                            updateStats();
+                        } else if (data.type === 'bot_cycle_update') {
+                            cycleUpdateCount++;
+                            log(`🔄 CYCLE UPDATE: Bot ${data.data.botId} cycle ${data.data.cycleNumber} - ${data.data.status}`, 'info');
+                            updateStats();
+                        } else if (data.type === 'take_profit_update') {
+                            takeProfitUpdateCount++;
+                            log(`🎯 TAKE PROFIT UPDATE: ${data.data.message || 'Take profit order updated'}`, 'warning');
+                            elements.lastAction.textContent = `TP Update (${new Date().toLocaleTimeString()})`;
+                            updateStats();
+                        } else if (data.type === 'safety_order_placement') {
+                            safetyOrderPlacementCount++;
+                            log(`⚡ SAFETY ORDER PLACED: ${data.data.message || 'Safety order placed'}`, 'warning');
+                            elements.lastAction.textContent = `SO Placement (${new Date().toLocaleTimeString()})`;
+                            updateStats();
+                        } else {
+                            log(`📨 Other message: ${data.type}`, 'info');
+                        }
+                    } catch (error) {
+                        log(`📨 Raw message: ${event.data}`, 'info');
+                    }
+                };
+                
+                ws.onclose = function(event) {
+                    log(`🔒 WebSocket disconnected - Code: ${event.code}, Reason: ${event.reason}`, 'warning');
+                    updateConnectionStatus('Disconnected from WebSocket', 'disconnected');
+                };
+                
+                ws.onerror = function(error) {
+                    log(`❌ WebSocket error: ${error}`, 'error');
+                    updateConnectionStatus('WebSocket Error', 'disconnected');
+                };
+                
+            } catch (error) {
+                log(`❌ Connection error: ${error.message}`, 'error');
+                updateConnectionStatus('Connection Error', 'disconnected');
+            }
+        }
+
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function testSafetyOrderFill() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not connected', 'error');
+                return;
+            }
+
+            const botId = parseInt(document.getElementById('botId').value);
+            const cycleId = parseInt(document.getElementById('cycleId').value);
+            const orderId = document.getElementById('orderId').value;
+            const fillPrice = parseFloat(document.getElementById('fillPrice').value);
+            const fillQuantity = parseFloat(document.getElementById('fillQuantity').value);
+
+            // Simulate a safety order fill event like the one from user data stream
+            const mockFillEvent = {
+                e: 'executionReport',
+                E: Date.now(),
+                s: 'ICPUSDT',
+                i: orderId,
+                S: 'BUY',
+                X: 'FILLED',
+                x: 'TRADE',
+                z: fillQuantity.toString(),
+                p: fillPrice.toString(),
+                q: fillQuantity.toString(),
+                n: '0.001',
+                N: 'USDT',
+                T: Date.now()
+            };
+
+            log(`🧪 Simulating safety order fill for Bot ${botId}, Cycle ${cycleId}...`, 'warning');
+            log(`   Order ID: ${orderId}`, 'info');
+            log(`   Fill Price: $${fillPrice}`, 'info');
+            log(`   Fill Quantity: ${fillQuantity}`, 'info');
+            
+            // This would normally come from Binance User Data Stream
+            // For testing, we simulate the event
+            log('📡 Sending simulated user data stream event...', 'info');
+        }
+
+        function checkOrderStatus() {
+            const botId = parseInt(document.getElementById('botId').value);
+            
+            log(`🔍 Checking order status for Bot ${botId}...`, 'info');
+            
+            // Fetch current bot data via API
+            fetch(`/api/bots/${botId}`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            })
+            .then(response => response.json())
+            .then(bot => {
+                log(`✅ Bot ${botId} status: ${bot.status}`, 'success');
+                elements.activeBotCount.textContent = bot.isActive ? '1' : '0';
+                
+                // Fetch bot cycles
+                return fetch(`/api/bot-cycles/${botId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+            })
+            .then(response => response.json())
+            .then(cycles => {
+                log(`📊 Found ${cycles.length} cycles for Bot ${botId}`, 'info');
+                cycles.forEach(cycle => {
+                    log(`   Cycle ${cycle.cycleNumber}: ${cycle.status}`, 'info');
+                });
+                
+                // Fetch bot orders
+                return fetch(`/api/bot-orders/${botId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+            })
+            .then(response => response.json())
+            .then(orders => {
+                log(`📋 Found ${orders.length} orders for Bot ${botId}`, 'info');
+                const filledOrders = orders.filter(o => o.status === 'filled');
+                const activeOrders = orders.filter(o => o.status === 'active');
+                const safetyOrders = orders.filter(o => o.orderType === 'safety_order');
+                
+                log(`   📊 Filled: ${filledOrders.length}, Active: ${activeOrders.length}`, 'info');
+                log(`   🎯 Safety Orders: ${safetyOrders.length}`, 'info');
+                
+                safetyOrders.forEach(order => {
+                    log(`   SO: ${order.exchangeOrderId} - ${order.status} (${order.side} ${order.amount} at ${order.price})`, 'info');
+                });
+            })
+            .catch(error => {
+                log(`❌ Error checking orders: ${error.message}`, 'error');
+            });
+        }
+
+        // Event listeners
+        elements.connectBtn.onclick = connectWebSocket;
+        elements.disconnectBtn.onclick = disconnectWebSocket;
+        elements.clearLogBtn.onclick = () => elements.log.innerHTML = '';
+        elements.testSafetyOrderFillBtn.onclick = testSafetyOrderFill;
+        elements.checkOrderStatusBtn.onclick = checkOrderStatus;
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 Bot Order Fill Monitoring Debug initialized');
+            log('💡 This tool monitors WebSocket messages for bot order fill events');
+            log('🔍 Use "Check Order Status" to see current bot/order state');
+            log('🧪 Use "Test Safety Order Fill" to simulate fill events');
+            connectWebSocket();
+        };
+
+        window.onbeforeunload = function() {
+            if (ws) {
+                ws.close();
+            }
+        };
+    </script>
+</body>
+</html>

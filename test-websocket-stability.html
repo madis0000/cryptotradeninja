@@ -72,7 +72,7 @@
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const hostname = window.location.hostname;
-            const isDev = window.location.port === '5173' || hostname === 'localhost';
+            const isDev = window.location.port === '3000' || hostname === 'localhost';
             const wsUrl = isDev ? `${protocol}//${hostname}:3001/api/ws` : `${protocol}//${hostname}:${window.location.port}/api/ws`;
             
             log(`Connecting to: ${wsUrl}`, 'info');

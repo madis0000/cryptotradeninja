@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Broadcasting Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; cursor: pointer; margin: 10px; }
+        .log { background: #f8f9fa; padding: 10px; margin: 10px 0; border-left: 4px solid #007bff; }
+        .error { border-left-color: #dc3545; }
+        .success { border-left-color: #28a745; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Real-Time Broadcasting Test</h1>
+    
+    <div>
+        <button class="button" onclick="triggerBroadcasting()">🚀 Trigger Broadcasting Test</button>
+        <button class="button" onclick="connectWebSocket()">🔌 Connect WebSocket</button>
+        <button class="button" onclick="clearLogs()">🧹 Clear Logs</button>
+    </div>
+    
+    <h2>📡 WebSocket Events:</h2>
+    <div id="logs"></div>
+    
+    <script>
+        let ws = null;
+        let eventCount = 0;
+        
+        function log(message, type = 'log') {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.innerHTML = `[${timestamp}] ${message}`;
+            logs.appendChild(div);
+            logs.scrollTop = logs.scrollHeight;
+        }
+        
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+            eventCount = 0;
+        }
+        
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('WebSocket already connected', 'success');
+                return;
+            }
+            
+            const wsUrl = 'ws://localhost:3001/api/ws';
+            log(`Connecting to: ${wsUrl}`);
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                log('✅ WebSocket connected successfully!', 'success');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    eventCount++;
+                    
+                    let logMessage = `📡 Event #${eventCount}: <strong>${data.type}</strong>`;
+                    
+                    // Special handling for different event types
+                    if (data.type === 'bot_status_update') {
+                        logMessage += ` - Bot ${data.data.botId} (${data.data.name}) → ${data.data.status}`;
+                    } else if (data.type === 'order_fill_notification') {
+                        logMessage += ` - ${data.data.symbol} ${data.data.side} ${data.data.quantity} @ ${data.data.price}`;
+                    } else if (data.type === 'bot_cycle_update') {
+                        logMessage += ` - Bot ${data.data.botId} Cycle ${data.data.cycleNumber}`;
+                    } else if (data.type === 'order_status_update') {
+                        logMessage += ` - Order ${data.data.orderId} → ${data.data.status}`;
+                    } else if (data.type === 'market_update') {
+                        logMessage += ` - ${data.data.symbol} = $${data.data.price}`;
+                    } else {
+                        logMessage += ` - ${JSON.stringify(data.data || data.message || 'N/A').substr(0, 100)}`;
+                    }
+                    
+                    log(logMessage, 'success');
+                    
+                } catch (error) {
+                    log(`❌ Error parsing WebSocket message: ${error.message}`, 'error');
+                }
+            };
+            
+            ws.onerror = (error) => {
+                log(`❌ WebSocket error: ${error}`, 'error');
+            };
+            
+            ws.onclose = () => {
+                log('🔌 WebSocket connection closed');
+            };
+        }
+        
+        async function triggerBroadcasting() {
+            try {
+                log('🚀 Triggering broadcasting test...');
+                
+                const response = await fetch('/api/test-broadcasting', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    log(`✅ Broadcasting test completed! Events: ${result.eventsTriggered.join(', ')}`, 'success');
+                    log(`🤖 Test bot: ${result.testBot.name} (${result.testBot.tradingPair})`, 'success');
+                } else {
+                    log(`❌ Broadcasting test failed: ${result.error}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Error triggering broadcasting test: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-connect on page load
+        window.onload = () => {
+            connectWebSocket();
+            log('🎯 Broadcasting test page loaded. Click "Trigger Broadcasting Test" to send test events.');
+        };
+    </script>
+</body>
+</html>

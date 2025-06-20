@@ -95,9 +95,12 @@ export class MessageHandler {
           break;
           case 'unsubscribe_balance':
           await this.handleUnsubscribeBalance(ws, message, clientId);
-          break;
-          case 'subscribe_ticker':
+          break;        case 'subscribe_ticker':
           await this.handleSubscribeTicker(ws, message, clientId);
+          break;
+        
+        case 'unsubscribe_ticker':
+          await this.handleUnsubscribeTicker(ws, message, clientId);
           break;
         
         case 'get_trading_balance':
@@ -349,12 +352,10 @@ export class MessageHandler {
           clientId
         }));
         return;
-      }
-
-      // Send appropriate response based on request type
+      }      // Send appropriate response based on request type
       if (isAllBalancesRequest) {
         // Return ALL balances (for My Exchange page)
-        ws.send(JSON.stringify({
+        const responseMessage = {
           type: 'balance_update',
           exchangeId: targetExchangeId,
           data: {
@@ -362,21 +363,25 @@ export class MessageHandler {
           },
           timestamp: balanceResult.timestamp || Date.now(),
           clientId
-        }));
-      } else {
+        };
+        
+        console.log(`[MESSAGE HANDLER] ✅ Sending balance_update for exchange ${targetExchangeId} with ${balanceResult.data?.balances?.length || 0} balances`);
+        ws.send(JSON.stringify(responseMessage));      } else {
         // Return single asset balance (for Martingale bot)
         const assetBalance = balanceResult.data.balances.find(
           (balance: any) => balance.asset === targetAsset
         );
         
-        ws.send(JSON.stringify({
+        const responseMessage = {
           type: 'balance_update',
           exchangeId: targetExchangeId,
           asset: targetAsset,
           balance: assetBalance || { asset: targetAsset, free: '0.00000000', locked: '0.00000000' },
           timestamp: balanceResult.timestamp || Date.now(),
           clientId
-        }));
+        };
+          console.log(`[MESSAGE HANDLER] ✅ Sending single asset balance_update for exchange ${targetExchangeId}, asset ${targetAsset}`);
+        ws.send(JSON.stringify(responseMessage));
       }
     } catch (error) {
       console.error('[MESSAGE HANDLER] Error in handleGetBalance:', error);
@@ -460,6 +465,23 @@ export class MessageHandler {
       }));
     }    // Send initial market data
     this.tickerStreamManager.sendCurrentMarketData(ws, symbols);
+  }
+
+  private async handleUnsubscribeTicker(ws: WebSocket, message: WebSocketMessage, clientId: string): Promise<void> {
+    const { symbols } = message;
+    
+    console.log(`[MESSAGE HANDLER] Unsubscribe ticker request from client ${clientId}:`, symbols || 'all symbols');    // Remove ticker client
+    this.tickerStreamManager.removeClient(clientId);
+
+    // Send confirmation
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'ticker_unsubscription_confirmed',
+        symbols: symbols || 'all',
+        message: 'Unsubscribed from ticker updates',
+        clientId
+      }));
+    }
   }
 
   // Handle trading balance request (returns base and quote currencies for a trading symbol)

@@ -40,6 +40,25 @@ export class TradingOperationsManager {
   // Cycle management optimization for concurrent operations
   private cycleOperationLocks = new Map<number, Promise<void>>();
   private pendingCycleStarts = new Map<number, NodeJS.Timeout>();
+
+  // Helper method to get Binance server time
+  private async getBinanceServerTime(baseUrl: string): Promise<number> {
+    try {
+      const timeResponse = await fetch(`${baseUrl}/api/v3/time`);
+      if (timeResponse.ok) {
+        const timeData = await timeResponse.json();
+        console.log(`[TIMESTAMP] Using Binance server time: ${timeData.serverTime}`);
+        return timeData.serverTime;
+      } else {
+        console.log(`[TIMESTAMP] Failed to get server time, using local time`);
+        return Date.now();
+      }
+    } catch (timeError) {
+      console.log(`[TIMESTAMP] Error getting server time, using local time:`, timeError);
+      return Date.now();
+    }
+  }
+
   constructor() {
     console.log('[UNIFIED WS] [TRADING OPERATIONS MANAGER] Initialized');
   }
@@ -955,19 +974,19 @@ export class TradingOperationsManager {
       } catch (decryptError) {
         console.error(`[UNIFIED WS BALANCE FETCHING] Failed to decrypt credentials for exchange ${exchangeId}:`, decryptError);
         throw new Error(`Failed to decrypt API credentials: ${decryptError instanceof Error ? decryptError.message : String(decryptError)}`);
-      }
-
-      // Fetch actual balance from exchange API (works for both testnet and live)
+      }      // Fetch actual balance from exchange API (works for both testnet and live)
       // The REST API endpoint determines whether it's testnet or live
       const environmentType = exchange.isTestnet ? 'Testnet' : 'Live';
       console.log(`[UNIFIED WS BALANCE FETCHING] Fetching real ${environmentType} balance from ${exchange.name}`);
+        const baseUrl = exchange.restApiEndpoint || (exchange.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com');
       
-      const baseUrl = exchange.restApiEndpoint || (exchange.isTestnet ? 'https://testnet.binance.vision' : 'https://api.binance.com');
-      const timestamp = Date.now();
+      // Get Binance server time to avoid timestamp issues
+      const timestamp = await this.getBinanceServerTime(baseUrl);
       
-      // Create query parameters
+      // Create query parameters with recvWindow to handle timestamp issues
       const params = new URLSearchParams({
-        timestamp: timestamp.toString()
+        timestamp: timestamp.toString(),
+        recvWindow: '60000'  // 60 second window to handle clock sync issues
       });
 
       // Create signature
@@ -1512,23 +1531,267 @@ export class TradingOperationsManager {
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🎉 TAKE PROFIT ORDER FILLED - CYCLE COMPLETED!`);
           await this.completeCycleAndStartNew(botId, cycleId, orderFillData);
           break;
-          
-        case 'safety_order':
+            case 'safety_order':
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⚡ SAFETY ORDER FILLED - UPDATING TAKE PROFIT`);
-          // TODO: Update average entry price, cancel and replace take profit order
-          // This would involve:
-          // 1. Calculate new average entry price
-          // 2. Cancel existing take profit order
-          // 3. Place new take profit order at updated price
-          // 4. Place next safety order if conditions are met
+          await this.handleSafetyOrderFill(botId, cycleId, orderFillData);
           break;
-          
-        default:
+            default:
           console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📝 Order fill event: ${orderType}`);
       }
       
     } catch (error) {
       console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Order fill event processing failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle safety order fill event - core martingale strategy logic
+   */
+  async handleSafetyOrderFill(botId: number, cycleId: number, orderFillData: any): Promise<void> {
+    console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ===== SAFETY ORDER FILLED =====`);
+    console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] � SAFETY ORDER ANALYSIS:`);
+    console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Bot ID: ${botId}, Cycle ID: ${cycleId}`);
+    console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Fill Price: $${orderFillData.price}`);
+    console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Fill Quantity: ${orderFillData.quantity}`);
+
+    try {      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        throw new Error('Bot not found');
+      }
+
+      const cycle = await storage.getActiveBotCycle(botId);
+      if (!cycle) {
+        throw new Error('Active cycle not found');
+      }      // Get all filled orders for this cycle (base order + filled safety orders)
+      const allOrders = await storage.getCycleOrders(cycleId);
+      const filledOrders = allOrders.filter((order: any) => order.status === 'filled');
+      const nonTakeProfitOrders = filledOrders.filter((order: any) => order.orderType !== 'take_profit');
+
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📋 Found ${nonTakeProfitOrders.length} filled orders for averaging:`);
+      
+      // 2. Calculate new average entry price
+      let totalValue = 0;
+      let totalQuantity = 0;
+      
+      for (const order of nonTakeProfitOrders) {
+        const price = parseFloat(order.filledPrice || order.price || '0');
+        const quantity = parseFloat(order.filledQuantity || order.quantity || '0');
+        if (price > 0 && quantity > 0) {
+          totalValue += price * quantity;
+          totalQuantity += quantity;
+          
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    - ${order.orderType}: ${quantity} @ $${price.toFixed(8)} = $${(price * quantity).toFixed(8)}`);
+        }
+      }
+
+      const newAveragePrice = totalValue / totalQuantity;
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📊 NEW AVERAGE ENTRY PRICE: $${newAveragePrice.toFixed(8)}`);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Total Quantity: ${totalQuantity}`);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Total Value: $${totalValue.toFixed(8)}`);
+
+      // 3. Cancel existing take profit order
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🚫 Cancelling existing take profit order...`);
+      const activeOrders = allOrders.filter((order: any) => order.status === 'active');
+      const takeProfitOrder = activeOrders.find((order: any) => order.orderType === 'take_profit');
+        if (takeProfitOrder && takeProfitOrder.exchangeOrderId) {
+        try {
+          await this.cancelOrder(botId, takeProfitOrder.exchangeOrderId);
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Cancelled take profit order ${takeProfitOrder.exchangeOrderId}`);
+        } catch (error) {
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⚠️ Take profit order might already be cancelled: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
+      // 4. Place new take profit order at updated price
+      await this.updateTakeProfitAfterSafetyOrder(botId, cycleId);
+
+      // 5. Check if we should place the next safety order
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 🔍 Checking if next safety order should be placed...`);
+      const currentMarketPrice = parseFloat(orderFillData.price);
+      await this.evaluateAndPlaceSafetyOrder(botId, cycleId, currentMarketPrice);
+
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ===== SAFETY ORDER PROCESSING COMPLETE =====`);
+
+    } catch (error) {
+      console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Safety order fill processing failed:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Update take profit order after safety order fill - recalculates based on new average price
+   */
+  async updateTakeProfitAfterSafetyOrder(botId: number, cycleId: number): Promise<void> {
+    console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ===== UPDATING TAKE PROFIT AFTER SAFETY ORDER =====`);
+    
+    let logger: any = null;
+    
+    try {
+      const bot = await storage.getTradingBot(botId);
+      if (!bot) {
+        throw new Error(`Bot ${botId} not found`);
+      }
+
+      // Initialize logger
+      logger = BotLoggerManager.getLogger(botId, bot.tradingPair);
+      logger.logStrategyAction('TAKE_PROFIT_UPDATE_START', {
+        botId,
+        cycleId,
+        reason: 'safety_order_filled'
+      });
+
+      const exchange = await storage.getExchange(bot.exchangeId);
+      if (!exchange) {
+        throw new Error('Exchange not found');
+      }      // Get all filled orders for this cycle (base order + filled safety orders)
+      const allOrders = await storage.getCycleOrders(cycleId);
+      const filledOrders = allOrders.filter((order: any) => order.status === 'filled');
+      const nonTakeProfitOrders = filledOrders.filter((order: any) => order.orderType !== 'take_profit');
+
+      if (nonTakeProfitOrders.length === 0) {
+        throw new Error('No filled orders found for average price calculation');
+      }
+
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📊 Recalculating take profit from ${nonTakeProfitOrders.length} filled orders...`);
+      
+      // Calculate new average entry price
+      let totalValue = 0;
+      let totalQuantity = 0;
+        for (const order of nonTakeProfitOrders) {
+        const price = parseFloat(order.filledPrice || order.price || '0');
+        const quantity = parseFloat(order.filledQuantity || order.quantity || '0');
+        if (price > 0 && quantity > 0) {
+          totalValue += price * quantity;
+          totalQuantity += quantity;
+          
+          console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    - ${order.orderType}: ${quantity} @ $${price.toFixed(8)} = $${(price * quantity).toFixed(8)}`);
+        }
+      }
+
+      const newAveragePrice = totalValue / totalQuantity;
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📈 NEW AVERAGE ENTRY PRICE: $${newAveragePrice.toFixed(8)}`);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Total Quantity: ${totalQuantity.toFixed(8)}`);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Total Value: $${totalValue.toFixed(8)}`);
+
+      // Get symbol filters for price adjustment
+      const filters = await getBinanceSymbolFilters(bot.tradingPair, exchange.restApiEndpoint || 'https://testnet.binance.vision');
+
+      // Calculate new take profit price based on average entry price
+      const takeProfitPercentage = parseFloat(bot.takeProfitPercentage);
+      let newTakeProfitPrice: number;
+      
+      if (bot.direction === 'long') {
+        newTakeProfitPrice = newAveragePrice * (1 + takeProfitPercentage / 100);
+      } else {
+        newTakeProfitPrice = newAveragePrice * (1 - takeProfitPercentage / 100);
+      }
+
+      // Apply PRICE_FILTER adjustment
+      let adjustedTakeProfitPrice = adjustPrice(newTakeProfitPrice, filters.tickSize, filters.priceDecimals);
+      
+      // Validate filter compliance for new take profit order
+      const compliance = ensureFilterCompliance(totalQuantity, adjustedTakeProfitPrice, filters);
+      if (!compliance.isValid) {
+        console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ New take profit filter compliance failed: ${compliance.error}`);
+        adjustedTakeProfitPrice = adjustPrice(adjustedTakeProfitPrice, filters.tickSize, filters.priceDecimals);
+      } else {
+        adjustedTakeProfitPrice = compliance.price;
+      }
+
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] 📊 NEW TAKE PROFIT CALCULATION:`);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    New Average Price: $${newAveragePrice.toFixed(8)}`);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    Take Profit %: ${takeProfitPercentage}%`);
+      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY]    New TP Price: $${adjustedTakeProfitPrice.toFixed(filters.priceDecimals)}`);
+
+      // Create new take profit order record
+      const newTakeProfitOrder = await storage.createCycleOrder({
+        cycleId: cycleId,
+        botId: botId,
+        userId: bot.userId,
+        orderType: 'take_profit',
+        side: bot.direction === 'long' ? 'SELL' : 'BUY',
+        orderCategory: 'LIMIT',
+        symbol: bot.tradingPair,
+        quantity: totalQuantity.toFixed(filters.qtyDecimals),
+        price: adjustedTakeProfitPrice.toFixed(filters.priceDecimals),
+        status: 'pending'
+      });
+
+      // Place new take profit order on exchange
+      const { apiKey, apiSecret } = decryptApiCredentials(
+        exchange.apiKey,
+        exchange.apiSecret,
+        exchange.encryptionIv
+      );
+
+      const orderParams = new URLSearchParams({
+        symbol: bot.tradingPair,
+        side: bot.direction === 'long' ? 'SELL' : 'BUY',
+        type: 'LIMIT',
+        quantity: totalQuantity.toFixed(filters.qtyDecimals),
+        price: adjustedTakeProfitPrice.toFixed(filters.priceDecimals),
+        timeInForce: 'GTC',
+        timestamp: Date.now().toString()
+      });
+
+      const signature = crypto
+        .createHmac('sha256', apiSecret)
+        .update(orderParams.toString())
+        .digest('hex');
+      
+      orderParams.append('signature', signature);
+
+      const orderResponse = await fetch(`${exchange.restApiEndpoint}/api/v3/order`, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: orderParams
+      });
+
+      const orderResult = await orderResponse.json();
+      
+      if (!orderResponse.ok) {
+        throw new Error(`Updated take profit order placement failed: ${orderResult.msg || 'Unknown error'}`);
+      }
+
+      if (orderResult && orderResult.orderId) {
+        await storage.updateCycleOrder(newTakeProfitOrder.id, {
+          exchangeOrderId: orderResult.orderId.toString(),
+          status: 'active'
+        });
+
+        const wsService = getGlobalWebSocketService();
+        if (wsService) {
+          wsService.broadcastOrderFillNotification({
+            id: newTakeProfitOrder.id,
+            exchangeOrderId: orderResult.orderId.toString(),
+            botId: botId,
+            orderType: 'take_profit',
+            symbol: bot.tradingPair,
+            side: bot.direction === 'long' ? 'SELL' : 'BUY',
+            quantity: totalQuantity.toFixed(filters.qtyDecimals),
+            price: adjustedTakeProfitPrice.toFixed(filters.priceDecimals),
+            status: 'active'
+          });
+        }
+
+        console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Updated take profit order placed! Order ID: ${orderResult.orderId}`);
+        logger.logStrategyAction('TAKE_PROFIT_UPDATED', {
+          orderId: orderResult.orderId,
+          newAveragePrice: newAveragePrice.toFixed(8),
+          newTakeProfitPrice: adjustedTakeProfitPrice.toFixed(filters.priceDecimals)
+        });
+      }    } catch (error) {
+      console.error(`[UNIFIED WS] [MARTINGALE STRATEGY] ❌ Take profit update failed:`, error);
+      if (logger) {
+        logger.logStrategyAction('TAKE_PROFIT_UPDATE_FAILED', {
+          botId,
+          cycleId,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
       throw error;
     }
   }
@@ -1551,8 +1814,7 @@ export class TradingOperationsManager {
       });
 
       console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Cycle ${cycleId} marked as completed`);
-      
-      // Broadcast cycle completion
+        // Broadcast cycle completion
       const wsService = getGlobalWebSocketService();
       if (wsService && completedCycle) {
         wsService.broadcastBotCycleUpdate({
@@ -1565,11 +1827,16 @@ export class TradingOperationsManager {
       // Update bot stats (will be implemented)
       // await storage.updateTradingBot(botId, {
       //   totalTrades: bot.totalTrades + 1,
-      // });
-
-      // Check if bot is still active
+      // });      // Check if bot is still active
       if (!bot.isActive) {
         console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⏸️ Bot ${botId} is inactive, not starting new cycle`);
+        
+        // Broadcast bot status update
+        const wsService = getGlobalWebSocketService();
+        if (wsService) {
+          wsService.broadcastBotStatusUpdate(bot);
+        }
+        
         return;
       }
 
@@ -1612,11 +1879,16 @@ export class TradingOperationsManager {
       const bot = await storage.getTradingBot(botId);
       if (!bot) {
         throw new Error('Bot not found');
-      }
-
-      // Check if bot is still active (might have been deactivated during cooldown)
+      }      // Check if bot is still active (might have been deactivated during cooldown)
       if (!bot.isActive) {
         console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ⏸️ Bot ${botId} is now inactive, cancelling new cycle`);
+        
+        // Broadcast bot status update
+        const wsService = getGlobalWebSocketService();
+        if (wsService) {
+          wsService.broadcastBotStatusUpdate(bot);
+        }
+        
         return;
       }
       
@@ -1627,16 +1899,17 @@ export class TradingOperationsManager {
         maxSafetyOrders: bot.maxSafetyOrders,
         cycleNumber: 1, // This should be incremented based on previous cycles
         status: 'active'
-      });
-
-      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Created new cycle ${newCycle.id} for bot ${botId}`);
-
+      });      console.log(`[UNIFIED WS] [MARTINGALE STRATEGY] ✅ Created new cycle ${newCycle.id} for bot ${botId}`);      
+      
       // Broadcast new cycle creation
       const wsService = getGlobalWebSocketService();
       if (wsService) {
-        wsService.broadcastBotCycleUpdate({
-          action: 'created',
-          cycle: newCycle
+        wsService.broadcastBotDataUpdate({
+          type: 'bot_cycle_update',
+          data: {
+            action: 'created',
+            cycle: newCycle
+          }
         });
         console.log(`[WEBSOCKET] Broadcasted new cycle creation for cycle ${newCycle.id}`);
       }
@@ -1733,11 +2006,10 @@ export class TradingOperationsManager {
       
       console.log(`[UNIFIED WS OPEN ORDERS] 🌐 Using REST API endpoint: ${baseUrl}`);
       console.log(`[UNIFIED WS OPEN ORDERS] 🌐 Endpoint source: ${exchange.restApiEndpoint ? 'Database' : 'Fallback'}`);
-      
-      // Build query parameters
+        // Build query parameters
       const queryParams = new URLSearchParams({
         timestamp: timestamp.toString(),
-        recvWindow: '10000'
+        recvWindow: '60000'  // Increased to 60 seconds to handle clock sync issues
       });
         if (symbol) {
         queryParams.set('symbol', symbol);

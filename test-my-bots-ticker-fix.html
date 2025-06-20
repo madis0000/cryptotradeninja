@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test My-Bots Ticker Fix</title>
+    <style>
+        body { font-family: monospace; margin: 20px; background: #1a1a1a; color: #fff; }
+        .log { border: 1px solid #333; padding: 10px; margin: 10px 0; max-height: 400px; overflow-y: auto; }
+        .success { color: #51cf66; }
+        .error { color: #ff6b6b; }
+        .info { color: #339af0; }
+        button { padding: 10px 20px; margin: 5px; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #555; }
+        .ticker-data { background: #2a2a2a; padding: 10px; margin: 10px 0; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Test My-Bots Ticker Fix</h1>
+    <p>Testing ticker subscription with exchange ID 4 (Binance testnet)</p>
+    
+    <div>
+        <button onclick="connect()">Connect WebSocket</button>
+        <button onclick="subscribeToICPUSDT()">Subscribe to ICPUSDT</button>
+        <button onclick="subscribeToMultiple()">Subscribe to Multiple Symbols</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+    
+    <div id="status" class="info">Disconnected</div>
+    
+    <div>
+        <h3>📊 Ticker Data:</h3>
+        <div id="tickerData" class="ticker-data">No ticker data yet...</div>
+    </div>
+    
+    <div>
+        <h3>📝 WebSocket Log:</h3>
+        <div id="log" class="log">Ready to connect...</div>
+    </div>
+
+    <script>
+        let ws = null;
+        let tickerData = {};
+
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+
+        function updateStatus(status, className = 'info') {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = `Status: ${status}`;
+            statusElement.className = className;
+        }
+
+        function updateTickerDisplay() {
+            const tickerElement = document.getElementById('tickerData');
+            if (Object.keys(tickerData).length === 0) {
+                tickerElement.innerHTML = 'No ticker data yet...';
+            } else {
+                let html = '';
+                for (const [symbol, data] of Object.entries(tickerData)) {
+                    html += `<div><strong>${symbol}:</strong> $${data.price} (${data.priceChangePercent}%)</div>`;
+                }
+                tickerElement.innerHTML = html;
+            }
+        }
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('Already connected');
+                return;
+            }
+
+            updateStatus('Connecting...', 'info');
+            log('🔌 Connecting to WebSocket server...');
+
+            try {
+                ws = new WebSocket('ws://localhost:3001/api/ws');
+
+                ws.onopen = function(event) {
+                    log('✅ Connected successfully');
+                    updateStatus('Connected', 'success');
+                    
+                    // Send test message
+                    ws.send(JSON.stringify({
+                        type: 'test',
+                        message: 'my_bots_ticker_test'
+                    }));
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'market_update' || data.type === 'ticker_update') {
+                            const update = data.data;
+                            log(`📈 ${data.type.toUpperCase()}: ${update.symbol} = $${update.price} (${update.priceChangePercent}%)`);
+                            
+                            // Store ticker data
+                            tickerData[update.symbol] = update;
+                            updateTickerDisplay();
+                        } else if (data.type === 'ticker_subscription_confirmed') {
+                            log(`✅ Ticker subscription confirmed for: ${data.symbols ? data.symbols.join(', ') : 'unknown symbols'}`);
+                        } else {
+                            log(`📨 Received: ${data.type} - ${JSON.stringify(data, null, 2)}`);
+                        }
+                    } catch (e) {
+                        log(`📨 Raw message: ${event.data}`);
+                    }
+                };
+
+                ws.onclose = function(event) {
+                    log(`🔒 Connection closed - Code: ${event.code}, Reason: ${event.reason}`);
+                    updateStatus('Disconnected', 'error');
+                };
+
+                ws.onerror = function(error) {
+                    log(`❌ WebSocket error: ${error}`);
+                    updateStatus('Error', 'error');
+                };
+
+            } catch (error) {
+                log(`❌ Failed to create WebSocket: ${error}`);
+                updateStatus('Error', 'error');
+            }
+        }
+
+        function subscribeToICPUSDT() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not connected');
+                return;
+            }
+
+            log('📡 Subscribing to ICPUSDT with exchange ID 4...');
+            ws.send(JSON.stringify({
+                type: 'subscribe_ticker',
+                symbols: ['ICPUSDT'],
+                exchangeId: 4  // Use exchange 4 (Binance testnet)
+            }));
+        }
+
+        function subscribeToMultiple() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not connected');
+                return;
+            }
+
+            const symbols = ['ICPUSDT', 'BTCUSDT', 'ETHUSDT'];
+            log(`📡 Subscribing to multiple symbols with exchange ID 4: ${symbols.join(', ')}`);
+            ws.send(JSON.stringify({
+                type: 'subscribe_ticker',
+                symbols: symbols,
+                exchangeId: 4  // Use exchange 4 (Binance testnet)
+            }));
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+            }
+            updateStatus('Disconnected', 'info');
+            log('🔌 Disconnected manually');
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = 'Log cleared...\n';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 My-Bots ticker test page loaded. Click Connect to start.');
+        };
+
+        // Clean up on page unload
+        window.onbeforeunload = function() {
+            if (ws) {
+                ws.close();
+            }
+        };
+    </script>
+</body>
+</html>

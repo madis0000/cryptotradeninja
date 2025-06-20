@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Balance Display Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .exchange-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            background: #f9f9f9;
+        }
+        .balance-display {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 10px 0;
+        }
+        .loading {
+            color: #3498db;
+            font-style: italic;
+        }
+        .debug-info {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Balance Display Fix Test</h1>
+        <p>Testing the new timeout and fallback mechanism for balance calculations.</p>
+        
+        <div id="status" class="status info">
+            🔄 Initializing test...
+        </div>
+
+        <button onclick="connectWebSocket()">🔌 Connect WebSocket</button>
+        <button onclick="requestBalances()">💰 Request All Balances</button>
+        <button onclick="clearLogs()">🧹 Clear Logs</button>
+        <button onclick="simulateTimeout()">⏰ Simulate Timeout Scenario</button>
+    </div>
+
+    <div class="container">
+        <h2>📊 Exchange Balances</h2>
+        <div id="exchangeBalances">
+            <!-- Balance cards will be inserted here -->
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🐛 Debug Console</h2>
+        <div id="debugConsole" class="debug-info">
+            Ready for testing...
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let isConnected = false;
+        let balanceStates = {};
+
+        // Mock ticker service for testing timeout scenarios
+        const mockTickerService = {
+            prices: {},
+            getAllPrices() {
+                return this.prices;
+            },
+            getCurrentPrice(asset) {
+                return this.prices[`${asset}USDT`] || null;
+            },
+            // Simulate having no prices (for timeout test)
+            clearPrices() {
+                this.prices = {};
+                log('🚫 Cleared all ticker prices (simulating timeout scenario)');
+            },
+            // Add some sample prices
+            addSamplePrices() {
+                this.prices = {
+                    'BTCUSDT': 95000,
+                    'ETHUSDT': 3500,
+                    'BNBUSDT': 680,
+                    'SOLUSDT': 185
+                };
+                log('📈 Added sample ticker prices');
+            }
+        };
+
+        function log(message) {
+            const debugConsole = document.getElementById('debugConsole');
+            const timestamp = new Date().toLocaleTimeString();
+            debugConsole.textContent += `[${timestamp}] ${message}\n`;
+            debugConsole.scrollTop = debugConsole.scrollHeight;
+            console.log(message);
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function clearLogs() {
+            document.getElementById('debugConsole').textContent = 'Debug console cleared...\n';
+        }
+
+        // Balance calculation functions (copied from utils with modifications for testing)
+        function calculateUsdtBalance(balances) {
+            const usdtBalance = balances.find(balance => balance.asset === 'USDT');
+            if (usdtBalance) {
+                return (parseFloat(usdtBalance.free || '0') + parseFloat(usdtBalance.locked || '0')).toFixed(2);
+            }
+            return '0.00';
+        }
+
+        function calculateTotalUsdtValueSync(balances) {
+            log(`🔄 Synchronous calculation for ${balances?.length || 0} balances`);
+            
+            if (!balances || balances.length === 0) {
+                return '0.00';
+            }
+
+            let totalUsdtValue = 0;
+
+            // Filter balances to only include assets with non-zero balance
+            const nonZeroBalances = balances.filter(balance => {
+                const totalBalance = parseFloat(balance.free || '0') + parseFloat(balance.locked || '0');
+                return totalBalance > 0;
+            });
+
+            // Process USDT first
+            const usdtBalance = nonZeroBalances.find(balance => balance.asset === 'USDT');
+            if (usdtBalance) {
+                const totalBalance = parseFloat(usdtBalance.free || '0') + parseFloat(usdtBalance.locked || '0');
+                totalUsdtValue += totalBalance;
+                log(`💵 USDT balance: ${totalBalance}`);
+            }
+
+            // Get prices from mock ticker service
+            const allPrices = mockTickerService.getAllPrices();
+            
+            if (Object.keys(allPrices).length === 0) {
+                log(`⚠️ No ticker prices available for sync calculation, returning USDT-only: $${totalUsdtValue.toFixed(2)}`);
+                return totalUsdtValue.toFixed(2);
+            }
+
+            // For major assets only
+            const MAJOR_ASSETS = ['BTC', 'ETH', 'BNB', 'SOL', 'ADA', 'DOT', 'LINK', 'UNI', 'DOGE', 'AVAX'];
+            
+            const majorAssetBalances = nonZeroBalances.filter(balance => 
+                MAJOR_ASSETS.includes(balance.asset) && balance.asset !== 'USDT'
+            );
+
+            for (const balance of majorAssetBalances) {
+                const totalBalance = parseFloat(balance.free || '0') + parseFloat(balance.locked || '0');
+                
+                try {
+                    const priceInUsdt = mockTickerService.getCurrentPrice(balance.asset);
+                    
+                    if (priceInUsdt && priceInUsdt > 0) {
+                        const assetUsdtValue = totalBalance * priceInUsdt;
+                        totalUsdtValue += assetUsdtValue;
+                        log(`✅ ${balance.asset}: ${totalBalance} × $${priceInUsdt} = $${assetUsdtValue.toFixed(2)} (sync)`);
+                    }
+                } catch (error) {
+                    log(`⚠️ Skipping ${balance.asset} in sync calculation`);
+                }
+            }
+
+            log(`✅ Sync total USDT value: $${totalUsdtValue.toFixed(2)}`);
+            return totalUsdtValue.toFixed(2);
+        }
+
+        async function calculateTotalUsdtValue(balances, exchangeId, timeoutMs = 2000) {
+            log(`🔄 Starting async calculation for ${balances?.length || 0} balances with ${timeoutMs}ms timeout`);
+            
+            if (!balances || balances.length === 0) {
+                return '0.00';
+            }
+
+            // Create a promise that resolves with the calculation
+            const calculationPromise = new Promise((resolve) => {
+                try {
+                    // Simulate some async work
+                    setTimeout(() => {
+                        const result = calculateTotalUsdtValueSync(balances);
+                        log(`✅ Async calculation completed: $${result}`);
+                        resolve(result);
+                    }, 500); // Simulate 500ms of work
+                } catch (error) {
+                    log(`❌ Error in async calculation: ${error.message}`);
+                    const usdtOnly = calculateUsdtBalance(balances);
+                    log(`🔄 Fallback to USDT-only: $${usdtOnly}`);
+                    resolve(usdtOnly);
+                }
+            });
+
+            // Create a timeout promise
+            const timeoutPromise = new Promise((resolve) => {
+                setTimeout(() => {
+                    log(`⏰ Calculation timed out after ${timeoutMs}ms, using USDT-only fallback`);
+                    const usdtOnly = calculateUsdtBalance(balances);
+                    log(`🔄 Timeout fallback to USDT-only: $${usdtOnly}`);
+                    resolve(usdtOnly);
+                }, timeoutMs);
+            });
+
+            // Race between calculation and timeout
+            return Promise.race([calculationPromise, timeoutPromise]);
+        }
+
+        function displayExchangeBalance(exchangeId, exchangeName, balance, loading = false, error = null) {
+            const container = document.getElementById('exchangeBalances');
+            let card = document.getElementById(`exchange-${exchangeId}`);
+            
+            if (!card) {
+                card = document.createElement('div');
+                card.id = `exchange-${exchangeId}`;
+                card.className = 'exchange-card';
+                container.appendChild(card);
+            }
+
+            let balanceDisplay = '';
+            if (loading) {
+                balanceDisplay = '<span class="loading">Loading balance...</span>';
+            } else if (error) {
+                balanceDisplay = `<span style="color: #e74c3c;">Error: ${error}</span>`;
+            } else {
+                balanceDisplay = `<span class="balance-display">$${balance} USDT</span>`;
+            }
+
+            card.innerHTML = `
+                <h3>${exchangeName} (ID: ${exchangeId})</h3>
+                ${balanceDisplay}
+                <div style="margin-top: 10px;">
+                    <small>State: ${loading ? 'Loading' : error ? 'Error' : 'Loaded'}</small>
+                </div>
+            `;
+        }
+
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('✅ WebSocket already connected');
+                return;
+            }
+
+            log('🔌 Connecting to WebSocket...');
+            ws = new WebSocket('ws://localhost:3001/api/ws');
+
+            ws.onopen = () => {
+                isConnected = true;
+                updateStatus('✅ WebSocket connected', 'success');
+                log('✅ WebSocket connection established');
+                
+                // Authenticate
+                ws.send(JSON.stringify({
+                    type: 'authenticate',
+                    userId: 1
+                }));
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`📨 Received: ${JSON.stringify(data)}`);
+                    
+                    if (data.type === 'balance_update' && data.data?.balances) {
+                        const exchangeId = data.exchangeId;
+                        const exchangeName = `Exchange ${exchangeId}`;
+                        
+                        log(`💰 Processing balance for exchange ${exchangeId} with ${data.data.balances.length} assets`);
+                        
+                        // Show loading state
+                        displayExchangeBalance(exchangeId, exchangeName, '0.00', true);
+                        
+                        // Calculate immediate value using sync calculation
+                        const immediateValue = calculateTotalUsdtValueSync(data.data.balances);
+                        log(`⚡ Immediate balance value: ${immediateValue} USDT`);
+                        
+                        // Update with immediate value
+                        displayExchangeBalance(exchangeId, exchangeName, immediateValue, false);
+                        
+                        // Then try async calculation with timeout
+                        calculateTotalUsdtValue(data.data.balances, exchangeId, 3000).then(asyncValue => {
+                            log(`✅ Async balance calculated: ${asyncValue} USDT`);
+                            
+                            if (asyncValue !== immediateValue) {
+                                log(`🔄 Updating with more accurate async value: ${asyncValue} (was ${immediateValue})`);
+                                displayExchangeBalance(exchangeId, exchangeName, asyncValue, false);
+                            } else {
+                                log(`✅ Async value matches immediate value, no update needed`);
+                            }
+                        }).catch(error => {
+                            log(`❌ Async calculation failed: ${error.message}`);
+                        });
+                    }
+                } catch (error) {
+                    log(`❌ Error parsing message: ${error.message}`);
+                }
+            };
+
+            ws.onerror = (error) => {
+                updateStatus('❌ WebSocket error', 'error');
+                log(`❌ WebSocket error: ${error}`);
+            };
+
+            ws.onclose = () => {
+                isConnected = false;
+                updateStatus('🔌 WebSocket disconnected', 'warning');
+                log('🔌 WebSocket connection closed');
+            };
+        }
+
+        function requestBalances() {
+            if (!isConnected) {
+                updateStatus('❌ WebSocket not connected', 'error');
+                return;
+            }
+
+            log('📤 Requesting balances for all exchanges...');
+            
+            // Add sample prices for realistic testing
+            mockTickerService.addSamplePrices();
+            
+            // Request balance for exchange 5 (Binance live)
+            ws.send(JSON.stringify({
+                type: 'get_balance',
+                exchangeId: 5
+            }));
+
+            // Request balance for exchange 4 (Binance testnet)
+            ws.send(JSON.stringify({
+                type: 'get_balance',
+                exchangeId: 4
+            }));
+
+            updateStatus('📤 Balance requests sent', 'info');
+        }
+
+        function simulateTimeout() {
+            log('⏰ Simulating timeout scenario...');
+            
+            // Clear ticker prices to simulate timeout condition  
+            mockTickerService.clearPrices();
+            
+            // Create sample balance data for testing
+            const sampleBalances = [
+                { asset: 'USDT', free: '150.50', locked: '0.00' },
+                { asset: 'BTC', free: '0.001', locked: '0.0005' },
+                { asset: 'ETH', free: '0.5', locked: '0.0' },
+                { asset: 'BNB', free: '2.5', locked: '0.0' }
+            ];
+
+            log(`🔄 Testing with sample data: ${sampleBalances.length} assets`);
+            
+            // Show loading state
+            displayExchangeBalance(999, 'Test Exchange (Timeout)', '0.00', true);
+            
+            // Calculate immediate value (should be USDT-only due to no prices)
+            const immediateValue = calculateTotalUsdtValueSync(sampleBalances);
+            log(`⚡ Immediate value (no prices): ${immediateValue} USDT`);
+            
+            // Update with immediate value
+            displayExchangeBalance(999, 'Test Exchange (Timeout)', immediateValue, false);
+            
+            // Test async calculation with very short timeout
+            calculateTotalUsdtValue(sampleBalances, 999, 1000).then(asyncValue => {
+                log(`✅ Async value with timeout: ${asyncValue} USDT`);
+                
+                if (asyncValue !== immediateValue) {
+                    displayExchangeBalance(999, 'Test Exchange (Timeout)', asyncValue, false);
+                }
+            }).catch(error => {
+                log(`❌ Async calculation with timeout failed: ${error.message}`);
+            });
+
+            updateStatus('⏰ Timeout scenario simulated', 'warning');
+        }
+
+        // Initialize
+        log('🚀 Balance Fix Test initialized');
+        updateStatus('Ready for testing', 'info');
+    </script>
+</body>
+</html>

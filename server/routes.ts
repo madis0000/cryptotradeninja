@@ -426,6 +426,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           console.log(`[MARTINGALE] Bot ${bot.id} marked as active after successful order placement`);
           
+          // Ensure user data stream is running for this exchange to monitor order fills
+          try {
+            console.log(`[USER DATA STREAM] Ensuring user data stream for exchange ${bot.exchangeId}...`);
+            await wsService.startUserDataStreamForExchange(bot.exchangeId);
+            console.log(`[USER DATA STREAM] ✅ User data stream active for exchange ${bot.exchangeId}`);
+          } catch (streamError) {
+            console.error(`[USER DATA STREAM] ⚠️ Failed to start user data stream for exchange ${bot.exchangeId}:`, streamError);
+            // Don't fail bot creation if user data stream fails - manual monitoring will still work
+          }
+          
           // Broadcast bot status update
           wsService.broadcastBotStatusUpdate({
             botId: bot.id,
@@ -1732,8 +1742,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Broadcast order fill notification to WebSocket clients (similar to martingale strategy)
         try {
-          console.log(`[MANUAL ORDER] 📢 Broadcasting order fill notification...`);
+          console.log(`[MANUAL ORDER] 📢 Broadcasting order placement notification...`);
           
+          const orderPlacementData = {
+            exchangeOrderId: exchangeOrderId,
+            symbol: symbol,
+            side: side,
+            quantity: filledQuantity,
+            price: filledPrice,
+            status: orderStatus,
+            exchangeId: parseInt(exchangeId),
+            userId: userId,
+            timestamp: Date.now(),
+            isManualOrder: true // Flag to identify this as a manual order
+          };
+
+          // Broadcast manual order placement notification (for sound notification)
+          wsService.broadcastManualOrderPlacementNotification(orderPlacementData);
+
           const orderFillData = {
             exchangeOrderId: exchangeOrderId,
             symbol: symbol,
@@ -1746,12 +1772,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             timestamp: Date.now()
           };
 
-          // Broadcast to all connected clients
+          // Also broadcast order fill notification (for UI updates)
           wsService.broadcastOrderFillNotification(orderFillData);
 
-          console.log(`[MANUAL ORDER] ✅ Order fill notification broadcasted`);
+          console.log(`[MANUAL ORDER] ✅ Order notifications broadcasted`);
         } catch (broadcastError) {
-          console.error(`[MANUAL ORDER] ⚠️ Failed to broadcast order fill notification:`, broadcastError);
+          console.error(`[MANUAL ORDER] ⚠️ Failed to broadcast order notifications:`, broadcastError);
           // Don't fail the order placement if broadcast fails
         }
 
@@ -2081,6 +2107,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Market data is now served through WebSocket-only communication
   // Frontend connects directly to the main WebSocket service
+
+  // Test broadcasting endpoint for development
+  app.post("/api/test-broadcasting", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const wsServiceInstance = wsService;
+      if (!wsServiceInstance) {
+        return res.status(500).json({ error: 'WebSocket service not available' });
+      }
+
+      console.log('🧪 [TEST] Manual broadcasting test triggered');
+
+      // Get existing bots for testing
+      const bots = await storage.getTradingBotsByUserId(req.user.id);
+      
+      if (bots.length === 0) {
+        return res.status(404).json({ error: 'No bots found for testing' });
+      }
+
+      const testBot = bots[0];
+      console.log(`🤖 [TEST] Using bot: ${testBot.name} (ID: ${testBot.id})`);
+
+      // Test 1: Bot Status Update
+      console.log('🧪 [TEST] Broadcasting bot status update...');
+      wsServiceInstance.broadcastBotStatusUpdate({
+        id: testBot.id,
+        status: testBot.isActive ? 'active' : 'inactive',
+        name: testBot.name,
+        tradingPair: testBot.tradingPair,
+        strategy: testBot.strategy,
+        direction: testBot.direction
+      });
+
+      // Test 2: Bot Data Update
+      console.log('🧪 [TEST] Broadcasting bot data update...');
+      wsServiceInstance.broadcastBotDataUpdate({
+        type: 'bot_update',
+        data: {
+          bot: testBot,
+          action: 'update'
+        }
+      });
+
+      // Test 3: Mock Order Fill Notification
+      console.log('🧪 [TEST] Broadcasting order fill notification...');
+      wsServiceInstance.broadcastOrderFillNotification({
+        id: 999,
+        exchangeOrderId: 'TEST_ORDER_' + Date.now(),
+        botId: testBot.id,
+        orderType: 'base_order',
+        symbol: testBot.tradingPair,
+        side: 'BUY',
+        quantity: '0.01',
+        price: '50.00',
+        status: 'filled'
+      });
+
+      // Test 4: Mock Cycle Update
+      console.log('🧪 [TEST] Broadcasting cycle update...');
+      wsServiceInstance.broadcastBotCycleUpdate({
+        botId: testBot.id,
+        id: 999,
+        cycleNumber: 1,
+        status: 'active',
+        baseOrderFilled: true,
+        currentPrice: 50.5,
+        averagePrice: 50.0,
+        totalQuantity: 0.01,
+        totalCost: 50.0,
+        unrealizedPnL: 0.5
+      });
+
+      // Test 5: Order Status Update
+      console.log('🧪 [TEST] Broadcasting order status update...');
+      wsServiceInstance.broadcastOrderStatusUpdate({
+        orderId: 'TEST_ORDER_' + Date.now(),
+        symbol: testBot.tradingPair,
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50.00',
+        status: 'FILLED',
+        exchangeId: testBot.exchangeId
+      });
+
+      console.log('✅ [TEST] All broadcasting tests completed!');
+
+      res.json({
+        success: true,
+        message: 'Broadcasting tests completed',
+        testBot: {
+          id: testBot.id,
+          name: testBot.name,
+          tradingPair: testBot.tradingPair
+        },
+        eventsTriggered: [
+          'bot_status_update',
+          'bot_data_update', 
+          'order_fill_notification',
+          'bot_cycle_update',
+          'order_status_update'
+        ]
+      });
+
+    } catch (error) {
+      console.error('❌ [TEST] Error during broadcasting test:', error);
+      res.status(500).json({ 
+        error: 'Broadcasting test failed', 
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
 
   // Health check endpoint
   app.get("/api/health", (req, res) => {

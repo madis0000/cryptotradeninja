@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 import { useMarketData } from "@/hooks/useMarketData";
+import { useBotUpdates } from "@/hooks/useBotUpdates";
 import { BotDetailsPage } from "./bot-details";
 import { format } from 'date-fns';
 import { webSocketSingleton } from "@/services/WebSocketSingleton";
@@ -26,10 +27,12 @@ export function MyBotsPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
   // Initialize order notifications and market data
   useOrderNotifications();
   const marketDataHook = useMarketData();
+  
+  // Initialize bot updates (status, data, cycle, stats)
+  useBotUpdates();
 
   // Utility functions for bot data calculations
   const formatCurrency = (amount: string | number) => {
@@ -627,39 +630,47 @@ export function MyBotsPage() {
     // Connect and subscribe using the singleton
     if (!webSocketSingleton.isConnected()) {
       webSocketSingleton.connect();
-    }
-
-    // Subscribe to ticker updates for all bot symbols
+    }    // Subscribe to ticker updates for all bot symbols
     const unsubscribe = webSocketSingleton.subscribe((data: any) => {
-      if (data.type === 'ticker_update' && data.data) {
+      console.log('[MY BOTS] Received WebSocket message:', data?.type);
+      
+      if (data.type === 'market_update' && data.data) {
         const update = data.data;
+        console.log('[MY BOTS] Market update received:', update.symbol, update.price);
         // Update price in the marketData state
         setMarketData((prev: any) => ({
           ...prev,
           [update.symbol]: {
             symbol: update.symbol,
             price: parseFloat(update.price),
-            priceChangePercent: parseFloat(update.priceChangePercent)
+            priceChangePercent: parseFloat(update.priceChangePercent || 0)
+          }
+        }));
+      } else if (data.type === 'ticker_update' && data.data) {
+        const update = data.data;
+        console.log('[MY BOTS] Ticker update received:', update.symbol, update.price);
+        // Update price in the marketData state
+        setMarketData((prev: any) => ({
+          ...prev,
+          [update.symbol]: {
+            symbol: update.symbol,
+            price: parseFloat(update.price),
+            priceChangePercent: parseFloat(update.priceChangePercent || 0)
           }
         }));
       }
-    });
-
-    // Send subscription message with correct format
+    });    // Send subscription message with correct format
     webSocketSingleton.sendMessage({
-      type: 'subscribe',
+      type: 'subscribe_ticker',
       symbols: symbolsArray,
-      dataType: 'ticker',
-      exchangeId: selectedExchangeId
+      exchangeId: selectedExchangeId || 4 // Default to exchange 4 (Binance testnet) instead of 1
     });
 
     return () => {
-      unsubscribe();
-      // Unsubscribe from symbols when component unmounts
+      unsubscribe();      // Unsubscribe from symbols when component unmounts
       webSocketSingleton.sendMessage({
-        type: 'unsubscribe',
-        symbols: symbolsArray,
-        dataType: 'ticker'
+        type: 'unsubscribe_ticker',
+        symbols: symbolsArray
       });
     };
   }, [activeBots, selectedExchangeId]);

@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Sound Notifications</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: white;
+        }
+        button {
+            margin: 10px;
+            padding: 15px 25px;
+            font-size: 16px;
+            background-color: #007acc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #005fa3;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #333;
+            border-radius: 8px;
+        }
+        .log {
+            background-color: #2d2d2d;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔊 Sound Notification Test</h1>
+    
+    <div class="section">
+        <h2>Audio Context Status</h2>
+        <p>Context State: <span id="contextState">-</span></p>
+        <p>Volume: <span id="volume">0.5</span></p>
+        <button onclick="initAudioContext()">Initialize Audio Context</button>
+        <button onclick="resumeAudioContext()">Resume Audio Context</button>
+    </div>
+
+    <div class="section">
+        <h2>Basic Sound Tests</h2>
+        <button onclick="testSound('notification')">Test Notification Sound</button>
+        <button onclick="testSound('beep')">Test Beep Sound</button>
+        <button onclick="testSound('chin-chin')">Test Chin-Chin Sound</button>
+    </div>
+
+    <div class="section">
+        <h2>Manual Order Notification Test</h2>
+        <button onclick="testManualOrderPlacementNotification()">Test Manual Order Placement</button>
+        <button onclick="simulateWebSocketNotification()">Simulate WebSocket Notification</button>
+    </div>
+
+    <div class="section">
+        <h2>WebSocket Connection Test</h2>
+        <button onclick="connectWebSocket()">Connect to WebSocket</button>
+        <button onclick="disconnectWebSocket()">Disconnect WebSocket</button>
+        <p>WebSocket Status: <span id="wsStatus">Disconnected</span></p>
+    </div>
+
+    <div class="section">
+        <h2>Debug Log</h2>
+        <button onclick="clearLog()">Clear Log</button>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let audioContext = null;
+        let loadedSounds = new Map();
+        let volume = 0.5;
+        let websocket = null;
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('log');
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('log').textContent = '';
+        }
+
+        function updateStatus() {
+            document.getElementById('contextState').textContent = audioContext ? audioContext.state : 'null';
+            document.getElementById('volume').textContent = volume;
+        }
+
+        function initAudioContext() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                log('✅ Audio context initialized');
+                updateStatus();
+            } catch (error) {
+                log('❌ Failed to initialize audio context: ' + error.message);
+            }
+        }
+
+        async function resumeAudioContext() {
+            if (!audioContext) {
+                log('❌ Audio context not initialized');
+                return;
+            }
+
+            try {
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                    log('✅ Audio context resumed');
+                } else {
+                    log('ℹ️ Audio context already running, state: ' + audioContext.state);
+                }
+                updateStatus();
+            } catch (error) {
+                log('❌ Failed to resume audio context: ' + error.message);
+            }
+        }
+
+        function generateNotificationSound() {
+            if (!audioContext) throw new Error('Audio context not available');
+            
+            const sampleRate = audioContext.sampleRate;
+            const duration = 0.5; // 500ms
+            const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate);
+            const data = buffer.getChannelData(0);
+
+            for (let i = 0; i < data.length; i++) {
+                const t = i / sampleRate;
+                const progress = t / duration;
+                const frequency = 400 + (progress * 200); // 400Hz to 600Hz
+                const envelope = Math.sin(Math.PI * progress) * 0.2; // Bell curve envelope
+                data[i] = Math.sin(2 * Math.PI * frequency * t) * envelope;
+            }
+
+            return buffer;
+        }
+
+        function generateBeepSound() {
+            if (!audioContext) throw new Error('Audio context not available');
+            
+            const sampleRate = audioContext.sampleRate;
+            const duration = 0.3; // 300ms
+            const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate);
+            const data = buffer.getChannelData(0);
+
+            for (let i = 0; i < data.length; i++) {
+                const t = i / sampleRate;
+                const envelope = Math.exp(-t * 5); // Gradual decay
+                data[i] = Math.sin(2 * Math.PI * 600 * t) * envelope * 0.2;
+            }
+
+            return buffer;
+        }
+
+        function generateChinChinSound() {
+            if (!audioContext) throw new Error('Audio context not available');
+            
+            const sampleRate = audioContext.sampleRate;
+            const duration = 0.6; // 600ms total
+            const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate);
+            const data = buffer.getChannelData(0);
+
+            // First "chin" - higher frequency
+            for (let i = 0; i < sampleRate * 0.15; i++) {
+                const t = i / sampleRate;
+                const envelope = Math.exp(-t * 8); // Quick decay
+                data[i] = Math.sin(2 * Math.PI * 800 * t) * envelope * 0.3;
+            }
+
+            // Short pause
+            for (let i = sampleRate * 0.15; i < sampleRate * 0.25; i++) {
+                data[i] = 0;
+            }
+
+            // Second "chin" - slightly lower frequency
+            for (let i = sampleRate * 0.25; i < sampleRate * 0.4; i++) {
+                const t = (i - sampleRate * 0.25) / sampleRate;
+                const envelope = Math.exp(-t * 8); // Quick decay
+                data[i] = Math.sin(2 * Math.PI * 700 * t) * envelope * 0.3;
+            }
+
+            return buffer;
+        }
+
+        async function getSound(soundName) {
+            if (loadedSounds.has(soundName)) {
+                return loadedSounds.get(soundName);
+            }
+
+            let buffer;
+            
+            switch (soundName) {
+                case 'chin-chin':
+                    buffer = generateChinChinSound();
+                    break;
+                case 'beep':
+                    buffer = generateBeepSound();
+                    break;
+                case 'notification':
+                    buffer = generateNotificationSound();
+                    break;
+                default:
+                    buffer = generateBeepSound(); // Fallback
+            }
+
+            loadedSounds.set(soundName, buffer);
+            return buffer;
+        }
+
+        async function playSound(soundName) {
+            log(`🔊 Playing sound: ${soundName}`);
+            
+            if (!audioContext) {
+                log('❌ Audio context not available');
+                return;
+            }
+
+            try {
+                // Resume audio context if suspended (due to autoplay policies)
+                if (audioContext.state === 'suspended') {
+                    log('🔄 Resuming suspended audio context...');
+                    await audioContext.resume();
+                    log('✅ Audio context resumed, new state: ' + audioContext.state);
+                }
+
+                const buffer = await getSound(soundName);
+                log(`✅ Got sound buffer, length: ${buffer.length}`);
+                
+                const source = audioContext.createBufferSource();
+                const gainNode = audioContext.createGain();
+                
+                source.buffer = buffer;
+                gainNode.gain.value = volume;
+                
+                source.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                log('🎵 Starting sound playback...');
+                source.start();
+                log('✅ Sound started successfully');
+                
+            } catch (error) {
+                log('❌ Failed to play sound: ' + error.message);
+            }
+        }
+
+        async function testSound(soundName) {
+            if (!audioContext) {
+                initAudioContext();
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            await playSound(soundName);
+        }
+
+        async function testManualOrderPlacementNotification() {
+            log('🧪 Testing manual order placement notification...');
+            
+            const settings = {
+                soundNotificationsEnabled: true,
+                manualOrderSoundEnabled: true,
+                manualOrderSound: 'notification',
+                notificationVolume: '0.50'
+            };
+
+            log('📋 Settings: ' + JSON.stringify(settings));
+
+            if (!settings.soundNotificationsEnabled) {
+                log('❌ Sound notifications disabled');
+                return;
+            }
+            
+            const manualOrderSoundEnabled = settings.manualOrderSoundEnabled !== false;
+            if (!manualOrderSoundEnabled) {
+                log('❌ Manual order sounds disabled');
+                return;
+            }
+
+            const soundName = settings.manualOrderSound || 'notification';
+            log(`🔊 Playing sound: ${soundName}`);
+            
+            volume = parseFloat(settings.notificationVolume);
+            log(`🔊 Set volume to: ${volume}`);
+            
+            try {
+                await playSound(soundName);
+                log('✅ Successfully played manual order placement sound');
+            } catch (error) {
+                log('❌ Failed to play manual order placement sound: ' + error.message);
+            }
+        }
+
+        function simulateWebSocketNotification() {
+            log('📡 Simulating WebSocket notification...');
+            
+            const mockOrderData = {
+                exchangeOrderId: 'TEST123456',
+                symbol: 'DOGEUSDT',
+                side: 'BUY',
+                quantity: '100',
+                price: '0.3150',
+                timestamp: Date.now()
+            };
+
+            log('📨 Mock order data: ' + JSON.stringify(mockOrderData));
+
+            // Simulate the notification handler
+            handleManualOrderPlacementNotification(mockOrderData);
+        }
+
+        async function handleManualOrderPlacementNotification(orderData) {
+            log('🔔 Manual order placement handler called: ' + JSON.stringify(orderData));
+            
+            const settings = {
+                soundNotificationsEnabled: true,
+                manualOrderSoundEnabled: true,
+                manualOrderSound: 'notification',
+                notificationVolume: '0.50'
+            };
+            
+            log('📋 Settings: ' + JSON.stringify(settings));
+            
+            if (!settings?.soundNotificationsEnabled) {
+                log('❌ Sound notifications disabled, skipping');
+                return;
+            }
+
+            try {
+                // Check if this is a manual order (not from a bot)
+                if (orderData.botId) {
+                    log('🤖 This is a bot order, skipping manual sound');
+                    return;
+                }
+
+                log('🔊 Playing manual order placement sound...');
+                
+                // Play manual order placement sound
+                const soundName = settings.manualOrderSound || 'notification';
+                volume = parseFloat(settings.notificationVolume);
+                await playSound(soundName);
+                
+                log(`✅ Played manual order placement sound for order ${orderData.exchangeOrderId}`);
+            } catch (error) {
+                log('❌ Failed to play manual order placement notification: ' + error.message);
+            }
+        }
+
+        function connectWebSocket() {
+            try {
+                websocket = new WebSocket('ws://localhost:3001/api/ws');
+                
+                websocket.onopen = function() {
+                    log('✅ WebSocket connected');
+                    document.getElementById('wsStatus').textContent = 'Connected';
+                    
+                    // Send test message
+                    websocket.send(JSON.stringify({
+                        type: 'test',
+                        message: 'connection_test'
+                    }));
+                };
+
+                websocket.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log('📨 WebSocket message received: ' + JSON.stringify(data));
+                        
+                        if (data.type === 'manual_order_placement_notification') {
+                            log('🔔 Received manual order placement notification');
+                            handleManualOrderPlacementNotification(data.data);
+                        }
+                    } catch (error) {
+                        log('❌ Failed to parse WebSocket message: ' + error.message);
+                    }
+                };
+
+                websocket.onclose = function() {
+                    log('❌ WebSocket disconnected');
+                    document.getElementById('wsStatus').textContent = 'Disconnected';
+                };
+
+                websocket.onerror = function(error) {
+                    log('❌ WebSocket error: ' + error.message);
+                };
+            } catch (error) {
+                log('❌ Failed to connect WebSocket: ' + error.message);
+            }
+        }
+
+        function disconnectWebSocket() {
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+            }
+        }
+
+        // Initialize
+        updateStatus();
+        log('🚀 Sound notification test page loaded');
+        log('👆 Click "Initialize Audio Context" first, then test sounds');
+    </script>
+</body>
+</html>

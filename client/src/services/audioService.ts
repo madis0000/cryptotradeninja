@@ -126,6 +126,10 @@ export class AudioService {
 
   // Play sound
   public async playSound(soundName: string): Promise<void> {
+    console.log('[AUDIO SERVICE] playSound called with:', soundName);
+    console.log('[AUDIO SERVICE] Audio context state:', this.audioContext?.state);
+    console.log('[AUDIO SERVICE] Volume:', this.volume);
+    
     if (!this.audioContext) {
       console.warn('Audio context not available');
       return;
@@ -134,10 +138,14 @@ export class AudioService {
     try {
       // Resume audio context if suspended (due to autoplay policies)
       if (this.audioContext.state === 'suspended') {
+        console.log('[AUDIO SERVICE] Resuming suspended audio context...');
         await this.audioContext.resume();
+        console.log('[AUDIO SERVICE] Audio context resumed, new state:', this.audioContext.state);
       }
 
       const buffer = await this.getSound(soundName);
+      console.log('[AUDIO SERVICE] Got sound buffer, length:', buffer.length);
+      
       const source = this.audioContext.createBufferSource();
       const gainNode = this.audioContext.createGain();
       
@@ -147,9 +155,13 @@ export class AudioService {
       source.connect(gainNode);
       gainNode.connect(this.audioContext.destination);
       
+      console.log('[AUDIO SERVICE] Starting sound playback...');
       source.start();
+      console.log('[AUDIO SERVICE] Sound started successfully');
+      
     } catch (error) {
       console.warn('Failed to play sound:', error);
+      throw error;
     }
   }
 
@@ -180,6 +192,39 @@ export class AudioService {
         this.setVolume(parseFloat(settings.notificationVolume));
       }
       await this.playSound(soundName);
+    }
+  }
+
+  // Play manual order placement notification
+  public async playManualOrderPlacementNotification(settings?: any): Promise<void> {
+    console.log('[AUDIO SERVICE] Playing manual order placement notification, settings:', settings);
+    
+    if (!settings?.soundNotificationsEnabled) {
+      console.log('[AUDIO SERVICE] Sound notifications disabled');
+      return;
+    }
+    
+    // Check if manual order placement sound is enabled
+    const manualOrderSoundEnabled = settings.manualOrderSoundEnabled !== false;
+    if (!manualOrderSoundEnabled) {
+      console.log('[AUDIO SERVICE] Manual order sounds disabled');
+      return;
+    }
+
+    const soundName = settings.manualOrderSound || 'notification';
+    console.log('[AUDIO SERVICE] Playing sound:', soundName);
+    
+    if (settings.notificationVolume !== undefined) {
+      this.setVolume(parseFloat(settings.notificationVolume));
+      console.log('[AUDIO SERVICE] Set volume to:', parseFloat(settings.notificationVolume));
+    }
+    
+    try {
+      await this.playSound(soundName);
+      console.log('[AUDIO SERVICE] Successfully played manual order placement sound');
+    } catch (error) {
+      console.error('[AUDIO SERVICE] Failed to play manual order placement sound:', error);
+      throw error;
     }
   }
 }

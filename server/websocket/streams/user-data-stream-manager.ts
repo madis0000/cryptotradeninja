@@ -10,6 +10,8 @@ export class UserDataStreamManager {
   private userStreams = new Map<number, WebSocket>(); // exchangeId -> WebSocket
   private listenKeys = new Map<number, string>(); // exchangeId -> listenKey
   private reconnectTimeouts = new Map<number, NodeJS.Timeout>(); // exchangeId -> timeout
+  private failureCount = new Map<number, number>(); // exchangeId -> failure count
+  private maxFailures = 5; // Maximum consecutive failures before stopping reconnect attempts
   
   constructor(tradingOperationsManager: TradingOperationsManager) {
     this.tradingOperationsManager = tradingOperationsManager;
@@ -35,21 +37,48 @@ export class UserDataStreamManager {
       const exchange = await storage.getExchange(exchangeId);
       if (!exchange) {
         throw new Error('Exchange not found');
+      }        // Use database-stored WebSocket stream endpoint
+      let streamUrl;
+      
+      // Check if wsStreamEndpoint is configured in database
+      if (exchange.wsStreamEndpoint) {
+        // For user data streams, we need to handle the URL construction properly
+        // User data streams use /ws/<listenKey> format, not the combined stream format
+        const baseEndpoint = exchange.wsStreamEndpoint;
+          // Check if this is a testnet.binance.vision endpoint
+        if (baseEndpoint.includes('testnet.binance.vision')) {
+          // For testnet user data streams, use wss://stream.testnet.binance.vision/ws/<listenKey>
+          streamUrl = `wss://stream.testnet.binance.vision/ws/${listenKey}`;
+        } else if (baseEndpoint.includes('stream.binance.com')) {
+          // For mainnet user data streams, use wss://stream.binance.com:9443/ws/<listenKey>
+          streamUrl = `wss://stream.binance.com:9443/ws/${listenKey}`;
+        } else {
+          // Generic handling for other endpoints
+          if (baseEndpoint.endsWith('/ws')) {
+            // Database endpoint already includes /ws, just append listenKey
+            streamUrl = `${baseEndpoint}/${listenKey}`;
+          } else {
+            // Database endpoint doesn't include /ws, add it
+            streamUrl = `${baseEndpoint}/ws/${listenKey}`;
+          }
+        }
+        console.log(`[USER DATA STREAM] Using corrected stream endpoint for user data: ${streamUrl.replace(listenKey, 'xxx...xxx')}`);
+      } else {        // Fallback to default endpoints
+        const isTestnet = exchange.isTestnet || exchange.name.toLowerCase().includes('testnet');
+        streamUrl = isTestnet 
+          ? `wss://stream.testnet.binance.vision/ws/${listenKey}`
+          : `wss://stream.binance.com:9443/ws/${listenKey}`;
+        console.log(`[USER DATA STREAM] Using fallback endpoint for ${isTestnet ? 'testnet' : 'mainnet'}`);
       }
       
-      // Use testnet endpoint for testnet exchanges
-      const isTestnet = exchange.name.toLowerCase().includes('testnet');
-      const streamUrl = isTestnet 
-        ? `wss://testnet.binance.vision/ws/${listenKey}`
-        : `wss://stream.binance.com:9443/ws/${listenKey}`;
-      
-      console.log(`[USER DATA STREAM] Connecting to ${isTestnet ? 'testnet' : 'mainnet'} user data stream...`);
+      console.log(`[USER DATA STREAM] Connecting to user data stream: ${streamUrl}`);
       
       const ws = new WebSocket(streamUrl);
-      this.userStreams.set(exchangeId, ws);      
-      ws.on('open', () => {
-        console.log(`[UNIFIED WS OPEN ORDERS] ✅ Connected to ${exchange.name} user data stream`);
-        console.log(`[UNIFIED WS OPEN ORDERS] 🎧 Monitoring order status changes and fills for real-time open orders updates`);
+      this.userStreams.set(exchangeId, ws);        ws.on('open', () => {
+        console.log(`[USER DATA STREAM] ✅ Connected to ${exchange.name} user data stream`);
+        console.log(`[USER DATA STREAM] 🎧 Monitoring order status changes and fills for real-time updates`);
+        // Reset failure count on successful connection
+        this.failureCount.delete(exchangeId);
       });
       
       ws.on('message', (data) => {
@@ -59,15 +88,27 @@ export class UserDataStreamManager {
         } catch (error) {
           console.error('[UNIFIED WS OPEN ORDERS] ❌ Failed to parse message:', error);
         }
+      });      ws.on('error', (error) => {
+        console.error(`[USER DATA STREAM] ❌ WebSocket error for exchange ${exchangeId}:`, error);
+        console.error(`[USER DATA STREAM] ❌ Failed URL: ${streamUrl}`);
+        console.error(`[USER DATA STREAM] ❌ Exchange details: ${exchange.name} (${exchange.isTestnet ? 'testnet' : 'live'})`);
+        console.error(`[USER DATA STREAM] ❌ Listen key: ${listenKey ? listenKey.substring(0, 10) + '...' : 'null'}`);
+        
+        // Increment failure count
+        const currentFailures = this.failureCount.get(exchangeId) || 0;
+        this.failureCount.set(exchangeId, currentFailures + 1);
+        
+        // Only schedule reconnect if we haven't exceeded max failures
+        if (currentFailures < this.maxFailures) {
+          this.scheduleReconnect(exchangeId);
+        } else {
+          console.error(`[USER DATA STREAM] ❌ Max failures (${this.maxFailures}) reached for exchange ${exchangeId}. Stopping reconnect attempts.`);
+          console.error(`[USER DATA STREAM] ❌ Please check your exchange configuration and WebSocket endpoints.`);
+        }
       });
-      
-      ws.on('error', (error) => {
-        console.error(`[UNIFIED WS OPEN ORDERS] ❌ WebSocket error for exchange ${exchangeId}:`, error);
-        this.scheduleReconnect(exchangeId);
-      });
-      
-      ws.on('close', (code, reason) => {
-        console.log(`[UNIFIED WS OPEN ORDERS] 🔌 Connection closed for exchange ${exchangeId} - Code: ${code}, Reason: ${reason}`);
+        ws.on('close', (code, reason) => {
+        console.log(`[USER DATA STREAM] 🔌 Connection closed for exchange ${exchangeId} - Code: ${code}, Reason: ${reason}`);
+        console.log(`[USER DATA STREAM] 🔌 URL was: ${streamUrl}`);
         this.userStreams.delete(exchangeId);
         this.scheduleReconnect(exchangeId);
       });
@@ -287,13 +328,19 @@ export class UserDataStreamManager {
         exchange.apiKey,
         exchange.apiSecret,
         exchange.encryptionIv
-      );
-
-      // Use testnet endpoint for testnet exchanges
-      const isTestnet = exchange.name.toLowerCase().includes('testnet');
-      const baseUrl = isTestnet 
-        ? 'https://testnet.binance.vision'
-        : 'https://api.binance.com';
+      );      // Use database-stored REST API endpoint or fallback
+      let baseUrl;
+      if (exchange.restApiEndpoint) {
+        baseUrl = exchange.restApiEndpoint;
+        console.log(`[USER DATA STREAM] Using database-stored REST endpoint: ${baseUrl}`);
+      } else {
+        const isTestnet = exchange.isTestnet || exchange.name.toLowerCase().includes('testnet');
+        baseUrl = isTestnet 
+          ? 'https://testnet.binance.vision'
+          : 'https://api.binance.com';
+        console.log(`[USER DATA STREAM] Using fallback REST endpoint: ${baseUrl}`);
+      }
+        console.log(`[USER DATA STREAM] Requesting listen key from: ${baseUrl}/api/v3/userDataStream`);
       
       const response = await fetch(`${baseUrl}/api/v3/userDataStream`, {
         method: 'POST',
@@ -309,7 +356,11 @@ export class UserDataStreamManager {
         console.log(`[USER DATA STREAM] ✓ Generated listen key for ${exchange.name}`);
         return data.listenKey;
       } else {
-        console.error(`[USER DATA STREAM] Failed to generate listen key:`, data);
+        console.error(`[USER DATA STREAM] Failed to generate listen key for ${exchange.name}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          data: data
+        });
         return null;
       }
       
@@ -318,7 +369,6 @@ export class UserDataStreamManager {
       return null;
     }
   }
-
   private scheduleReconnect(exchangeId: number): void {
     // Clear existing timeout
     const existingTimeout = this.reconnectTimeouts.get(exchangeId);
@@ -326,21 +376,30 @@ export class UserDataStreamManager {
       clearTimeout(existingTimeout);
     }
 
-    // Schedule reconnection in 5 seconds
+    const currentFailures = this.failureCount.get(exchangeId) || 0;
+    
+    // Don't schedule reconnect if we've exceeded max failures
+    if (currentFailures >= this.maxFailures) {
+      console.log(`[USER DATA STREAM] ⚠️ Not scheduling reconnect for exchange ${exchangeId} - max failures reached`);
+      return;
+    }
+
+    // Schedule reconnection with exponential backoff
+    const backoffDelay = Math.min(5000 * Math.pow(2, currentFailures), 60000); // Max 60 seconds
+    console.log(`[USER DATA STREAM] ⏰ Scheduling reconnect for exchange ${exchangeId} in ${backoffDelay}ms (attempt ${currentFailures + 1}/${this.maxFailures})`);
+    
     const timeout = setTimeout(async () => {
       console.log(`[USER DATA STREAM] Attempting to reconnect to exchange ${exchangeId}...`);
       try {
         await this.startUserDataStream(exchangeId);
       } catch (error) {
         console.error(`[USER DATA STREAM] Reconnection failed for exchange ${exchangeId}:`, error);
-        // Schedule another reconnect
-        this.scheduleReconnect(exchangeId);
+        // Don't schedule another reconnect here - let the error handler do it
       }
-    }, 5000);
+    }, backoffDelay);
     
     this.reconnectTimeouts.set(exchangeId, timeout);
   }
-
   async stopUserDataStream(exchangeId: number): Promise<void> {
     console.log(`[USER DATA STREAM] Stopping user data stream for exchange ${exchangeId}`);
     
@@ -350,6 +409,9 @@ export class UserDataStreamManager {
       clearTimeout(timeout);
       this.reconnectTimeouts.delete(exchangeId);
     }
+    
+    // Clear failure count
+    this.failureCount.delete(exchangeId);
     
     // Close WebSocket connection
     const ws = this.userStreams.get(exchangeId);
@@ -380,5 +442,11 @@ export class UserDataStreamManager {
 
   getActiveStreams(): number[] {
     return Array.from(this.userStreams.keys()).filter(exchangeId => this.isConnected(exchangeId));
+  }
+
+  // Method to reset failure count for a specific exchange (useful for manual retry)
+  resetFailureCount(exchangeId: number): void {
+    this.failureCount.delete(exchangeId);
+    console.log(`[USER DATA STREAM] Reset failure count for exchange ${exchangeId}`);
   }
 }

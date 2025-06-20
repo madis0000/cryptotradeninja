@@ -73,9 +73,8 @@ class WebSocketSingleton {
     // In development, use port 8080 for WebSocket
     // In production/deployment, use the same port as the main application
     let wsUrl;
-    
-    // Check if we're in development environment
-    const isDev = window.location.port === '5173' || window.location.port === '3000' || 
+      // Check if we're in development environment
+    const isDev = window.location.port === '3000' || 
                   hostname === 'localhost' || hostname === '127.0.0.1' || 
                   hostname.includes('replit.dev');
     
@@ -328,18 +327,17 @@ class WebSocketSingleton {
   public getCurrentInterval(): string {
     return this.currentInterval;
   }
-
-  public subscribeToTickers(symbols: string[]): void {
+  public subscribeToTickers(symbols: string[], exchangeId: number = 4): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('[WEBSOCKET SINGLETON] Cannot subscribe - not connected');
       return;
     }
 
-    console.log('[WEBSOCKET SINGLETON] Subscribing to tickers:', symbols);
+    console.log('[WEBSOCKET SINGLETON] Subscribing to tickers:', symbols, 'on exchange:', exchangeId);
     this.sendMessage({
-      type: 'subscribe',
+      type: 'subscribe_ticker',
       symbols: symbols,
-      dataType: 'ticker'
+      exchangeId: exchangeId
     });
   }
 

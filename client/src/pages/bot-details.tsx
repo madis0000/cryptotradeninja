@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ArrowLeft, Play, Square, TrendingUp, TrendingDown, Trash2 } from 'lucide-react';
 import { useMarketData } from '@/hooks/useMarketData';
+import { useBotUpdates } from '@/hooks/useBotUpdates';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 
@@ -19,9 +20,11 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
   const [showStopDialog, setShowStopDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  
-  const queryClient = useQueryClient();
+    const queryClient = useQueryClient();
   const { toast } = useToast();
+  
+  // Initialize bot updates (status, data, cycle, stats)
+  useBotUpdates();
   // Stop bot mutation
   const stopBotMutation = useMutation({
     mutationFn: async (botId: number) => {
@@ -95,10 +98,24 @@ export function BotDetailsPage({ bot, onBack }: BotDetailsProps) {
     setIsProcessing(true);
     deleteBotMutation.mutate(bot.id);
   };
-
   // Get real-time market data via WebSocket
-  const { getSymbolData } = useMarketData();
+  const { getSymbolData, connectToMarketData, disconnectFromMarketData } = useMarketData();
   const currentMarketData = getSymbolData(bot.tradingPair);
+
+  // Subscribe to market data for this bot's trading pair
+  useEffect(() => {
+    if (bot?.tradingPair && bot?.exchangeId) {
+      console.log(`[BOT DETAILS] Subscribing to market data for ${bot.tradingPair} on exchange ${bot.exchangeId}`);
+      connectToMarketData([bot.tradingPair], bot.exchangeId);
+    }
+
+    return () => {
+      if (bot?.tradingPair) {
+        console.log(`[BOT DETAILS] Unsubscribing from market data for ${bot.tradingPair}`);
+        // Note: disconnectFromMarketData affects all symbols, so we'll let the cleanup happen naturally
+      }
+    };
+  }, [bot?.tradingPair, bot?.exchangeId, connectToMarketData]);
   // Fetch bot orders for selected bot (event-driven updates only)
   const { data: botOrders = [], isLoading: ordersLoading } = useQuery<any[]>({
     queryKey: ['/api/bot-orders', bot?.id],

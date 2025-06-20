@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Balance Frontend Processing</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 3px; font-family: monospace; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e9; color: #2e7d32; }
+        .info { background: #e3f2fd; color: #1565c0; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Debug Balance Frontend Processing</h1>
+    
+    <div class="section">
+        <h3>WebSocket Connection Status</h3>
+        <div id="connectionStatus">Disconnected</div>
+        <button onclick="connectWebSocket()">Connect</button>
+        <button onclick="disconnectWebSocket()">Disconnect</button>
+    </div>
+    
+    <div class="section">
+        <h3>Balance Request Test</h3>
+        <input type="number" id="exchangeIdInput" placeholder="Exchange ID (e.g., 1)" value="1">
+        <button onclick="requestBalance()">Request Balance</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+    
+    <div class="section">
+        <h3>Balance State Simulation</h3>
+        <button onclick="simulateBalanceUpdate()">Simulate Balance Update</button>
+        <div id="balanceDisplay" style="margin-top: 10px; padding: 10px; border: 1px solid #ddd; min-height: 50px;">
+            <strong>Balance Display Area:</strong>
+            <div id="balanceContent">No balance data</div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>Debug Logs</h3>
+        <div id="logs"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let exchangeBalances = {};
+        
+        // Simulate the balance utilities from the frontend
+        const formatBalance = (balance) => {
+            const num = typeof balance === 'string' ? parseFloat(balance) : balance;
+            return num.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        };
+        
+        const calculateUsdtBalance = (balances) => {
+            const usdtBalance = balances.find(balance => balance.asset === 'USDT');
+            if (usdtBalance) {
+                return (parseFloat(usdtBalance.free || '0') + parseFloat(usdtBalance.locked || '0')).toFixed(2);
+            }
+            return '0.00';
+        };
+        
+        const calculateTotalBalanceForDisplay = (balances) => {
+            const totalAssets = balances.filter(balance => 
+                (parseFloat(balance.free || 0) + parseFloat(balance.locked || 0)) > 0
+            ).length;
+            return `${totalAssets} assets`;
+        };
+        
+        // Mock ticker price service for testing
+        const mockTickerPriceService = {
+            getCurrentPrice: (asset) => {
+                const mockPrices = {
+                    'BTC': 65000,
+                    'ETH': 3500,
+                    'BNB': 400,
+                    'SOL': 150
+                };
+                return mockPrices[asset] || null;
+            }
+        };
+        
+        const calculateTotalUsdtValue = async (balances, exchangeId) => {
+            if (!balances || balances.length === 0) {
+                return '0.00';
+            }
+            
+            let totalUsdtValue = 0;
+            
+            // Filter balances with non-zero balance
+            const nonZeroBalances = balances.filter(balance => {
+                const totalBalance = parseFloat(balance.free || '0') + parseFloat(balance.locked || '0');
+                return totalBalance > 0;
+            });
+            
+            log(`Processing ${nonZeroBalances.length} assets with non-zero balance out of ${balances.length} total assets`, 'info');
+            
+            // Process USDT first
+            const usdtBalance = nonZeroBalances.find(balance => balance.asset === 'USDT');
+            if (usdtBalance) {
+                const totalBalance = parseFloat(usdtBalance.free || '0') + parseFloat(usdtBalance.locked || '0');
+                totalUsdtValue += totalBalance;
+                log(`USDT balance: ${totalBalance}`, 'info');
+            }
+            
+            // For major assets, get mock prices
+            const MAJOR_ASSETS = ['BTC', 'ETH', 'BNB', 'SOL', 'ADA', 'DOT', 'LINK', 'UNI', 'DOGE', 'AVAX'];
+            const majorAssetBalances = nonZeroBalances.filter(balance => 
+                MAJOR_ASSETS.includes(balance.asset) && balance.asset !== 'USDT'
+            );
+            
+            log(`Processing ${majorAssetBalances.length} major assets for price conversion`, 'info');
+            
+            for (const balance of majorAssetBalances) {
+                const totalBalance = parseFloat(balance.free || '0') + parseFloat(balance.locked || '0');
+                const priceInUsdt = mockTickerPriceService.getCurrentPrice(balance.asset);
+                
+                if (priceInUsdt && priceInUsdt > 0) {
+                    const assetUsdtValue = totalBalance * priceInUsdt;
+                    totalUsdtValue += assetUsdtValue;
+                    log(`${balance.asset}: ${totalBalance} × $${priceInUsdt} = $${assetUsdtValue.toFixed(2)}`, 'info');
+                } else {
+                    log(`No price available for ${balance.asset}, skipping`, 'info');
+                }
+            }
+            
+            log(`Total USDT value: $${totalUsdtValue.toFixed(2)}`, 'success');
+            return totalUsdtValue.toFixed(2);
+        };
+        
+        function log(message, type = 'info') {
+            const logsDiv = document.getElementById('logs');
+            const logDiv = document.createElement('div');
+            logDiv.className = `log ${type}`;
+            logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(logDiv);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+        
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+        
+        function updateConnectionStatus(status) {
+            document.getElementById('connectionStatus').textContent = status;
+        }
+        
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('WebSocket already connected', 'info');
+                return;
+            }
+            
+            const wsUrl = 'ws://localhost:3001/ws';
+            log(`Connecting to ${wsUrl}...`, 'info');
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                log('WebSocket connected successfully', 'success');
+                updateConnectionStatus('Connected');
+            };
+            
+            ws.onmessage = async (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`Received WebSocket message: ${JSON.stringify(data)}`, 'info');
+                    
+                    if (data.type === 'balance_error') {
+                        log(`Balance fetch error: ${data.error}`, 'error');
+                        const targetExchangeId = data.exchangeId;
+                        if (targetExchangeId) {
+                            exchangeBalances[targetExchangeId] = { 
+                                balance: '0.00', 
+                                loading: false, 
+                                error: data.error || 'Failed to fetch balance'
+                            };
+                            updateBalanceDisplay(targetExchangeId);
+                        }
+                        return;
+                    }
+                    
+                    if (data.type === 'balance_update' && data.data?.balances) {
+                        const targetExchangeId = data.exchangeId;
+                        
+                        log(`Processing balance update for exchange ${targetExchangeId} with ${data.data.balances.length} balances`, 'success');
+                        
+                        if (targetExchangeId) {
+                            // Calculate balance metrics
+                            const usdtOnly = calculateUsdtBalance(data.data.balances);
+                            const totalFree = calculateTotalBalanceForDisplay(data.data.balances.filter(b => parseFloat(b.free || '0') > 0));
+                            const totalLocked = calculateTotalBalanceForDisplay(data.data.balances.filter(b => parseFloat(b.locked || '0') > 0));
+                            
+                            // Calculate total USDT value
+                            try {
+                                const totalUsdtValue = await calculateTotalUsdtValue(data.data.balances, targetExchangeId);
+                                log(`✅ Balance calculated for exchange ${targetExchangeId}: ${totalUsdtValue} USDT`, 'success');
+                                
+                                exchangeBalances[targetExchangeId] = { 
+                                    balance: totalUsdtValue, 
+                                    loading: false,
+                                    balances: data.data.balances,
+                                    usdtOnly,
+                                    totalFree,
+                                    totalLocked
+                                };
+                                updateBalanceDisplay(targetExchangeId);
+                            } catch (error) {
+                                log(`Error calculating total USDT value: ${error.message}`, 'error');
+                                // Fallback to USDT-only value
+                                exchangeBalances[targetExchangeId] = { 
+                                    balance: usdtOnly, 
+                                    loading: false,
+                                    balances: data.data.balances,
+                                    usdtOnly,
+                                    totalFree,
+                                    totalLocked
+                                };
+                                updateBalanceDisplay(targetExchangeId);
+                            }
+                        } else {
+                            log('❌ No target exchange ID found for balance update', 'error');
+                        }
+                    }
+                } catch (error) {
+                    log(`Error parsing WebSocket message: ${error.message}`, 'error');
+                }
+            };
+            
+            ws.onerror = (error) => {
+                log(`WebSocket error: ${error}`, 'error');
+                updateConnectionStatus('Error');
+            };
+            
+            ws.onclose = () => {
+                log('WebSocket disconnected', 'info');
+                updateConnectionStatus('Disconnected');
+            };
+        }
+        
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+        
+        function requestBalance() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocket not connected. Please connect first.', 'error');
+                return;
+            }
+            
+            const exchangeId = parseInt(document.getElementById('exchangeIdInput').value) || 1;
+            
+            log(`Requesting balance for exchange ${exchangeId}`, 'info');
+            
+            // Set loading state
+            exchangeBalances[exchangeId] = { balance: '0.00', loading: true, error: undefined };
+            updateBalanceDisplay(exchangeId);
+            
+            const message = {
+                type: 'get_balance',
+                exchangeId: exchangeId
+            };
+            
+            log(`Sending message: ${JSON.stringify(message)}`, 'info');
+            ws.send(JSON.stringify(message));
+        }
+        
+        function simulateBalanceUpdate() {
+            const exchangeId = parseInt(document.getElementById('exchangeIdInput').value) || 1;
+            
+            const mockBalances = [
+                { asset: 'USDT', free: '1000.50000000', locked: '0.00000000' },
+                { asset: 'BTC', free: '0.01500000', locked: '0.00000000' },
+                { asset: 'ETH', free: '2.50000000', locked: '0.00000000' },
+                { asset: 'BNB', free: '10.00000000', locked: '5.00000000' }
+            ];
+            
+            log(`Simulating balance update for exchange ${exchangeId}`, 'info');
+            
+            const mockData = {
+                type: 'balance_update',
+                exchangeId: exchangeId,
+                data: {
+                    balances: mockBalances
+                },
+                timestamp: Date.now()
+            };
+            
+            // Process as if received from WebSocket
+            ws.dispatchEvent(new MessageEvent('message', {
+                data: JSON.stringify(mockData)
+            }));
+        }
+        
+        function updateBalanceDisplay(exchangeId) {
+            const balanceState = exchangeBalances[exchangeId];
+            const contentDiv = document.getElementById('balanceContent');
+            
+            if (!balanceState) {
+                contentDiv.innerHTML = 'No balance data';
+                return;
+            }
+            
+            let html = `<strong>Exchange ${exchangeId}:</strong><br>`;
+            
+            if (balanceState.loading) {
+                html += '🔄 Loading...';
+            } else if (balanceState.error) {
+                html += `❌ Error: ${balanceState.error}`;
+            } else {
+                html += `💰 Total Balance: $${formatBalance(balanceState.balance || '0.00')}<br>`;
+                html += `💵 USDT Only: $${formatBalance(balanceState.usdtOnly || '0.00')}<br>`;
+                html += `📈 Free Assets: ${balanceState.totalFree || '0 assets'}<br>`;
+                html += `🔒 Locked Assets: ${balanceState.totalLocked || '0 assets'}<br>`;
+                
+                if (balanceState.balances && balanceState.balances.length > 0) {
+                    html += `📊 Asset Details:<br>`;
+                    balanceState.balances.forEach(balance => {
+                        const total = parseFloat(balance.free || '0') + parseFloat(balance.locked || '0');
+                        if (total > 0) {
+                            html += `&nbsp;&nbsp;• ${balance.asset}: ${balance.free} (free) + ${balance.locked} (locked)<br>`;
+                        }
+                    });
+                }
+            }
+            
+            contentDiv.innerHTML = html;
+        }
+        
+        // Auto-connect on page load
+        window.addEventListener('load', () => {
+            log('Page loaded. Ready to test balance processing.', 'info');
+        });
+    </script>
+</body>
+</html>

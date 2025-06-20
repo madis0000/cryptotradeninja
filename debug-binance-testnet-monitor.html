@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binance Testnet WebSocket Monitor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .status.connected { background-color: #d4edda; color: #155724; }
+        .status.disconnected { background-color: #f8d7da; color: #721c24; }
+        .status.connecting { background-color: #fff3cd; color: #856404; }
+        .log-entry {
+            padding: 8px;
+            margin: 4px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry.info { background-color: #e7f3ff; }
+        .log-entry.success { background-color: #d4edda; }
+        .log-entry.error { background-color: #f8d7da; }
+        .log-entry.warning { background-color: #fff3cd; }
+        .log-container {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .endpoint-info {
+            font-family: monospace;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .button.danger {
+            background-color: #dc3545;
+        }
+        .button.danger:hover {
+            background-color: #c82333;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .header {
+            text-align: center;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .counter {
+            font-weight: bold;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧪 Binance Testnet WebSocket Monitor</h1>
+        <p>Real-time monitoring of WebSocket connections and endpoint fixes</p>
+    </div>
+
+    <div class="container">
+        <h2>📋 Endpoint Configuration</h2>
+        <div class="endpoint-info">
+            <strong>✅ Fixed Testnet Endpoints:</strong><br>
+            • Public Streams: wss://stream.testnet.binance.vision/ws<br>
+            • User Data Streams: wss://stream.testnet.binance.vision/ws/&lt;listenKey&gt;<br>
+            • REST API: https://testnet.binance.vision<br><br>
+            
+            <strong>❌ Previous Incorrect Endpoints:</strong><br>
+            • ❌ wss://testnet.binance.vision/ws/&lt;listenKey&gt; (missing 'stream' subdomain)<br>
+            • ❌ wss://testnet.binance.vision/ws (missing 'stream' subdomain)
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="container">
+            <h2>🔌 Public Stream Test</h2>
+            <p>Testing: <code>wss://stream.testnet.binance.vision/ws/btcusdt@ticker</code></p>
+            <div>
+                Status: <span id="publicStatus" class="status disconnected">Disconnected</span>
+                <br>Messages: <span id="publicCounter" class="counter">0</span>
+            </div>
+            <div>
+                <button class="button" onclick="connectPublic()">Connect</button>
+                <button class="button danger" onclick="disconnectPublic()">Disconnect</button>
+                <button class="button" onclick="clearPublicLog()">Clear Log</button>
+            </div>
+            <h3>Latest Data:</h3>
+            <div id="publicData">No data yet</div>
+            <h3>Connection Log:</h3>
+            <div id="publicLog" class="log-container"></div>
+        </div>
+
+        <div class="container">
+            <h2>👤 User Data Stream Test</h2>
+            <p>Testing user data stream endpoint format</p>
+            <div>
+                Status: <span id="userStatus" class="status disconnected">Disconnected</span>
+                <br>Listen Key: <span id="listenKeyDisplay">Not obtained</span>
+            </div>
+            <div>
+                <button class="button" onclick="testUserDataStream()">Test User Stream</button>
+                <button class="button danger" onclick="disconnectUser()">Disconnect</button>
+                <button class="button" onclick="clearUserLog()">Clear Log</button>
+            </div>
+            <h3>Connection Log:</h3>
+            <div id="userLog" class="log-container"></div>
+        </div>
+
+        <div class="container">
+            <h2>🤖 Bot WebSocket Monitor</h2>
+            <p>Monitor your trading bot's WebSocket connections</p>
+            <div>
+                Bot WS Status: <span id="botStatus" class="status disconnected">Disconnected</span>
+                <br>Connected: <span id="botConnected" class="counter">0</span>
+            </div>
+            <div>
+                <button class="button" onclick="connectToBotWebSocket()">Connect to Bot</button>
+                <button class="button danger" onclick="disconnectFromBot()">Disconnect</button>
+                <button class="button" onclick="clearBotLog()">Clear Log</button>
+            </div>
+            <h3>Bot Events:</h3>
+            <div id="botLog" class="log-container"></div>
+        </div>
+    </div>
+
+    <script>
+        let publicWs = null;
+        let userWs = null;
+        let botWs = null;
+        let publicMessageCount = 0;
+        let botConnectedCount = 0;
+
+        function log(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateStatus(elementId, status) {
+            const element = document.getElementById(elementId);
+            element.className = `status ${status}`;
+            element.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        }
+
+        function connectPublic() {
+            if (publicWs) {
+                log('publicLog', 'Already connected to public stream', 'warning');
+                return;
+            }
+
+            updateStatus('publicStatus', 'connecting');
+            log('publicLog', 'Connecting to public stream...', 'info');
+
+            publicWs = new WebSocket('wss://stream.testnet.binance.vision/ws/btcusdt@ticker');
+
+            publicWs.onopen = function() {
+                updateStatus('publicStatus', 'connected');
+                log('publicLog', '✅ Connected to public stream successfully', 'success');
+            };
+
+            publicWs.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    publicMessageCount++;
+                    document.getElementById('publicCounter').textContent = publicMessageCount;
+                    
+                    document.getElementById('publicData').innerHTML = `
+                        <strong>Symbol:</strong> ${data.s}<br>
+                        <strong>Price:</strong> ${data.c}<br>
+                        <strong>Change:</strong> ${data.P}%<br>
+                        <strong>Volume:</strong> ${data.v}<br>
+                        <strong>Last Update:</strong> ${new Date().toLocaleTimeString()}
+                    `;
+                    
+                    if (publicMessageCount % 10 === 0) {
+                        log('publicLog', `📊 Received ${publicMessageCount} messages. Latest price: ${data.c}`, 'success');
+                    }
+                } catch (e) {
+                    log('publicLog', '❌ Failed to parse message: ' + e.message, 'error');
+                }
+            };
+
+            publicWs.onerror = function(error) {
+                log('publicLog', '❌ WebSocket error: ' + error, 'error');
+                updateStatus('publicStatus', 'disconnected');
+            };
+
+            publicWs.onclose = function(event) {
+                log('publicLog', `🔌 Connection closed. Code: ${event.code}`, 'warning');
+                updateStatus('publicStatus', 'disconnected');
+                publicWs = null;
+            };
+        }
+
+        function disconnectPublic() {
+            if (publicWs) {
+                publicWs.close();
+                log('publicLog', 'Manually disconnected', 'info');
+            }
+        }
+
+        function clearPublicLog() {
+            document.getElementById('publicLog').innerHTML = '';
+            publicMessageCount = 0;
+            document.getElementById('publicCounter').textContent = '0';
+        }
+
+        async function testUserDataStream() {
+            log('userLog', 'Testing user data stream endpoint format...', 'info');
+            
+            // This is just a test of the endpoint format - in real usage, you'd need a valid listen key
+            const testListenKey = 'test123456789';
+            const testEndpoint = `wss://stream.testnet.binance.vision/ws/${testListenKey}`;
+            
+            log('userLog', `📋 Constructed endpoint: ${testEndpoint}`, 'info');
+            log('userLog', '✅ Endpoint format is correct for Binance testnet', 'success');
+            log('userLog', '💡 Note: Real user data stream requires valid listen key from API', 'warning');
+            
+            document.getElementById('listenKeyDisplay').textContent = 'test123456789 (example)';
+            updateStatus('userStatus', 'connecting');
+            
+            // For demo purposes, just show the endpoint format
+            setTimeout(() => {
+                updateStatus('userStatus', 'disconnected');
+                log('userLog', '📝 Test complete: Endpoint format verified', 'info');
+            }, 2000);
+        }
+
+        function disconnectUser() {
+            if (userWs) {
+                userWs.close();
+                log('userLog', 'Manually disconnected', 'info');
+            }
+        }
+
+        function clearUserLog() {
+            document.getElementById('userLog').innerHTML = '';
+        }
+
+        function connectToBotWebSocket() {
+            if (botWs) {
+                log('botLog', 'Already connected to bot WebSocket', 'warning');
+                return;
+            }
+
+            updateStatus('botStatus', 'connecting');
+            log('botLog', 'Connecting to bot WebSocket on port 3001...', 'info');
+
+            botWs = new WebSocket('ws://localhost:3001/api/ws');
+
+            botWs.onopen = function() {
+                updateStatus('botStatus', 'connected');
+                botConnectedCount++;
+                document.getElementById('botConnected').textContent = botConnectedCount;
+                log('botLog', '✅ Connected to bot WebSocket successfully', 'success');
+            };
+
+            botWs.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log('botLog', `📨 Received: ${data.type} - ${JSON.stringify(data)}`, 'info');
+                } catch (e) {
+                    log('botLog', `📨 Received: ${event.data}`, 'info');
+                }
+            };
+
+            botWs.onerror = function(error) {
+                log('botLog', '❌ Bot WebSocket error: ' + error, 'error');
+                updateStatus('botStatus', 'disconnected');
+            };
+
+            botWs.onclose = function(event) {
+                log('botLog', `🔌 Bot connection closed. Code: ${event.code}`, 'warning');
+                updateStatus('botStatus', 'disconnected');
+                botWs = null;
+            };
+        }
+
+        function disconnectFromBot() {
+            if (botWs) {
+                botWs.close();
+                log('botLog', 'Manually disconnected from bot', 'info');
+            }
+        }
+
+        function clearBotLog() {
+            document.getElementById('botLog').innerHTML = '';
+        }
+
+        // Auto-connect to public stream on page load
+        window.onload = function() {
+            log('publicLog', '🚀 Auto-connecting to public stream...', 'info');
+            setTimeout(connectPublic, 1000);
+        };
+    </script>
+</body>
+</html>

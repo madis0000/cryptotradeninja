@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug My Exchange Balance</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.connecting {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .exchange-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            background-color: #f8f9fa;
+        }
+        .balance-display {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Debug My Exchange Balance Issue</h1>
+        
+        <div class="status" id="connectionStatus">Connection Status: Disconnected</div>
+        
+        <div>
+            <button class="button" onclick="connectWebSocket()">Connect WebSocket</button>
+            <button class="button" onclick="authenticate()">Authenticate</button>
+            <button class="button" onclick="loadExchanges()">Load Exchanges</button>
+            <button class="button" onclick="testAllBalances()">Test All Balances</button>
+            <button class="button" onclick="clearLog()">Clear Log</button>
+        </div>
+
+        <div id="exchangesList"></div>
+
+        <div class="balance-display" id="balanceDisplay">
+            <h4>Balance Display:</h4>
+            <div id="balanceContent">No balance data yet</div>
+        </div>
+        
+        <div class="log" id="logOutput"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+        let authenticated = false;
+        let exchanges = [];
+
+        function log(message) {
+            const timestamp = new Date().toISOString();
+            const logElement = document.getElementById('logOutput');
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(`[DEBUG] ${message}`);
+        }
+
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.textContent = `Connection Status: ${status}`;
+            statusElement.className = `status ${status.toLowerCase()}`;
+        }
+
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('WebSocket already connected');
+                return;
+            }
+
+            log('Connecting to WebSocket...');
+            updateConnectionStatus('Connecting');
+              // Use the same URL logic as the React app
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const hostname = window.location.hostname || 'localhost';
+            const wsUrl = `${protocol}//${hostname}:3001/api/ws`;
+            
+            log(`WebSocket URL: ${wsUrl}`);
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                log('✅ WebSocket connected successfully');
+                updateConnectionStatus('Connected');
+                connected = true;
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`📨 Received: ${JSON.stringify(data, null, 2)}`);
+                    
+                    if (data.type === 'authenticated') {
+                        log('✅ Authentication confirmed');
+                        authenticated = true;
+                    } else if (data.type === 'balance_update') {
+                        log('💰 Balance update received');
+                        displayBalance(data);
+                    } else if (data.type === 'balance_error') {
+                        log(`❌ Balance error: ${data.error}`);
+                    }
+                } catch (error) {
+                    log(`❌ Error parsing message: ${error.message}`);
+                }
+            };
+            
+            ws.onclose = function(event) {
+                log(`❌ WebSocket closed: ${event.code} - ${event.reason}`);
+                updateConnectionStatus('Disconnected');
+                connected = false;
+                authenticated = false;
+            };
+            
+            ws.onerror = function(error) {
+                log(`❌ WebSocket error: ${error}`);
+                updateConnectionStatus('Error');
+            };
+        }
+
+        function authenticate() {
+            if (!connected) {
+                log('❌ Cannot authenticate - not connected');
+                return;
+            }
+            
+            log('🔐 Sending authentication...');
+            ws.send(JSON.stringify({
+                type: 'authenticate',
+                userId: 1
+            }));
+        }
+
+        async function loadExchanges() {
+            try {
+                log('📋 Loading exchanges...');
+                const response = await fetch('/api/exchanges', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token') || 'test-token'}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                exchanges = await response.json();
+                log(`✅ Loaded ${exchanges.length} exchanges`);
+                
+                displayExchanges();
+                
+            } catch (error) {
+                log(`❌ Error loading exchanges: ${error.message}`);
+            }
+        }
+
+        function displayExchanges() {
+            const container = document.getElementById('exchangesList');
+            container.innerHTML = '<h3>📊 Loaded Exchanges:</h3>';
+            
+            exchanges.forEach(exchange => {
+                const card = document.createElement('div');
+                card.className = 'exchange-card';
+                card.innerHTML = `
+                    <h4>${exchange.name} (ID: ${exchange.id})</h4>
+                    <p><strong>Active:</strong> ${exchange.isActive ? '✅ Yes' : '❌ No'}</p>
+                    <p><strong>Testnet:</strong> ${exchange.isTestnet ? '🧪 Yes' : '🔴 No'}</p>
+                    <p><strong>Has API Key:</strong> ${exchange.apiKey ? '🔑 Yes' : '❌ No'}</p>
+                    <button class="button" onclick="testExchangeBalance(${exchange.id})">Test Balance</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function testExchangeBalance(exchangeId) {
+            if (!connected) {
+                log('❌ Cannot test balance - not connected');
+                return;
+            }
+            
+            if (!authenticated) {
+                log('❌ Cannot test balance - not authenticated');
+                return;
+            }
+            
+            log(`💰 Requesting balance for exchange ${exchangeId}...`);
+            
+            const message = {
+                type: 'get_balance',
+                exchangeId: exchangeId
+                // No asset parameter - request ALL balances
+            };
+            
+            log(`📤 Sending: ${JSON.stringify(message, null, 2)}`);
+            ws.send(JSON.stringify(message));
+        }
+
+        function testAllBalances() {
+            if (exchanges.length === 0) {
+                log('❌ No exchanges loaded');
+                return;
+            }
+            
+            log('🧪 Testing all exchange balances...');
+            
+            exchanges.forEach((exchange, index) => {
+                if (exchange.isActive && exchange.apiKey) {
+                    setTimeout(() => {
+                        log(`Testing exchange ${exchange.id} (${exchange.name})...`);
+                        testExchangeBalance(exchange.id);
+                    }, index * 1000); // Stagger requests by 1 second
+                } else {
+                    log(`⚠️ Skipping exchange ${exchange.id} (${exchange.name}) - not active or no API key`);
+                }
+            });
+        }
+
+        function displayBalance(data) {
+            const content = document.getElementById('balanceContent');
+            
+            if (data.data && data.data.balances) {
+                const balances = data.data.balances;
+                const nonZeroBalances = balances.filter(b => 
+                    parseFloat(b.free || '0') > 0 || parseFloat(b.locked || '0') > 0
+                );
+                
+                let html = `<h5>Exchange ${data.exchangeId} - ${nonZeroBalances.length} non-zero balances:</h5>`;
+                
+                nonZeroBalances.slice(0, 10).forEach(balance => {
+                    const total = parseFloat(balance.free || '0') + parseFloat(balance.locked || '0');
+                    html += `<div>${balance.asset}: ${total.toFixed(8)} (Free: ${balance.free}, Locked: ${balance.locked})</div>`;
+                });
+                
+                if (nonZeroBalances.length > 10) {
+                    html += `<div><em>... and ${nonZeroBalances.length - 10} more</em></div>`;
+                }
+                
+                content.innerHTML = html;
+            } else if (data.balance) {
+                content.innerHTML = `<h5>Single Asset Balance:</h5><div>${data.asset}: ${JSON.stringify(data.balance)}</div>`;
+            } else {
+                content.innerHTML = `<div>❌ No balance data in response</div>`;
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('logOutput').textContent = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 Debug page loaded');
+            log('This page will help debug My Exchange balance fetching issues');
+            log('Steps: 1) Connect WebSocket 2) Authenticate 3) Load Exchanges 4) Test Balances');
+        };
+    </script>
+</body>
+</html>

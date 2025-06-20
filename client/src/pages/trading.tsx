@@ -9,6 +9,7 @@ import { OrdersHistory } from "@/components/trading/orders-history";
 
 import { webSocketSingleton } from "@/services/WebSocketSingleton";
 import { useQuery } from "@tanstack/react-query";
+import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 import { 
   createSubscriptionMessage, 
   createChangeSubscriptionMessage,
@@ -67,12 +68,15 @@ export default function Trading() {
   const [quoteBalance, setQuoteBalance] = useState<BalanceData | null>(null);
   const [balanceLoading, setBalanceLoading] = useState<boolean>(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
-  
-  // Open orders states
+    // Open orders states
   const [openOrders, setOpenOrders] = useState<OpenOrderData[]>([]);
   const [openOrdersLoading, setOpenOrdersLoading] = useState<boolean>(false);
   const [openOrdersError, setOpenOrdersError] = useState<string | null>(null);
-    // Order execution tracking
+  
+  // Initialize order notifications hook for sound notifications
+  useOrderNotifications();
+  
+  // Order execution tracking
   const [lastOrderStatus, setLastOrderStatus] = useState<string | null>(null);
   const [orderHistory, setOrderHistory] = useState<Array<{
     orderId: string;

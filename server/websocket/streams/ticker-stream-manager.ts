@@ -72,17 +72,20 @@ export class TickerStreamManager {
     if (!baseWsUrl) {
       console.error(`[TICKER STREAM] No WebSocket URL found for exchange ${this.currentExchangeId}`);
       return;
-    }
-
-    // Determine the correct WebSocket URL based on the endpoint
-    let wsUrl: string;
-    if (baseWsUrl.includes('testnet.binance.vision')) {
-      // For testnet, use the URL as-is (should be wss://stream.testnet.binance.vision)
-      wsUrl = baseWsUrl;
+    }    // Determine the correct WebSocket URL based on the endpoint
+    let wsUrl: string;    if (baseWsUrl.includes('testnet.binance.vision')) {
+      // For testnet public streams, use wss://stream.testnet.binance.vision/ws
+      wsUrl = 'wss://stream.testnet.binance.vision/ws';
+    } else if (baseWsUrl.includes('stream.binance.com')) {
+      // For mainnet public streams, use combined stream endpoint
+      wsUrl = 'wss://stream.binance.com:9443/stream';
     } else {
-      // For mainnet, append /stream for combined stream endpoint
-      // According to Binance docs: /stream?streams=<streamName1>/<streamName2>
-      wsUrl = `${baseWsUrl}/stream`;
+      // Generic handling for other endpoints
+      if (baseWsUrl.endsWith('/stream')) {
+        wsUrl = baseWsUrl;
+      } else {
+        wsUrl = `${baseWsUrl}/stream`;
+      }
     }
     
     console.log(`[TICKER STREAM] Connecting to: ${wsUrl}`);
@@ -226,31 +229,65 @@ export class TickerStreamManager {
     } catch (error) {
       console.error('[TICKER STREAM] Error processing message:', error);
     }
-  }
-
-  // Broadcast to ticker clients
+  }  // Enhanced broadcast to ticker clients with performance optimization
   private broadcastToTickerClients(marketUpdate: MarketUpdate): void {
     // Cache the latest price
     this.cachedPrices.set(marketUpdate.symbol, marketUpdate);
     
     let activeClientCount = 0;
     
+    // Create both market_update and ticker_update messages
+    const marketUpdateMessage = JSON.stringify({
+      type: 'market_update',
+      data: marketUpdate
+    });
+    
+    const tickerUpdateMessage = JSON.stringify({
+      type: 'ticker_update',
+      data: {
+        symbol: marketUpdate.symbol,
+        price: marketUpdate.price,
+        priceChange: marketUpdate.priceChange,
+        priceChangePercent: marketUpdate.priceChangePercent,
+        volume: marketUpdate.volume,
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+    // Use Promise.allSettled for better performance with multiple clients
+    const sendPromises: Promise<void>[] = [];
+    
     this.clients.forEach(client => {
       if (client.isActive && client.symbols.has(marketUpdate.symbol.toUpperCase())) {
         if (client.ws.readyState === WebSocket.OPEN) {
-          client.ws.send(JSON.stringify({
-            type: 'market_update',
-            data: marketUpdate
-          }));
-          activeClientCount++;
+          sendPromises.push(
+            new Promise<void>((resolve, reject) => {
+              try {
+                // Send market_update (for compatibility with trading-bots page)
+                client.ws.send(marketUpdateMessage);
+                // Also send ticker_update (for my-bots and bot-details pages)
+                client.ws.send(tickerUpdateMessage);
+                activeClientCount++;
+                resolve();
+              } catch (error) {
+                client.isActive = false;
+                reject(error);
+              }
+            })
+          );
         } else {
           client.isActive = false;
         }
       }
     });
     
-    if (activeClientCount > 0) {
-      console.log(`[TICKER BROADCAST] Sent to ${activeClientCount} ticker clients for ${marketUpdate.symbol}`);
+    // Execute all sends in parallel for minimal latency
+    if (sendPromises.length > 0) {
+      Promise.allSettled(sendPromises).then(() => {
+        if (activeClientCount > 0) {
+          console.log(`[TICKER BROADCAST] ⚡ Sent market_update AND ticker_update to ${activeClientCount} ticker clients for ${marketUpdate.symbol}`);
+        }
+      });
     }
   }
 

@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Martingale Strategy Monitoring Debug Tool</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: #00ff00;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #00ff88;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #2a2a2a;
+            border-radius: 8px;
+        }
+        .status-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .status-box {
+            padding: 15px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            border-left: 4px solid #00ff88;
+        }
+        .log-container {
+            height: 400px;
+            overflow-y: auto;
+            background: #0a0a0a;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 12px;
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+        }
+        .events-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .event-box {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 4px solid #ff8800;
+        }
+        .event-title {
+            color: #ff8800;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .event-data {
+            font-size: 11px;
+            background: #1a1a1a;
+            padding: 8px;
+            border-radius: 4px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        button {
+            background: #00ff88;
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #00cc66;
+        }
+        button:disabled {
+            background: #666;
+            color: #999;
+            cursor: not-allowed;
+        }
+        input, select {
+            background: #1a1a1a;
+            color: #00ff00;
+            border: 1px solid #444;
+            padding: 6px;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+        .timestamp {
+            color: #888;
+            font-size: 10px;
+        }
+        .success { color: #00ff88; }
+        .warning { color: #ffaa00; }
+        .error { color: #ff4444; }
+        .info { color: #4488ff; }
+        .safety-order-event { border-left-color: #ff4444; }
+        .take-profit-event { border-left-color: #00ff88; }
+        .base-order-event { border-left-color: #4488ff; }
+        .monitoring-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #00ff88;
+        }
+        .stat-label {
+            font-size: 11px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Martingale Strategy Monitoring Debug Tool</h1>
+            <p>Real-time monitoring and debugging for Martingale bot safety order fills and strategy execution</p>
+        </div>
+
+        <div class="controls">
+            <div>
+                <label>Connection:</label><br>
+                <button id="connectBtn" onclick="connectWebSocket()">Connect</button>
+                <button id="disconnectBtn" onclick="disconnectWebSocket()" disabled>Disconnect</button>
+            </div>
+            <div>
+                <label>Bot ID to Monitor:</label><br>
+                <input type="number" id="botIdInput" value="1" min="1" placeholder="Bot ID">
+                <button onclick="startBotMonitoring()">Monitor Bot</button>
+            </div>
+            <div>
+                <label>Test Actions:</label><br>
+                <button onclick="simulateSafetyOrderFill()">Simulate Safety Fill</button>
+                <button onclick="simulateTakeProfitFill()">Simulate TP Fill</button>
+            </div>
+            <div>
+                <label>Export:</label><br>
+                <button onclick="exportMonitoringData()">Export Data</button>
+                <button onclick="clearLog()">Clear Log</button>
+            </div>
+        </div>
+
+        <div class="status-panel">
+            <div class="status-box">
+                <h3>Connection Status</h3>
+                <div id="connectionStatus">Disconnected</div>
+                <div class="timestamp" id="lastConnected">Never connected</div>
+            </div>
+            <div class="status-box">
+                <h3>User Data Stream</h3>
+                <div id="streamStatus">Unknown</div>
+                <div class="timestamp" id="lastStreamEvent">No events</div>
+            </div>
+        </div>
+
+        <div class="monitoring-stats">
+            <div class="stat-box">
+                <div class="stat-value" id="totalOrderFills">0</div>
+                <div class="stat-label">Total Order Fills</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="safetyOrderFills">0</div>
+                <div class="stat-label">Safety Order Fills</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="takeProfitUpdates">0</div>
+                <div class="stat-label">Take Profit Updates</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="nextSafetyPlacements">0</div>
+                <div class="stat-label">Next Safety Placements</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="completedCycles">0</div>
+                <div class="stat-label">Completed Cycles</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="averageProcessingTime">0ms</div>
+                <div class="stat-label">Avg Processing Time</div>
+            </div>
+        </div>
+
+        <div class="events-grid">
+            <div class="event-box" id="lastSafetyOrderEvent">
+                <div class="event-title">🛡️ Last Safety Order Fill</div>
+                <div class="event-data" id="lastSafetyOrderData">No safety order fills detected</div>
+            </div>
+            <div class="event-box" id="lastTakeProfitEvent">
+                <div class="event-title">🎯 Last Take Profit Update</div>
+                <div class="event-data" id="lastTakeProfitData">No take profit updates detected</div>
+            </div>
+            <div class="event-box" id="lastCycleEvent">
+                <div class="event-title">🔄 Last Cycle Action</div>
+                <div class="event-data" id="lastCycleData">No cycle actions detected</div>
+            </div>
+        </div>
+
+        <div class="log-container" id="log">
+            🚀 Martingale Strategy Monitoring Debug Tool initialized
+            💡 Click "Connect" to start monitoring WebSocket events
+            📊 Monitor safety order fills and automatic take profit updates
+            
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageCount = 0;
+        let reconnectTimeout = null;
+        let monitoringBotId = null;
+        let startTime = Date.now();
+        
+        // Statistics tracking
+        let stats = {
+            totalOrderFills: 0,
+            safetyOrderFills: 0,
+            takeProfitUpdates: 0,
+            nextSafetyPlacements: 0,
+            completedCycles: 0,
+            processingTimes: []
+        };
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('log');
+            const colorClass = type === 'error' ? 'error' : type === 'warning' ? 'warning' : type === 'success' ? 'success' : 'info';
+            logElement.innerHTML += `<span class="timestamp">[${timestamp}]</span> <span class="${colorClass}">${message}</span>\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById('connectionStatus');
+            const lastConnectedElement = document.getElementById('lastConnected');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            
+            statusElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            statusElement.className = status === 'connected' ? 'success' : status === 'connecting' ? 'warning' : 'error';
+            
+            if (status === 'connected') {
+                lastConnectedElement.textContent = `Connected at ${new Date().toLocaleTimeString()}`;
+            }
+            
+            connectBtn.disabled = status === 'connected' || status === 'connecting';
+            disconnectBtn.disabled = status === 'disconnected';
+        }
+
+        function updateStreamStatus(status, lastEvent = null) {
+            const streamElement = document.getElementById('streamStatus');
+            const lastEventElement = document.getElementById('lastStreamEvent');
+            
+            streamElement.textContent = status;
+            streamElement.className = status === 'Active' ? 'success' : status === 'Error' ? 'error' : 'warning';
+            
+            if (lastEvent) {
+                lastEventElement.textContent = `Last event: ${new Date().toLocaleTimeString()}`;
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('totalOrderFills').textContent = stats.totalOrderFills;
+            document.getElementById('safetyOrderFills').textContent = stats.safetyOrderFills;
+            document.getElementById('takeProfitUpdates').textContent = stats.takeProfitUpdates;
+            document.getElementById('nextSafetyPlacements').textContent = stats.nextSafetyPlacements;
+            document.getElementById('completedCycles').textContent = stats.completedCycles;
+            
+            const avgTime = stats.processingTimes.length > 0 
+                ? Math.round(stats.processingTimes.reduce((a, b) => a + b, 0) / stats.processingTimes.length)
+                : 0;
+            document.getElementById('averageProcessingTime').textContent = `${avgTime}ms`;
+        }
+
+        function updateEventDisplay(eventType, data) {
+            const timestamp = new Date().toLocaleTimeString();
+            
+            if (eventType === 'safety_order_fill') {
+                const element = document.getElementById('lastSafetyOrderData');
+                element.innerHTML = `
+<strong>Timestamp:</strong> ${timestamp}
+<strong>Bot ID:</strong> ${data.botId || 'Unknown'}
+<strong>Cycle ID:</strong> ${data.cycleId || 'Unknown'}
+<strong>Order ID:</strong> ${data.orderId || 'Unknown'}
+<strong>Symbol:</strong> ${data.symbol || 'Unknown'}
+<strong>Price:</strong> $${data.price || 'Unknown'}
+<strong>Quantity:</strong> ${data.quantity || 'Unknown'}
+<strong>Commission:</strong> ${data.commission || 'Unknown'} ${data.commissionAsset || ''}
+
+<strong>Strategy Actions:</strong>
+• Take profit recalculated: ${data.takeProfitUpdated ? '✅' : '⏳'}
+• Next safety order placed: ${data.nextSafetyPlaced ? '✅' : '⏳'}
+• Average price updated: ${data.newAveragePrice || 'Calculating...'}
+                `;
+                document.getElementById('lastSafetyOrderEvent').className = 'event-box safety-order-event';
+                stats.safetyOrderFills++;
+            } else if (eventType === 'take_profit_update') {
+                const element = document.getElementById('lastTakeProfitData');
+                element.innerHTML = `
+<strong>Timestamp:</strong> ${timestamp}
+<strong>Bot ID:</strong> ${data.botId || 'Unknown'}
+<strong>Cycle ID:</strong> ${data.cycleId || 'Unknown'}
+<strong>Old TP Price:</strong> $${data.oldTakeProfitPrice || 'Unknown'}
+<strong>New TP Price:</strong> $${data.newTakeProfitPrice || 'Unknown'}
+<strong>New Average Price:</strong> $${data.newAveragePrice || 'Unknown'}
+<strong>Total Quantity:</strong> ${data.totalQuantity || 'Unknown'}
+<strong>Exchange Order ID:</strong> ${data.exchangeOrderId || 'Unknown'}
+
+<strong>Calculation Details:</strong>
+• Take profit %: ${data.takeProfitPercentage || 'Unknown'}%
+• Filter compliance: ${data.filterCompliant ? '✅' : '❌'}
+                `;
+                document.getElementById('lastTakeProfitEvent').className = 'event-box take-profit-event';
+                stats.takeProfitUpdates++;
+            } else if (eventType === 'cycle_action') {
+                const element = document.getElementById('lastCycleData');
+                element.innerHTML = `
+<strong>Timestamp:</strong> ${timestamp}
+<strong>Action:</strong> ${data.action || 'Unknown'}
+<strong>Bot ID:</strong> ${data.botId || 'Unknown'}
+<strong>Cycle ID:</strong> ${data.cycleId || 'Unknown'}
+<strong>Details:</strong> ${JSON.stringify(data.details || {}, null, 2)}
+                `;
+                if (data.action === 'completed') {
+                    stats.completedCycles++;
+                }
+            }
+            
+            updateStats();
+        }
+
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('⚠️ Already connected', 'warning');
+                return;
+            }
+
+            updateConnectionStatus('connecting');
+            log('🔌 Connecting to WebSocket...', 'info');
+
+            try {
+                ws = new WebSocket('ws://localhost:3000/api/ws');
+
+                ws.onopen = function(event) {
+                    log('✅ WebSocket connected successfully', 'success');
+                    updateConnectionStatus('connected');
+                    updateStreamStatus('Waiting for events...');
+                    clearReconnectTimeout();
+                };
+
+                ws.onmessage = function(event) {
+                    messageCount++;
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'order_fill_notification') {
+                        handleOrderFillNotification(data.data);
+                    } else if (data.type === 'take_profit_updated') {
+                        handleTakeProfitUpdate(data.data);
+                    } else if (data.type === 'bot_cycle_update') {
+                        handleCycleUpdate(data.data);
+                    } else if (data.type === 'execution_report') {
+                        handleExecutionReport(data);
+                    } else {
+                        log(`📨 Message ${messageCount}: ${data.type}`, 'info');
+                    }
+                    
+                    updateStreamStatus('Active', true);
+                };
+
+                ws.onclose = function(event) {
+                    log(`🔌 WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`, 'warning');
+                    updateConnectionStatus('disconnected');
+                    updateStreamStatus('Disconnected');
+                    
+                    if (event.code !== 1000) {
+                        log('🔄 Will attempt to reconnect in 5 seconds...', 'info');
+                        scheduleReconnect();
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    log(`❌ WebSocket error: ${error}`, 'error');
+                    updateConnectionStatus('disconnected');
+                    updateStreamStatus('Error');
+                };
+
+            } catch (error) {
+                log(`❌ Failed to create WebSocket connection: ${error}`, 'error');
+                updateConnectionStatus('disconnected');
+                updateStreamStatus('Error');
+            }
+        }
+
+        function handleOrderFillNotification(data) {
+            log(`🔔 Order Fill: ${data.orderType} - ${data.symbol} ${data.side} ${data.quantity} @ $${data.price}`, 'success');
+            stats.totalOrderFills++;
+            
+            if (data.orderType === 'safety_order') {
+                updateEventDisplay('safety_order_fill', data);
+                log(`🛡️ SAFETY ORDER FILLED - Bot ${data.botId} monitoring martingale actions...`, 'warning');
+            } else if (data.orderType === 'take_profit') {
+                log(`🎯 TAKE PROFIT FILLED - Cycle completion for Bot ${data.botId}`, 'success');
+            } else if (data.orderType === 'base_order') {
+                log(`🎯 BASE ORDER FILLED - Starting safety orders for Bot ${data.botId}`, 'info');
+            }
+        }
+
+        function handleTakeProfitUpdate(data) {
+            log(`📈 Take Profit Updated: Bot ${data.botId} - New TP: $${data.newTakeProfitPrice}`, 'success');
+            updateEventDisplay('take_profit_update', data);
+        }
+
+        function handleCycleUpdate(data) {
+            log(`🔄 Cycle Update: ${data.action} - Bot ${data.botId || data.cycle?.botId}`, 'info');
+            updateEventDisplay('cycle_action', { 
+                action: data.action, 
+                botId: data.botId || data.cycle?.botId,
+                cycleId: data.cycleId || data.cycle?.id,
+                details: data 
+            });
+        }
+
+        function handleExecutionReport(data) {
+            if (data.status === 'FILLED') {
+                log(`⚡ Execution Report: ${data.symbol} ${data.side} ${data.executedQty} @ $${data.price} - Status: ${data.status}`, 'info');
+            }
+        }
+
+        function startBotMonitoring() {
+            const botId = document.getElementById('botIdInput').value;
+            if (!botId) {
+                log('❌ Please enter a Bot ID to monitor', 'error');
+                return;
+            }
+            
+            monitoringBotId = parseInt(botId);
+            log(`🎯 Started monitoring Bot ID: ${monitoringBotId}`, 'success');
+            
+            // Reset statistics for new monitoring session
+            stats = {
+                totalOrderFills: 0,
+                safetyOrderFills: 0,
+                takeProfitUpdates: 0,
+                nextSafetyPlacements: 0,
+                completedCycles: 0,
+                processingTimes: []
+            };
+            updateStats();
+        }
+
+        function simulateSafetyOrderFill() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not connected', 'error');
+                return;
+            }
+            
+            const botId = monitoringBotId || 1;
+            log(`🧪 Simulating safety order fill for Bot ${botId}...`, 'info');
+            
+            const testData = {
+                type: 'test_martingale_action',
+                action: 'safety_order_fill',
+                data: {
+                    botId: botId,
+                    cycleId: 1,
+                    orderId: Date.now(),
+                    symbol: 'ICPUSDT',
+                    side: 'BUY',
+                    quantity: '1.5',
+                    price: '5.85',
+                    commission: '0.001',
+                    commissionAsset: 'USDT'
+                }
+            };
+            
+            ws.send(JSON.stringify(testData));
+        }
+
+        function simulateTakeProfitFill() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not connected', 'error');
+                return;
+            }
+            
+            const botId = monitoringBotId || 1;
+            log(`🧪 Simulating take profit fill for Bot ${botId}...`, 'info');
+            
+            const testData = {
+                type: 'test_martingale_action',
+                action: 'take_profit_fill',
+                data: {
+                    botId: botId,
+                    cycleId: 1,
+                    orderId: Date.now(),
+                    symbol: 'ICPUSDT',
+                    side: 'SELL',
+                    quantity: '3.0',
+                    price: '6.20',
+                    commission: '0.003',
+                    commissionAsset: 'USDT'
+                }
+            };
+            
+            ws.send(JSON.stringify(testData));
+        }
+
+        function disconnectWebSocket() {
+            clearReconnectTimeout();
+            if (ws) {
+                ws.close(1000, 'Manual disconnect');
+                ws = null;
+            }
+            updateConnectionStatus('disconnected');
+            updateStreamStatus('Manually disconnected');
+            log('🔌 WebSocket disconnected manually', 'info');
+        }
+
+        function scheduleReconnect() {
+            clearReconnectTimeout();
+            reconnectTimeout = setTimeout(() => {
+                log('🔄 Attempting to reconnect...', 'info');
+                connectWebSocket();
+            }, 5000);
+        }
+
+        function clearReconnectTimeout() {
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+        }
+
+        function exportMonitoringData() {
+            const data = {
+                sessionStart: new Date(startTime).toISOString(),
+                sessionEnd: new Date().toISOString(),
+                monitoringBotId: monitoringBotId,
+                statistics: stats,
+                connectionHistory: 'See console logs'
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `martingale-monitoring-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            log('📊 Monitoring data exported', 'success');
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '🧹 Log cleared...\n';
+            log('🚀 Martingale Strategy Monitoring Debug Tool ready', 'info');
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 Martingale Monitoring Tool loaded. Ready to debug strategy execution.', 'success');
+            log('💡 Click "Connect" to start monitoring real-time events.', 'info');
+            log('🎯 Enter a Bot ID and click "Monitor Bot" to track specific bot actions.', 'info');
+            
+            // Try to connect automatically after a short delay
+            setTimeout(() => {
+                log('🔄 Auto-connecting to WebSocket...', 'info');
+                connectWebSocket();
+            }, 1000);
+        };
+
+        // Clean up on page unload
+        window.onbeforeunload = function() {
+            if (ws) {
+                ws.close();
+            }
+        };
+    </script>
+</body>
+</html>

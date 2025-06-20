@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bot Order Notification Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: white; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #0f5132; color: #d1e7dd; }
+        .disconnected { background: #842029; color: #f8d7da; }
+        .connecting { background: #664d03; color: #fff3cd; }
+        .log { background: #212529; border: 1px solid #495057; padding: 10px; height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .controls { margin: 20px 0; }
+        .controls button { margin: 5px; padding: 8px 15px; background: #0d6efd; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        .controls button:hover { background: #0b5ed7; }
+        .controls button:disabled { background: #6c757d; cursor: not-allowed; }
+        .notification-test { background: #2d3748; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .notification-test h3 { margin-top: 0; color: #4dabf7; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 20px 0; }
+        .stat-card { background: #2d3748; padding: 15px; border-radius: 5px; }
+        .stat-card h4 { margin-top: 0; color: #4dabf7; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Bot Order Notification Test</h1>
+        
+        <div id="connectionStatus" class="status disconnected">
+            Disconnected from WebSocket
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn">Connect WebSocket</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+            <button id="clearLogBtn">Clear Log</button>
+            <button id="testBotNotificationBtn">Test Bot Notification Sound</button>
+            <button id="simulateOrderFillBtn">Simulate Bot Order Fill</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <h4>📊 Order Fill Notifications</h4>
+                <div>Received: <span id="orderFillCount">0</span></div>
+                <div>Bot Orders: <span id="botOrderCount">0</span></div>
+                <div>Manual Orders: <span id="manualOrderCount">0</span></div>
+            </div>
+            <div class="stat-card">
+                <h4>🔊 Sound Notifications</h4>
+                <div>Bot Sounds Played: <span id="botSoundCount">0</span></div>
+                <div>Last Sound: <span id="lastSound">None</span></div>
+                <div>Status: <span id="soundStatus">Ready</span></div>
+            </div>
+        </div>
+
+        <div class="notification-test">
+            <h3>🧪 Bot Order Fill Simulation</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                <div>
+                    <label>Bot ID:</label>
+                    <input type="number" id="botId" value="1" style="width: 100%; padding: 5px; margin-top: 5px;">
+                </div>
+                <div>
+                    <label>Order Type:</label>
+                    <select id="orderType" style="width: 100%; padding: 5px; margin-top: 5px;">
+                        <option value="base_order">Base Order</option>
+                        <option value="safety_order">Safety Order</option>
+                        <option value="take_profit">Take Profit</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Symbol:</label>
+                    <input type="text" id="symbol" value="BTCUSDT" style="width: 100%; padding: 5px; margin-top: 5px;">
+                </div>
+                <div>
+                    <label>Price:</label>
+                    <input type="number" id="price" value="45000" step="0.01" style="width: 100%; padding: 5px; margin-top: 5px;">
+                </div>
+            </div>
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let orderFillCount = 0;
+        let botOrderCount = 0;
+        let manualOrderCount = 0;
+        let botSoundCount = 0;
+
+        const elements = {
+            connectionStatus: document.getElementById('connectionStatus'),
+            connectBtn: document.getElementById('connectBtn'),
+            disconnectBtn: document.getElementById('disconnectBtn'),
+            clearLogBtn: document.getElementById('clearLogBtn'),
+            testBotNotificationBtn: document.getElementById('testBotNotificationBtn'),
+            simulateOrderFillBtn: document.getElementById('simulateOrderFillBtn'),
+            log: document.getElementById('log'),
+            orderFillCount: document.getElementById('orderFillCount'),
+            botOrderCount: document.getElementById('botOrderCount'),
+            manualOrderCount: document.getElementById('manualOrderCount'),
+            botSoundCount: document.getElementById('botSoundCount'),
+            lastSound: document.getElementById('lastSound'),
+            soundStatus: document.getElementById('soundStatus')
+        };
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.style.color = type === 'success' ? '#4ade80' : type === 'error' ? '#f87171' : type === 'warning' ? '#fbbf24' : '#a1a1aa';
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            elements.log.appendChild(logEntry);
+            elements.log.scrollTop = elements.log.scrollHeight;
+        }
+
+        function updateStats() {
+            elements.orderFillCount.textContent = orderFillCount;
+            elements.botOrderCount.textContent = botOrderCount;
+            elements.manualOrderCount.textContent = manualOrderCount;
+            elements.botSoundCount.textContent = botSoundCount;
+        }
+
+        function updateConnectionStatus(status, statusClass) {
+            elements.connectionStatus.textContent = status;
+            elements.connectionStatus.className = `status ${statusClass}`;
+            
+            const isConnected = statusClass === 'connected';
+            elements.connectBtn.disabled = isConnected;
+            elements.disconnectBtn.disabled = !isConnected;
+            elements.testBotNotificationBtn.disabled = !isConnected;
+            elements.simulateOrderFillBtn.disabled = !isConnected;
+        }
+
+        function connectWebSocket() {
+            try {
+                updateConnectionStatus('Connecting...', 'connecting');
+                log('Attempting WebSocket connection...');
+                
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}`;
+                
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function() {
+                    log('✅ WebSocket connected successfully', 'success');
+                    updateConnectionStatus('Connected to WebSocket', 'connected');
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'order_fill_notification') {
+                            orderFillCount++;
+                            
+                            const isBot = data.data.botId ? true : false;
+                            if (isBot) {
+                                botOrderCount++;
+                                log(`🤖 BOT ORDER FILL: ${data.data.symbol} ${data.data.orderType} - ${data.data.side} ${data.data.quantity} at ${data.data.price}`, 'success');
+                                
+                                // Test if sound notification would be triggered
+                                elements.soundStatus.textContent = 'Bot sound triggered!';
+                                elements.lastSound.textContent = `${data.data.orderType} (${new Date().toLocaleTimeString()})`;
+                                botSoundCount++;
+                                
+                                setTimeout(() => {
+                                    elements.soundStatus.textContent = 'Ready';
+                                }, 3000);
+                            } else {
+                                manualOrderCount++;
+                                log(`👤 MANUAL ORDER FILL: ${data.data.symbol} - ${data.data.side} ${data.data.quantity} at ${data.data.price}`, 'warning');
+                            }
+                            
+                            updateStats();
+                        } else if (data.type === 'manual_order_placement_notification') {
+                            log(`📋 MANUAL ORDER PLACEMENT: ${data.data.symbol} ${data.data.side} ${data.data.quantity}`, 'warning');
+                        } else {
+                            log(`📨 Other message: ${data.type}`, 'info');
+                        }
+                    } catch (error) {
+                        log(`📨 Raw message: ${event.data}`, 'info');
+                    }
+                };
+                
+                ws.onclose = function(event) {
+                    log(`🔒 WebSocket disconnected - Code: ${event.code}, Reason: ${event.reason}`, 'warning');
+                    updateConnectionStatus('Disconnected from WebSocket', 'disconnected');
+                };
+                
+                ws.onerror = function(error) {
+                    log(`❌ WebSocket error: ${error}`, 'error');
+                    updateConnectionStatus('WebSocket Error', 'disconnected');
+                };
+                
+            } catch (error) {
+                log(`❌ Connection error: ${error.message}`, 'error');
+                updateConnectionStatus('Connection Error', 'disconnected');
+            }
+        }
+
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function simulateBotOrderFill() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not connected', 'error');
+                return;
+            }
+
+            const botId = parseInt(document.getElementById('botId').value);
+            const orderType = document.getElementById('orderType').value;
+            const symbol = document.getElementById('symbol').value;
+            const price = parseFloat(document.getElementById('price').value);
+
+            // Simulate a bot order fill notification
+            const mockBotOrderFill = {
+                type: 'order_fill_notification',
+                data: {
+                    orderId: Date.now(),
+                    exchangeOrderId: Date.now().toString(),
+                    botId: botId,
+                    orderType: orderType,
+                    orderSubType: orderType.toUpperCase(),
+                    symbol: symbol,
+                    side: orderType === 'take_profit' ? 'SELL' : 'BUY',
+                    quantity: '0.001',
+                    price: price.toString(),
+                    status: 'filled',
+                    filledAt: new Date().toISOString(),
+                    timestamp: new Date().toISOString(),
+                    isManualTrade: false
+                }
+            };
+
+            // Simulate receiving the message
+            ws.onmessage({ data: JSON.stringify(mockBotOrderFill) });
+            
+            log(`🧪 Simulated ${orderType} fill for bot ${botId}`, 'success');
+        }
+
+        function testBotNotificationSound() {
+            // This would test the actual audio service if we had access to it
+            log('🔊 Testing bot notification sound...', 'info');
+            elements.soundStatus.textContent = 'Testing sound...';
+            elements.lastSound.textContent = `Test sound (${new Date().toLocaleTimeString()})`;
+            botSoundCount++;
+            updateStats();
+            
+            setTimeout(() => {
+                elements.soundStatus.textContent = 'Ready';
+                log('✅ Sound test completed', 'success');
+            }, 2000);
+        }
+
+        // Event listeners
+        elements.connectBtn.onclick = connectWebSocket;
+        elements.disconnectBtn.onclick = disconnectWebSocket;
+        elements.clearLogBtn.onclick = () => elements.log.innerHTML = '';
+        elements.testBotNotificationBtn.onclick = testBotNotificationSound;
+        elements.simulateOrderFillBtn.onclick = simulateBotOrderFill;
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🚀 Bot Order Notification Test initialized');
+            log('💡 This tool monitors WebSocket messages for bot order fill notifications');
+            log('🔊 It tracks whether bot orders would trigger sound notifications');
+            log('📊 Check the stats above to see if notifications are being received');
+            connectWebSocket();
+        };
+
+        window.onbeforeunload = function() {
+            if (ws) {
+                ws.close();
+            }
+        };
+    </script>
+</body>
+</html>

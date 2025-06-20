@@ -10,12 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2, Plus, Trash2, Settings, RefreshCw, AlertCircle } from "lucide-react";
 import { useUserWebSocket } from "@/hooks/useWebSocketService";
 import { EXCHANGE_OPTIONS } from "@/lib/mock-data";
-import { calculateTotalUsdtValue, calculateUsdtBalance, formatBalance } from "@/utils/balance-utils";
-import { tickerPriceService } from "@/services/TickerPriceService";
+import { calculateUsdtBalance, formatBalance } from "@/utils/balance-utils";
 
 interface Exchange {
   id: number;
@@ -60,23 +60,15 @@ export default function MyExchanges() {
   const [editingExchange, setEditingExchange] = useState<Exchange | null>(null);
   const [wsApiEndpoint, setWsApiEndpoint] = useState("");
   const [wsStreamEndpoint, setWsStreamEndpoint] = useState("");
-  const [restApiEndpoint, setRestApiEndpoint] = useState("");
-
-  // Fetch exchanges
+  const [restApiEndpoint, setRestApiEndpoint] = useState("");  // Fetch exchanges
   const { data: exchanges, isLoading: exchangesLoading, error: exchangesError } = useQuery<Exchange[]>({
     queryKey: ['/api/exchanges'],
     retry: 2,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
-
-  // Debug logging for exchanges query
-  useEffect(() => {
-    console.log('[MY EXCHANGES] Query state:', {
-      exchanges: exchanges?.length || 0,
-      exchangesLoading,
-      exchangesError: exchangesError?.message
-    });
-  }, [exchanges, exchangesLoading, exchangesError]);
+  
+  // Initialize order notifications hook for sound notifications
+  useOrderNotifications();
 
   // Helper functions for balance calculations
   const calculateTotalBalanceForDisplay = (balances: any[]): string => {
@@ -114,41 +106,36 @@ export default function MyExchanges() {
           balancesLength: data.data.balances.length
         });
         
-        if (targetExchangeId) {
-          // Calculate USDT balance and other metrics
-          const usdtOnly = calculateUsdtBalance(data.data.balances);
+        if (targetExchangeId) {          // Calculate USDT balance and other metrics - SIMPLE VERSION
+          const usdtBalance = calculateUsdtBalance(data.data.balances);
           const totalFree = calculateTotalBalanceForDisplay(data.data.balances.filter((b: any) => parseFloat(b.free || '0') > 0));
           const totalLocked = calculateTotalBalanceForDisplay(data.data.balances.filter((b: any) => parseFloat(b.locked || '0') > 0));
           
-          // Calculate total USDT value with price conversion (async)
-          calculateTotalUsdtValue(data.data.balances, targetExchangeId).then(totalUsdtValue => {
-            console.log(`[MY EXCHANGES] ✅ Balance calculated for exchange ${targetExchangeId}:`, totalUsdtValue, 'USDT');
-            
-            setExchangeBalances(prev => ({
+          console.log(`[MY EXCHANGES] � Simple USDT balance calculation for exchange ${targetExchangeId}`);
+          console.log(`[MY EXCHANGES] 📊 Balance data received:`, {
+            balancesCount: data.data.balances.length,
+            usdtBalance,
+            totalFree,
+            totalLocked,
+            firstFewBalances: data.data.balances.slice(0, 3)
+          });
+
+          // Set the balance immediately - no complex calculations, no async operations
+          console.log(`[MY EXCHANGES] ⚡ Setting USDT-only balance: $${usdtBalance}`);
+          setExchangeBalances(prev => {
+            const newState = {
               ...prev,
               [targetExchangeId]: { 
-                balance: totalUsdtValue, 
-                loading: false,
+                balance: usdtBalance, 
+                loading: false, // Always set to false immediately
                 balances: data.data.balances,
-                usdtOnly,
+                usdtOnly: usdtBalance,
                 totalFree,
                 totalLocked
               }
-            }));
-          }).catch(error => {
-            console.error('[MY EXCHANGES] Error calculating total USDT value:', error);
-            // Fallback to USDT-only value if price conversion fails
-            setExchangeBalances(prev => ({
-              ...prev,
-              [targetExchangeId]: { 
-                balance: usdtOnly, 
-                loading: false,
-                balances: data.data.balances,
-                usdtOnly,
-                totalFree,
-                totalLocked
-              }
-            }));
+            };
+            console.log(`[MY EXCHANGES] ✅ Balance state set for exchange ${targetExchangeId}:`, newState[targetExchangeId]);
+            return newState;
           });
         } else {
           console.log('❌ No target exchange ID found for balance update');
@@ -187,9 +174,15 @@ export default function MyExchanges() {
     }
   });  // Simple balance fetching function wrapped in useCallback to prevent excessive re-renders
   const fetchExchangeBalance = useCallback((exchange: Exchange) => {
-    if (!exchange.isActive || !exchange.apiKey) return;
+    console.log(`[MY EXCHANGES] fetchExchangeBalance called for ${exchange.name} (ID: ${exchange.id})`);
+    console.log(`[MY EXCHANGES] Exchange details - isActive: ${exchange.isActive}, hasApiKey: ${!!exchange.apiKey}`);
     
-    console.log(`[MY EXCHANGES] Requesting balance for ${exchange.name} (ID: ${exchange.id})`);
+    if (!exchange.isActive || !exchange.apiKey) {
+      console.log(`[MY EXCHANGES] Skipping ${exchange.name} - not active or no API key`);
+      return;
+    }
+    
+    console.log(`[MY EXCHANGES] 🔄 Requesting balance for ${exchange.name} (ID: ${exchange.id})`);
     
     // Set loading state
     setExchangeBalances(prev => ({
@@ -197,117 +190,106 @@ export default function MyExchanges() {
       [exchange.id]: { ...prev[exchange.id], balance: '0.00', loading: true, error: undefined }
     }));
     
-    // Set a timeout to prevent infinite loading
+    // Set a MANDATORY timeout to prevent infinite loading - ALWAYS force loading to false
     const timeoutId = setTimeout(() => {
-      console.log(`[MY EXCHANGES] Timeout fetching balance for exchange ${exchange.name}`);
+      console.log(`[MY EXCHANGES] ⏰ MANDATORY timeout for ${exchange.name} - FORCING loading to false`);
       setExchangeBalances(prev => ({
         ...prev,
         [exchange.id]: { 
           balance: '0.00', 
-          loading: false, 
-          error: 'Request timeout'
+          loading: false, // FORCE this to false no matter what
+          error: 'Request timeout - please refresh'
         }
       }));
-    }, 15000); // 15 second timeout
+    }, 8000); // 8 second mandatory timeout
     
     // Function to send balance request
     const sendBalanceRequest = () => {
-      console.log(`[MY EXCHANGES] Sending balance request for exchange ${exchange.id}`);
-      userWs.sendMessage({
+      console.log(`[MY EXCHANGES] 📤 Sending balance request for exchange ${exchange.id}`);
+      console.log(`[MY EXCHANGES] 🔗 WebSocket status: ${userWs.status}`);
+      const message = {
         type: 'get_balance',
         exchangeId: exchange.id
-        // No asset parameter - this will request ALL balances
-      });
-      // Clear timeout once request is sent
-      setTimeout(() => clearTimeout(timeoutId), 1000);
+      };
+      console.log(`[MY EXCHANGES] 📤 Balance request message:`, message);
+      userWs.sendMessage(message);
+      
+      // Set an additional safety timeout to force loading to false if no response
+      setTimeout(() => {
+        console.log(`[MY EXCHANGES] 🛡️ Safety timeout - checking if still loading for ${exchange.name}`);
+        setExchangeBalances(prev => {
+          const currentState = prev[exchange.id];
+          if (currentState?.loading) {
+            console.log(`[MY EXCHANGES] 🛡️ Still loading ${exchange.name}, forcing to false`);
+            return {
+              ...prev,
+              [exchange.id]: { 
+                balance: '0.00', 
+                loading: false, // FORCE loading to false
+                error: 'No response from server'
+              }
+            };
+          }
+          return prev;
+        });
+        clearTimeout(timeoutId);
+      }, 5000); // 5 second safety net
     };
     
-    // Send balance request if WebSocket is connected, otherwise wait for connection
+    // Send balance request if WebSocket is connected
     if (userWs.status === 'connected') {
+      console.log(`[MY EXCHANGES] ✅ WebSocket is connected, sending balance request immediately`);
       sendBalanceRequest();
     } else {
-      console.log(`[MY EXCHANGES] WebSocket not connected (status: ${userWs.status}), waiting for connection for ${exchange.name}`);
-      clearTimeout(timeoutId); // Don't timeout while waiting for connection
+      console.log(`[MY EXCHANGES] ⏳ WebSocket not connected (status: ${userWs.status}), forcing error state for ${exchange.name}`);
+      // If WebSocket is not connected, immediately show error instead of loading forever
+      setTimeout(() => {
+        setExchangeBalances(prev => ({
+          ...prev,
+          [exchange.id]: { 
+            balance: '0.00', 
+            loading: false, 
+            error: 'WebSocket not connected'
+          }
+        }));
+        clearTimeout(timeoutId);
+      }, 500);
     }
-  }, [userWs.status, userWs.sendMessage]);  // Initialize WebSocket connection once when component mounts
+  }, [userWs.sendMessage, userWs.status]); // Include status to handle WebSocket state changes// Initialize WebSocket connection once when component mounts
   useEffect(() => {
     console.log('[MY EXCHANGES] Initializing WebSocket connection...');
     userWs.connect();
   }, []); // Empty dependency array - only run once on mount  // Auto-fetch balances when WebSocket connects and exchanges are loaded
   useEffect(() => {
+    console.log(`[MY EXCHANGES] 🔄 Balance fetch trigger - WebSocket status: ${userWs.status}, Exchanges count: ${exchanges?.length || 0}`);
+    console.log(`[MY EXCHANGES] 🔄 Exchanges data:`, exchanges);
+    
     if (userWs.status === 'connected' && exchanges && exchanges.length > 0) {
-      console.log('[MY EXCHANGES] WebSocket connected, fetching balances for all exchanges...');
+      console.log('[MY EXCHANGES] ✅ Conditions met - fetching balances for all exchanges...');
       exchanges.forEach((exchange, index) => {
+        console.log(`[MY EXCHANGES] 🔍 Checking exchange ${exchange.id} (${exchange.name}): isActive=${exchange.isActive}, hasApiKey=${!!exchange.apiKey}`);
         if (exchange.isActive && exchange.apiKey) {
           // Add a small delay between requests to avoid overwhelming the server
-          setTimeout(() => fetchExchangeBalance(exchange), index * 500); // Staggered requests
+          setTimeout(() => {
+            console.log(`[MY EXCHANGES] ⏰ Scheduling balance fetch for exchange ${exchange.id} (${exchange.name}) in ${index * 500}ms`);
+            fetchExchangeBalance(exchange);
+          }, index * 500); // Staggered requests
+        } else {
+          console.log(`[MY EXCHANGES] ⏭️ Skipping exchange ${exchange.id} (${exchange.name}) - not active or no API key`);
         }
       });
+    } else {
+      console.log(`[MY EXCHANGES] ❌ Conditions not met - not fetching balances`);      console.log(`[MY EXCHANGES] 📊 Details - WebSocket status: '${userWs.status}', Exchanges: ${exchanges?.length || 0}`);
     }
-  }, [userWs.status, exchanges, fetchExchangeBalance]);
-  // Cleanup WebSocket connection when component unmounts
+  }, [userWs.status, exchanges]); // Removed fetchExchangeBalance from dependencies to prevent loops
+  
+  // Cleanup effect for WebSocket
   useEffect(() => {
     return () => {
       console.log('[MY EXCHANGES] Component unmounting - disconnecting WebSocket');
       userWs.disconnect();
     };
   }, [userWs.disconnect]);
-  // Conditional ticker price subscription - only when we have balances that need price conversion
-  useEffect(() => {
-    console.log('[MY EXCHANGES] Checking if ticker price subscription is needed...');
-    
-    // Get unique asset symbols from all current balances that need price conversion
-    const uniqueAssets = new Set<string>();
-    Object.values(exchangeBalances).forEach(balanceState => {
-      if (balanceState.balances && !balanceState.loading && !balanceState.error) {
-        balanceState.balances.forEach((balance: any) => {
-          if (balance.asset && 
-              balance.asset !== 'USDT' && 
-              (parseFloat(balance.free || '0') > 0 || parseFloat(balance.locked || '0') > 0)) {
-            uniqueAssets.add(balance.asset);
-          }
-        });
-      }
-    });
-    
-    const assetsArray = Array.from(uniqueAssets);
-    
-    if (assetsArray.length > 0) {
-      console.log('[MY EXCHANGES] Non-USDT balances detected, subscribing to ticker prices for:', assetsArray);
-      
-      const unsubscribe = tickerPriceService.subscribeToSymbols(assetsArray, (prices) => {
-        console.log('[MY EXCHANGES] Received ticker price updates for', Object.keys(prices).length, 'symbols');
-        
-        // Recalculate balances for all exchanges when prices update
-        setExchangeBalances(prevBalances => {
-          const updatedBalances = { ...prevBalances };
-          
-          Object.keys(updatedBalances).forEach(exchangeId => {
-            const exchangeData = updatedBalances[Number(exchangeId)];
-            if (exchangeData.balances && !exchangeData.loading) {
-              // Recalculate total USDT value with new prices
-              calculateTotalUsdtValue(exchangeData.balances, Number(exchangeId)).then(totalUsdtValue => {
-                setExchangeBalances(prev => ({
-                  ...prev,
-                  [Number(exchangeId)]: {
-                    ...prev[Number(exchangeId)],
-                    balance: totalUsdtValue
-                  }
-                }));
-              }).catch(error => {
-                console.warn(`Failed to recalculate balance for exchange ${exchangeId}:`, error);
-              });
-            }
-          });
-          
-          return updatedBalances;
-        });
-      });
-      
-      return unsubscribe;
-    } else {
-      console.log('[MY EXCHANGES] No non-USDT balances found, skipping ticker price subscription');
-    }  }, [exchangeBalances]); // Re-run when exchangeBalances change
 
   // Mutations for CRUD operations
   const createExchangeMutation = useMutation({
@@ -477,9 +459,11 @@ export default function MyExchanges() {
       setExchangeToDelete(null);
     }
   };
-
   const renderExchangeCard = (exchange: Exchange) => {
     const balanceState = exchangeBalances[exchange.id];
+    
+    console.log(`[MY EXCHANGES] 🎨 Rendering exchange card for ${exchange.name} (ID: ${exchange.id})`);
+    console.log(`[MY EXCHANGES] 🎨 Balance state:`, balanceState);
     
     return (
       <Card key={exchange.id} className="transition-all duration-200 hover:shadow-md">
@@ -516,25 +500,39 @@ export default function MyExchanges() {
               <p className="text-sm font-mono bg-muted p-2 rounded mt-1">
                 {exchange.apiKey.substring(0, 8)}...{exchange.apiKey.slice(-4)}
               </p>
-            </div>
-            <div>
+            </div>            <div>
               <p className="text-sm font-medium text-muted-foreground">Total Balance (USDT)</p>
               <div className="flex items-center mt-1">
-                {balanceState?.loading ? (
-                  <div className="flex items-center space-x-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-sm">Loading...</span>
-                  </div>
-                ) : balanceState?.error ? (
-                  <div className="flex items-center space-x-2 text-red-600 dark:text-red-400">
-                    <AlertCircle className="h-4 w-4" />
-                    <span className="text-sm">{balanceState.error}</span>
-                  </div>
-                ) : (
-                  <span className="text-lg font-semibold">
-                    ${formatBalance(balanceState?.balance || '0.00')}
-                  </span>
-                )}
+                {(() => {
+                  console.log(`[MY EXCHANGES] 💰 Rendering balance for exchange ${exchange.id}:`, {
+                    loading: balanceState?.loading,
+                    error: balanceState?.error,
+                    balance: balanceState?.balance,
+                    hasBalanceState: !!balanceState
+                  });
+                  
+                  if (balanceState?.loading) {
+                    return (
+                      <div className="flex items-center space-x-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm">Loading...</span>
+                      </div>
+                    );
+                  } else if (balanceState?.error) {
+                    return (
+                      <div className="flex items-center space-x-2 text-red-600 dark:text-red-400">
+                        <AlertCircle className="h-4 w-4" />
+                        <span className="text-sm">{balanceState.error}</span>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <span className="text-lg font-semibold">
+                        ${formatBalance(balanceState?.balance || '0.00')}
+                      </span>
+                    );
+                  }
+                })()}
               </div>
             </div>
           </div>
@@ -635,7 +633,6 @@ export default function MyExchanges() {
       </div>
     );
   }
-
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
@@ -661,8 +658,7 @@ export default function MyExchanges() {
               <DialogDescription>
                 Configure your exchange API credentials to enable trading
               </DialogDescription>
-            </DialogHeader>
-            
+            </DialogHeader>            
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
                 <Label htmlFor="exchange">Exchange</Label>
@@ -728,9 +724,7 @@ export default function MyExchanges() {
                 ) : null}
                 {editingExchange ? 'Update' : 'Add'} Exchange
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </div>          </DialogContent>        </Dialog>
 
         {/* Edit Exchange Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

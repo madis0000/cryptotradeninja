@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Balance Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 3px; font-family: monospace; font-size: 12px; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e9; color: #2e7d32; }
+        .info { background: #e3f2fd; color: #1565c0; }
+        button { padding: 10px 20px; margin: 5px; }
+        #balanceDisplay { background: #f0f0f0; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Simple Balance Test</h1>
+    
+    <div class="section">
+        <h3>WebSocket Status</h3>
+        <div id="wsStatus">Disconnected</div>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+    
+    <div class="section">
+        <h3>Balance Test</h3>
+        <input type="number" id="exchangeId" value="1" placeholder="Exchange ID">
+        <button onclick="requestBalance()">Request Balance</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+    
+    <div class="section">
+        <h3>Balance Display</h3>
+        <div id="balanceDisplay">No balance data</div>
+    </div>
+    
+    <div class="section">
+        <h3>Logs</h3>
+        <div id="logs"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let balanceData = {};
+        
+        function log(message, type = 'info') {
+            const logsDiv = document.getElementById('logs');
+            const logDiv = document.createElement('div');
+            logDiv.className = `log ${type}`;
+            logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(logDiv);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+        
+        function updateStatus(status) {
+            document.getElementById('wsStatus').textContent = status;
+        }
+        
+        function updateBalanceDisplay(exchangeId, data) {
+            const displayDiv = document.getElementById('balanceDisplay');
+            if (data.loading) {
+                displayDiv.innerHTML = `<strong>Exchange ${exchangeId}:</strong> Loading...`;
+            } else if (data.error) {
+                displayDiv.innerHTML = `<strong>Exchange ${exchangeId}:</strong> Error: ${data.error}`;
+            } else if (data.balances) {
+                let html = `<strong>Exchange ${exchangeId}:</strong><br>`;
+                html += `Total assets: ${data.balances.length}<br>`;
+                html += `<strong>Balances:</strong><br>`;
+                data.balances.forEach(balance => {
+                    const total = parseFloat(balance.free || '0') + parseFloat(balance.locked || '0');
+                    if (total > 0) {
+                        html += `${balance.asset}: ${balance.free} (free) + ${balance.locked} (locked)<br>`;
+                    }
+                });
+                displayDiv.innerHTML = html;
+            } else {
+                displayDiv.innerHTML = `<strong>Exchange ${exchangeId}:</strong> No balance data`;
+            }
+        }
+        
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('WebSocket already connected', 'info');
+                return;
+            }
+            
+            const wsUrl = 'ws://localhost:3001/ws';
+            log(`Connecting to ${wsUrl}...`, 'info');
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                log('WebSocket connected successfully', 'success');
+                updateStatus('Connected');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`Received: ${JSON.stringify(data)}`, 'info');
+                    
+                    if (data.type === 'balance_error') {
+                        log(`Balance error: ${data.error}`, 'error');
+                        balanceData[data.exchangeId] = { error: data.error, loading: false };
+                        updateBalanceDisplay(data.exchangeId, balanceData[data.exchangeId]);
+                    } else if (data.type === 'balance_update') {
+                        log(`Balance update received for exchange ${data.exchangeId}`, 'success');
+                        balanceData[data.exchangeId] = { 
+                            balances: data.data?.balances || [], 
+                            loading: false 
+                        };
+                        updateBalanceDisplay(data.exchangeId, balanceData[data.exchangeId]);
+                    }
+                } catch (error) {
+                    log(`Error parsing message: ${error.message}`, 'error');
+                }
+            };
+            
+            ws.onerror = (error) => {
+                log(`WebSocket error: ${error}`, 'error');
+                updateStatus('Error');
+            };
+            
+            ws.onclose = () => {
+                log('WebSocket disconnected', 'info');
+                updateStatus('Disconnected');
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+        
+        function requestBalance() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocket not connected', 'error');
+                return;
+            }
+            
+            const exchangeId = parseInt(document.getElementById('exchangeId').value) || 1;
+            
+            log(`Requesting balance for exchange ${exchangeId}`, 'info');
+            
+            // Set loading state
+            balanceData[exchangeId] = { loading: true };
+            updateBalanceDisplay(exchangeId, balanceData[exchangeId]);
+            
+            const message = {
+                type: 'get_balance',
+                exchangeId: exchangeId
+            };
+            
+            log(`Sending: ${JSON.stringify(message)}`, 'info');
+            ws.send(JSON.stringify(message));
+        }
+        
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+        
+        // Auto-connect on page load
+        window.addEventListener('load', () => {
+            log('Page loaded', 'info');
+            setTimeout(connect, 1000);
+        });
+    </script>
+</body>
+</html>

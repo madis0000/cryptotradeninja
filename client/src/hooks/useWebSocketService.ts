@@ -116,7 +116,7 @@ export function usePublicWebSocket(options: WebSocketHookOptions = {}): PublicWe
     let wsUrl;
     
     // Check if we're in development environment
-    const isDev = window.location.port === '5173' || window.location.port === '3000' || 
+    const isDev = window.location.port === '3000' || 
                   hostname === 'localhost' || hostname === '127.0.0.1' || 
                   hostname.includes('replit.dev');
     
@@ -280,7 +280,7 @@ export function useUserWebSocket(options: WebSocketHookOptions = {}): UserWebSoc
     const hostname = window.location.hostname;
     
     // Check if we're in development environment
-    const isDev = window.location.port === '5173' || window.location.port === '3000' || 
+    const isDev = window.location.port === '3000' || 
                   hostname === 'localhost' || hostname === '127.0.0.1';
     
     let wsUrl;
